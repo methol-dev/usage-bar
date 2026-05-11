@@ -119,6 +119,12 @@ struct PopoverView: View {
             ExtraUsageRow(extra: extra)
         }
 
+        // v0.1.2: 本地 30 天 cost 估算；nil 或 scannedFileCount==0 时整张隐藏
+        if let cost = service.localCost30d {
+            Divider()
+            LocalCostCard(summary: cost)
+        }
+
         Divider()
         UsageChartView(historyService: historyService)
 

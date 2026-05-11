@@ -28,6 +28,8 @@ struct ClaudeUsageBarApp: App {
                     if service.isAuthenticated && !UserDefaults.standard.bool(forKey: "setupComplete") {
                         UserDefaults.standard.set(true, forKey: "setupComplete")
                     }
+                    // v0.1.2: 启动期一次性扫本地 JSONL 算 30 天 cost；polling timer 内不重复
+                    await service.refreshLocalCostIfNeeded()
                     service.startPolling()
                 }
         }
