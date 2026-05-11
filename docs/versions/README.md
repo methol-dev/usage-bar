@@ -20,6 +20,8 @@ updated: 2026-05-11
 placeholder ─首个 spec 落地─► planned ─开发开始─► in-progress ─tag 推送─► shipped
                                                                             │
                                                                             └─严重缺陷─► yanked
+
+placeholder ─作者评估后 scope-cut─► wontfix（不实施，不打 tag；版本号保留作历史记录）
 ```
 
 ## 当前路线
@@ -38,7 +40,7 @@ placeholder ─首个 spec 落地─► planned ─开发开始─► in-progres
 | [v0.2.0](./v0.2.0-phase2-milestone.md) | phase2-milestone | shipped | 2026-05-11 | 🏁 Phase 2 里程碑（逻辑标记） |
 | [v0.2.1](./v0.2.1-apple-notarization.md) | apple-notarization | placeholder | — | 🔧 Apple 公证 |
 | [v0.2.2](./v0.2.2-sparkle-beta-channel.md) | sparkle-beta-channel | in-progress | 2026-05-12 | 🔧 Sparkle beta 通道 |
-| [v0.2.3](./v0.2.3-cookie-fallback.md) | cookie-fallback | placeholder | — | 🔧 cookie 回退 |
+| [v0.2.3](./v0.2.3-cookie-fallback.md) | cookie-fallback | **wontfix** | — | 🚫 scope-cut（2026-05-11 user 决策不实施） |
 | [v0.2.4](./v0.2.4-cli-pty-fallback.md) | cli-pty-fallback | placeholder | — | 🔧 CLI PTY 兜底 |
 | [v0.2.5](./v0.2.5-widgetkit.md) | widgetkit | placeholder | — | 🔧 WidgetKit |
 | [v0.2.6](./v0.2.6-cli-tool.md) | cli-tool | placeholder | — | 🔧 CLI 工具 |
