@@ -15,15 +15,15 @@ spec_criteria:
     done: false
     evidence: "see ## Verification log"
   - id: SC2
-    criterion: "AppUpdater.swift 扩展：实现 SPUUpdaterDelegate 协议；allowedChannels(for:) 返回 \"stable\" 通道（始终）+ 当用户选 .beta 时追加 \"beta\"；SPUStandardUpdaterController init 传入 updaterDelegate: self"
+    criterion: "AppUpdater.swift 扩展：从 final class : ObservableObject 改为 final class : NSObject, ObservableObject, SPUUpdaterDelegate（**init 顺序**（G2-B1）：所有 stored property 赋值 → super.init() → KVO 注册 → updaterController.startUpdater）；allowedChannels(for:) nonisolated 实现返回根据用户选择的 set；SPUStandardUpdaterController init 传入 updaterDelegate: self"
     done: false
     evidence: "see ## Verification log"
   - id: SC3
-    criterion: "UpdateChannel 持久化：@AppStorage(UpdateChannel.storageKey) 在 SettingsView；AppUpdater 内部用 UserDefaults.standard.string(forKey:) 读（不直接 @AppStorage 避免与 ObservableObject 生命周期冲突）；切换 channel 后 next check 生效；不需要立即重启 SPUUpdater"
+    criterion: "UpdateChannel 持久化：@AppStorage(UpdateChannel.storageKey) 在 SettingsView；AppUpdater 内部通过**注入的 UserDefaults**（G2-B2/G3-B1：init 加 defaults: UserDefaults = .standard，存为 stored property，delegate 回调从 self.defaults 读）读 storageKey；切换 channel 后 next check 生效；不需要立即重启 SPUUpdater"
     done: false
     evidence: "see ## Verification log"
   - id: SC4
-    criterion: "SettingsView 加 \"更新通道\" section（在现有 About / 自动更新区块附近）：Picker 显示两个 channel option + 一行说明 \"Beta 通道包含未稳定版本，仅建议测试用户启用\""
+    criterion: "SettingsView Form 内新增 `Section(\"更新通道\")`（G3-N1 修订：现有 SettingsView 无\"自动更新\" section，新建 Section 位置在 General/Notifications 之后、Account/About 之前）：Picker 显示 channel options + 一行说明 \"Beta 通道包含未稳定版本，仅建议测试用户启用\""
     done: false
     evidence: "see ## Verification log"
   - id: SC5
@@ -35,7 +35,7 @@ spec_criteria:
     done: false
     evidence: "see ## Verification log"
   - id: SC7
-    criterion: "新增 UpdateChannelTests / AppUpdaterChannelTests：≥4 case（rawValue persistence / allowedChannels behavior with mock UserDefaults：stable 仅 stable / beta 含 beta+stable / display label）"
+    criterion: "新增 UpdateChannelTests / AppUpdaterChannelTests：≥5 case：testRawValueRoundTrip / testCurrentFallsBackForNil / testCurrentFallsBackForUnknownRawValue（G2-RC：\"canary\" 等非法字符串 fallback）/ testAllowedChannelsForStable / testAllowedChannelsForBeta / testDisplayName / **testAppUpdaterReflectsInjectedDefaults**（用 `UserDefaults(suiteName: \"test.\\(UUID)\")` 创建隔离 suite，传给 AppUpdater.init，写入 storageKey 后 allowedChannels(for: nil) 返回预期 set）"
     done: false
     evidence: "see ## Verification log"
   - id: SC8
@@ -58,7 +58,43 @@ automated_checks:
 manual_checks:
   - "在 .app 启动后打开 Settings，看到 \"更新通道\" 区块和 Picker；切换到 Beta 后下次 checkForUpdates 应能拉取 sparkle:channel=\"beta\" 的 item"
   - "切回 stable 后 beta items 不再可见"
-reviews: []
+reviews:
+  - gate: G2
+    reviewer: claude-code (general-purpose subagent, agentId a5e72a9e3325055e6, with security focus)
+    date: 2026-05-11
+    verdict: approved-after-revisions
+    summary: |
+      原始 verdict: approved-after-revisions（2 BLOCKING + 4 RECOMMENDED + 4 ADVISORY）。
+      作者按 superpowers:receiving-code-review 流程处理：
+      - BLOCKING B1 (NSObject super.init 顺序) accepted — SC2 加 sub-criterion
+        "init order: stored property init → super.init() → KVO registration → startUpdater"。
+      - BLOCKING B2 (SC7 AppUpdaterChannelTests UserDefaults 注入与 init 签名矛盾) accepted —
+        SC3 改 AppUpdater.init 加 defaults: UserDefaults = .standard 注入 seam；
+        SC7 改用 `UserDefaults(suiteName: "test.\(UUID)")` 隔离 suite。
+      - RECOMMENDED A (UserDefaults.standard thread-safe) accepted — §5 #1 加 Apple docs 引用。
+      - RECOMMENDED B (跨 channel 版本比较保证) accepted — §5 新增 #7 SUStandardVersionComparator 说明。
+      - RECOMMENDED C (testCurrentFallsBackForUnknownRawValue) accepted — SC7 加 "canary" 字符串 case。
+      - RECOMMENDED D (SUEnableAutomaticChecks 自动 check 同样走 delegate) accepted — §5 #1 加一行说明。
+      - ADVISORY 全 confirmed / 接受（appcast XML namespace 在 P3 verify；SC9 baseline 数；scope cut；frontmatter）。
+      - Confirmed correct 全部 ✅。
+    artifacts: ["G2 review subagent output (agentId a5e72a9e3325055e6)"]
+  - gate: G3
+    reviewer: claude-code (general-purpose subagent, agentId ac9834821224675bd)
+    date: 2026-05-11
+    verdict: approved-after-revisions
+    summary: |
+      原始 verdict: approved-after-revisions（2 BLOCKING + 3 RECOMMENDED + 2 NOTES）。
+      作者按 superpowers:receiving-code-review 流程处理：
+      - BLOCKING B1 (AppUpdaterChannelTests 注入 contract 缺) 与 G2-B2 重合 — 同款修订（init defaults: 注入 + suiteName UUID）。
+      - BLOCKING B2 (P1 缺 AppUpdater regression check) accepted — P1 Success 加
+        `swift test --filter UsageServiceTests` + `swift test --filter SettingsViewTests` 单独跑全绿。
+      - RECOMMENDED R1 (P3 拆分) accepted — P3 拆为 P3a (runbook doc, G4) + P3b (G6 wrap-up)。
+      - RECOMMENDED R2 (baseline 验证) accepted — P0 加 baseline 测试数记录步骤；P1 grep 规则保留 ≥125 上下限。
+      - RECOMMENDED R3 (P2 git diff 严格 SettingsView only) accepted — P2 Success 改为 git diff --name-only base..HEAD 严格白名单。
+      - NOTES N1 (SettingsView 无"自动更新" section) accepted — SC4 + §3.3 措辞改"Form 内新增 Section"；位置 Notifications 之后 / Account 之前。
+      - NOTES N2 (test-in-same-commit) confirmed ✅。
+      - Confirmed correct 全部 ✅。
+    artifacts: ["G3 review subagent output (agentId ac9834821224675bd)"]
 ---
 
 # Sparkle 双通道（stable / beta）
@@ -213,27 +249,39 @@ Section("更新通道") {
 - **Success**: linkcheck OK；frontmatter parse；grep status: planned
 - **覆盖 SC**: 无
 
+**Step P0 baseline 验证**（G3-R2 修订）：在 P1 启动前先跑 `cd macos && swift test 2>&1 | grep -E 'Executed [0-9]+ tests.*0 failures' | tail -2` 记录实际基线测试数（应为 120，若漂移则调 P1 grep）。
+
 **Step P1** — UpdateChannel + AppUpdater + 测试（Commit B）
-- 新增 UpdateChannel.swift
-- AppUpdater 加 NSObject + SPUUpdaterDelegate
-- 新增 UpdateChannelTests + AppUpdaterChannelTests
+- 新增 UpdateChannel.swift（含 displayName + storageKey + current(defaults:) + allowedChannelStrings(for:)）
+- AppUpdater 改造：加 NSObject + SPUUpdaterDelegate；**init 顺序**：stored property → super.init() → KVO → startUpdater（G2-B1）；新增 `init(bundle:, defaults:)` 加 UserDefaults 注入 seam（G2-B2/G3-B1）
+- 新增 UpdateChannelTests（≥4 case）+ AppUpdaterChannelTests（≥1 case，用 `UserDefaults(suiteName: "test.\(UUID())")` 注入）
 - **Success**:
-  - `swift build -c release && swift test` 全绿
-  - `swift test 2>&1 | grep -E 'Executed (12[4-9]|1[3-9][0-9]) tests.*0 failures'` 命中
+  - `cd macos && swift build -c release && swift test` 全绿
+  - `swift test 2>&1 | grep -E 'Executed (12[4-9]|1[3-9][0-9]) tests.*0 failures'` 命中（基线 120 + ≥5 = ≥125）
+  - **回归 check**（G3-B2）：`swift test --filter UsageServiceTests` + `swift test --filter SettingsViewTests` 单独跑全绿
+  - SC_AUTO_NO_PRINT_TOKENS / SC_AUTO_NO_REAL_TOKEN_PREFIX 守护无匹配
 - **覆盖 SC**: SC1, SC2, SC3, SC6（前置）, SC7, SC9（前半）
 
 **Step P2** — SettingsView UI（Commit C）
-- SettingsView 加 "更新通道" Picker section
+- SettingsView Form 内新增 `Section("更新通道")`，位置在 Notifications 之后 / Account/About 之前（G3-N1）
+- Picker 绑定 @AppStorage(UpdateChannel.storageKey)
 - **Success**:
-  - `swift build && swift test` 全绿；UI 不破坏现有 SettingsView 渲染
-  - `git diff --stat HEAD~1..HEAD` 仅触白名单：SettingsView.swift
+  - `cd macos && swift build && swift test` 全绿
+  - `git diff --name-only <P1 sha>..HEAD -- macos/Sources/ClaudeUsageBar/` 仅含 `SettingsView.swift`（G3-R3）
 - **覆盖 SC**: SC4, SC8（部分）
 
-**Step P3** — Release runbook 文档（Commit D，与 G6 合并）
+**Step P3a** — Release runbook 文档（Commit D-1，G3-R1 拆分）
 - 新增/更新 docs/runbooks/release.md beta tag 章节
+- **Success**: linkcheck pass + frontmatter lint pass（若 runbook 有 frontmatter）
+- **覆盖 SC**: SC5
+
+**Step P3b** — G6 收尾（Commit D-2，G3-R1 拆分）
 - spec status accepted → implemented；reviews append G5 + G6
 - Verification log 全 [x]；索引同步；CHANGELOG entry；version → in-progress
-- **覆盖 SC**: SC5, SC10
+- **Success**：
+  - `grep -c '^  - gate:' docs/superpowers/specs/2026-05-11-sparkle-beta-channel.md` 输出 ≥4
+  - `grep -c '^## \[v0.2.2\]' CHANGELOG.md` 输出 1
+- **覆盖 SC**: SC10
 
 ## 4. 现有文件迁移动作
 
@@ -250,12 +298,13 @@ Section("更新通道") {
 
 ## 5. 风险 / Open questions
 
-1. **Sparkle delegate 线程**：SPUUpdaterDelegate 可能从非 main 线程调用 allowedChannels。用 `nonisolated` 标注 + UserDefaults 读取（thread-safe）。
+1. **Sparkle delegate 线程**：SPUUpdaterDelegate 可能从非 main 线程调用 allowedChannels。用 `nonisolated` 标注 + UserDefaults 读取。**UserDefaults.standard 是 Apple 文档承诺的 thread-safe API**（G2-A 修订），并发 @AppStorage 写 + delegate 读安全。SUEnableAutomaticChecks 触发的自动 check 也通过同一 delegate（G2-D）。
 2. **首次启动 channel 字段不存在**：UserDefaults 返 nil → fallback stable。
 3. **用户选 beta 但仓库无 beta tag**：appcast 无 beta items → Sparkle 退到 stable。可接受。
 4. **切回 stable 后已装的 beta build 不会被自动降级**：用户需要手动等 stable 版本超过当前 beta 版本号。已知行为，文档化即可。
 5. **SC_AUTO 守护**：channel 不涉及 token；现有 SC_AUTO_NO_PRINT_TOKENS / NO_REAL_TOKEN_PREFIX 守护范围自然覆盖新文件。
-6. **AppUpdater NSObject 转换**：原 `final class AppUpdater: ObservableObject` 改 `final class AppUpdater: NSObject, ObservableObject`。NSKeyValueObservation 在 NSObject 上 work。
+6. **AppUpdater NSObject 转换**：原 `final class AppUpdater: ObservableObject` 改 `final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate`。NSKeyValueObservation 在 NSObject 上 work；consumers (`ClaudeUsageBarApp.swift:8` @StateObject + `PopoverView.swift:7` @ObservedObject) 仅用 ObservableObject 协议层 API，NSObject 转换无 ABI break。
+7. **跨 channel 版本比较**（G2-B 修订）：Sparkle 用 `SUStandardVersionComparator` 比较版本号，不分 channel。beta 用户 allowedChannels=["stable","beta"] 时若 stable v2.0 + beta v1.9 同 appcast，比较结果 v2.0 胜出 → beta 用户拿到 v2.0（不会"卡在 beta"）。
 
 ## 6. 后续工作（不在本 spec 范围）
 
