@@ -79,12 +79,17 @@ struct PopoverView: View {
             points: points,
             metric: \.pct7d
         )
+        let pace5h = computePaceState(
+            currentPct: service.usage?.fiveHour?.utilization,
+            resetDate: service.usage?.fiveHour?.resetsAtDate
+        )
 
         UsageHeroCard(
             size: .hero,
             label: "5-Hour",
             bucket: service.usage?.fiveHour,
-            trend: trend5h
+            trend: trend5h,
+            pace: pace5h
         )
 
         UsageHeroCard(
