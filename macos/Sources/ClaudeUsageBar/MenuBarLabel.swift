@@ -3,10 +3,11 @@ import SwiftUI
 struct MenuBarLabel: View {
     @ObservedObject var service: UsageService
     @ObservedObject var historyService: UsageHistoryService
-    @AppStorage(MenuBarDisplayMode.storageKey) private var modeRaw: String = MenuBarDisplayMode.icon.rawValue
+    // @AppStorage 直接绑定 enum（SwiftUI 原生支持 RawRepresentable + RawValue == String）
+    // G5 review B1 修订：消除 String<->enum 的中间 Binding(get:set:) 映射
+    @AppStorage(MenuBarDisplayMode.storageKey) private var mode: MenuBarDisplayMode = .icon
 
     var body: some View {
-        let mode = MenuBarDisplayMode(rawValue: modeRaw) ?? .icon
         switch mode {
         case .icon:
             iconView
