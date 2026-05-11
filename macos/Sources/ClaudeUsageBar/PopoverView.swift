@@ -26,7 +26,7 @@ struct PopoverView: View {
             }
         }
         .padding()
-        .frame(width: 340)
+        .frame(width: 360)
     }
 
     @ViewBuilder
@@ -64,13 +64,15 @@ struct PopoverView: View {
 
     @ViewBuilder
     private var usageView: some View {
-        UsageBucketRow(
-            label: "5-Hour Window",
+        UsageHeroCard(
+            size: .hero,
+            label: "5-Hour",
             bucket: service.usage?.fiveHour
         )
 
-        UsageBucketRow(
-            label: "7-Day Window",
+        UsageHeroCard(
+            size: .secondary,
+            label: "7-Day",
             bucket: service.usage?.sevenDay
         )
 
