@@ -17,7 +17,7 @@ updated: 2026-05-11
 
 | Spec ID | Title | Status | Target | 引用 |
 |---|---|---|---|---|
-| `2026-05-11-docs-governance` | 文档治理框架与版本路线骨架 | accepted | v0.0.7 | [文件](./2026-05-11-docs-governance.md) |
+| `2026-05-11-docs-governance` | 文档治理框架与版本路线骨架 | implemented | v0.0.7 | [文件](./2026-05-11-docs-governance.md) |
 
 > 新增 spec 时在表格 append 一行；状态由 spec frontmatter 同步。
 

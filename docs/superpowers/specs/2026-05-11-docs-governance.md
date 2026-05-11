@@ -1,7 +1,7 @@
 ---
 id: 2026-05-11-docs-governance
 title: 文档治理框架与版本路线骨架
-status: accepted                  # draft → accepted（已通过 G2，本文件首条 review）
+status: implemented               # G6 通过：SC1~SC17 全 done、reviews 含 G2/G5/G6 三轮 verdict
 created: 2026-05-11
 updated: 2026-05-11
 owner: claude-code                # 主导 runner
@@ -116,6 +116,19 @@ reviews:
       - 建议补 → §3 子目录约定段、§5 brainstorming 输出形态、§5 codex 双名解释、§6 codex memory 措辞中性化、§7 PR title 约定、§9 三大模板引用
       整改后 linkcheck 仍 ✅。完整 review 内容存于本次主会话 transcript（subagent agentId: a17620bedfcf408c2）。
     artifacts: ["AGENTS.md §2/§3/§4.2/§5/§6/§7.1/§9 修订"]
+  - gate: G6
+    reviewer: claude-code (main session, automated checks)
+    date: 2026-05-11
+    verdict: approved
+    summary: |
+      G6 merge 前验收：spec_criteria SC1~SC17 全部 done=true、evidence 已逐条登记于
+      文末 ## Verification log。两条 automated_checks 复跑均绿：
+      - SC_AUTO_LINKCHECK：42 个 markdown 文件全部相对链接可解析（脚本剥离 frontmatter
+        与 code fence、忽略 ${VAR} 模板占位）
+      - SC_AUTO_FRONTMATTER：spec/ADR/version/research 31 个文件 frontmatter 第一行均为 ---
+      （runbook/user-guide 不在 SC14 criterion 范围内，与 SC14 evidence "31 files" 完全对齐）
+      G6 通过 → spec status: accepted → implemented。后续如打 v0.0.7 tag 则触发 G7。
+    artifacts: ["scripts/linkcheck (inline python)", "scripts/frontmatter-lint (inline python)"]
 ---
 
 # 文档治理框架与版本路线骨架
