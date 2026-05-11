@@ -169,6 +169,28 @@ CI 完成后：
 - [ ] version 文件 frontmatter status / shipped_date 已更新
 - [ ] commit message：`chore(release): mark ${VER} as shipped`
 
+## 8.5 Sparkle 双通道（v0.2.2+）
+
+自 v0.2.2 起 app 支持 Sparkle stable / beta 双通道。tag 命名约定：
+
+| Tag pattern | Channel | CI 行为 |
+|---|---|---|
+| `v0.X.Y` / `v1.0.0` 等不带 `-beta.N` 后缀 | **stable** | appcast item 不带 `<sparkle:channel>` 标签（默认通道） |
+| `v0.X.Y-beta.N` / `v0.X.Y-beta.1` 等带 `-beta.N` 后缀 | **beta** | appcast item 加 `<sparkle:channel>beta</sparkle:channel>` |
+
+约束：
+- 两类 item 都进**同一个** `appcast.xml`，部署到 GitHub Pages
+- 用户在 Settings → "更新通道" 选 Beta 后能看到 beta items；选 Stable 则不可见
+- beta 用户的 `allowedChannels` = `["stable", "beta"]`，**也能**收 stable 更新（不会"卡在 beta"）
+- 跨 channel 版本比较由 `SUStandardVersionComparator` 决定（更高版本号胜出，无论 channel）
+
+CI workflow 若使用 generate-appcast 工具需根据 tag 后缀注入 `--channel beta` 参数。
+
+打 beta tag 前置约束：
+- ⚠️ HARD GATE：Apple 公证（v0.2.1）若未落地，beta build 仍未经公证 — 用户首次启动可能看到 Gatekeeper 警告
+- 必须更新版本号到 `vX.Y.Z-beta.N` 后再 tag 推送
+- 仅推 origin（`git push origin vX.Y.Z-beta.N`）；不更新 main 分支
+
 ## 9. 24h health check（发版后异步）
 
 24 小时后：
