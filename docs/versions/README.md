@@ -29,7 +29,7 @@ placeholder ─首个 spec 落地─► planned ─开发开始─► in-progres
 | [v0.0.7](./v0.0.7-docs-governance.md) | docs-governance | planned | 2026-05-11 | 📚 文档治理 + 路线骨架 |
 | [v0.0.8](./v0.0.8-hero-popover.md) | hero-popover | in-progress | 2026-05-12 | 🎨 hero popover 重做 |
 | [v0.0.9](./v0.0.9-trend-arrows.md) | trend-arrows | in-progress | 2026-05-12 | 🎨 趋势箭头 |
-| [v0.0.10](./v0.0.10-menubar-display-modes.md) | menubar-display-modes | placeholder | — | 🎨 菜单栏多显示模式 |
+| [v0.0.10](./v0.0.10-menubar-display-modes.md) | menubar-display-modes | planned | 2026-05-12 | 🎨 菜单栏多显示模式 |
 | [v0.0.11](./v0.0.11-pace-tracking.md) | pace-tracking | placeholder | — | 🎨 Pace tracking |
 | [v0.1.0](./v0.1.0-phase1-milestone.md) | phase1-milestone | placeholder | — | 🏁 Phase 1 里程碑 |
 | [v0.1.1](./v0.1.1-claude-cli-credentials.md) | claude-cli-credentials | placeholder | — | 🔌 Claude CLI 凭证复用 |
