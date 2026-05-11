@@ -18,6 +18,7 @@ updated: 2026-05-11
 | Spec ID | Title | Status | Target | 引用 |
 |---|---|---|---|---|
 | `2026-05-11-docs-governance` | 文档治理框架与版本路线骨架 | implemented | v0.0.7 | [文件](./2026-05-11-docs-governance.md) |
+| `2026-05-11-hero-popover` | Popover 重做：5h hero + 7d secondary + capsule 进度条 | accepted | v0.0.8 | [文件](./2026-05-11-hero-popover.md) |
 
 > 新增 spec 时在表格 append 一行；状态由 spec frontmatter 同步。
 
