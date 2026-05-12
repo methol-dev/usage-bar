@@ -39,10 +39,14 @@ struct CreditLine: Equatable {
     var isEnabled: Bool
     /// 已用百分比 `0...100`（若 provider 提供）。
     var utilizationPct: Double?
-    /// 已用金额（货币单位）。
+    /// 已用金额（货币单位）—— Claude `extra_usage`。
     var usedAmount: Double?
-    /// 上限金额（货币单位）。
+    /// 上限金额（货币单位）—— Claude `extra_usage`。
     var limitAmount: Double?
+    /// 剩余余额（货币单位）—— Codex `credits.balance`。与「已用/上限」语义不同，单列。
+    var remainingAmount: Double?
+    /// 无限额度 —— Codex `credits.unlimited`。
+    var isUnlimited: Bool
     /// 货币代码（如 `"USD"`）。nil = 按默认（`$`）渲染。
     var currencyCode: String?
 
@@ -50,11 +54,15 @@ struct CreditLine: Equatable {
          utilizationPct: Double? = nil,
          usedAmount: Double? = nil,
          limitAmount: Double? = nil,
+         remainingAmount: Double? = nil,
+         isUnlimited: Bool = false,
          currencyCode: String? = nil) {
         self.isEnabled = isEnabled
         self.utilizationPct = utilizationPct
         self.usedAmount = usedAmount
         self.limitAmount = limitAmount
+        self.remainingAmount = remainingAmount
+        self.isUnlimited = isUnlimited
         self.currencyCode = currencyCode
     }
 }
