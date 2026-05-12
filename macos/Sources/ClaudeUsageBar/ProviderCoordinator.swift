@@ -3,8 +3,8 @@ import Combine
 
 /// 多 provider 的「门面」—— 持有注册表 + provider 顺序 / 启用集 / 菜单栏 provider + 非-Claude 的后台 timer + 按需 refresh。
 ///
-/// Claude 的后台轮询 / 429 backoff / `recordDataPoint` / `checkAndNotify` 仍归 `UsageService` 自己（装配处 `claude.startPolling()`）——
-/// coordinator 只统管「非-Claude provider」的统一后台 timer（v0.2.10），以及 popover 打开时的一次性刷新。
+/// v0.2.11：coordinator 持一个统一的后台 timer，覆盖**所有** enabled provider（含 Claude）—— 间隔 = `pollingMinutes`，监听 UserDefaults 变化重起。
+/// Claude 的 429 backoff 由它自己的 `UsageService.fetchUsage` 记进 `backoffUntil`（暴露为 `nextEligibleRefresh`），coordinator 的 tick 在 backoff 窗口内会跳过本 provider。
 @MainActor
 final class ProviderCoordinator: ObservableObject {
     /// Claude provider（一等公民，一定存在）—— 登录 UX / polling 设置等 Claude 专属 UI 直接用它。
@@ -130,11 +130,23 @@ final class ProviderCoordinator: ObservableObject {
 
     // MARK: - 刷新纪律
     /// Claude 的首屏是否还空（= 还没成功拉过）—— popover 打开时才据此兜一次硬拉。
-    var shouldRefreshClaudeOnOpen: Bool { claude.runtime.snapshot == nil }
-    /// popover 打开（content 视图首次 appear）触发一次：非-Claude 各拉一次；Claude 仅在首屏空时兜一次（避免打乱其 backoff）。
+    var shouldRefreshClaudeOnOpen: Bool {
+        guard claude.runtime.snapshot == nil else { return false }
+        if let due = claude.nextEligibleRefresh, due > Date() { return false }   // 还在 429 backoff 窗口里 → 别拉
+        return true
+    }
+    /// popover 打开（content 视图首次 appear）触发一次：对每个 enabled provider，跳过 `nextEligibleRefresh` 还在未来的；
+    /// 非-Claude provider 直接 `refreshNow`；Claude 仅在首屏还空时兜一次（避免「每次打开 popover 都硬拉 Claude」打乱其速率配额）。
     func refreshAllEnabledOnOpen() async {
-        for id in availableIDs where id != .claude { await registry.provider(id)?.refreshNow() }
-        if shouldRefreshClaudeOnOpen { await claude.refreshNow() }
+        for id in availableIDs {
+            guard let p = registry.provider(id) else { continue }
+            if let due = p.nextEligibleRefresh, due > Date() { continue }
+            if id == .claude {
+                if shouldRefreshClaudeOnOpen { await p.refreshNow() }
+            } else {
+                await p.refreshNow()
+            }
+        }
     }
 
     // MARK: - 非-Claude 的统一后台 timer
@@ -145,9 +157,9 @@ final class ProviderCoordinator: ObservableObject {
         return TimeInterval(mins * 60)
     }
 
-    /// 装配处（`ClaudeUsageBarApp`）调用：为 Codex 设好 `onPollTick`（驱动 codexStats 刷新，回调由 App 注入）+ 起统一后台 timer + 立即各拉一次 + 监听 `pollingMinutes` 变化重起。
-    func startBackgroundPolling(codexOnPollTick: @escaping @MainActor () -> Void) {
-        (registry.provider(.codex) as? CodexProvider)?.onPollTick = codexOnPollTick
+    /// 装配处（`ClaudeUsageBarApp`）调用：起统一后台 timer（覆盖所有 enabled provider，含 Claude）+ 立即各拉一次 + 监听 `pollingMinutes` 变化重起。
+    /// 各 provider 的 `onPollTick`（驱动其本机统计刷新）由装配处在调本方法**之前**单独设好。
+    func startBackgroundPolling() {
         rescheduleBackgroundTimer()
         onBackgroundTick()                                 // 立即一次
         defaultsObserver = NotificationCenter.default.addObserver(
@@ -167,12 +179,15 @@ final class ProviderCoordinator: ObservableObject {
             .autoconnect()
             .sink { [weak self] _ in self?.onBackgroundTick() }
     }
-    /// 一次后台 tick（`internal` 以便单测直接调）：非-Claude 的 enabled provider 各 `refreshNow` + `onPollTick`。Claude 不碰（它有自己的 timer）。
+    /// 一次后台 tick（`internal` 以便单测直接调）：对每个 enabled provider（含 Claude），若 `nextEligibleRefresh` 还在未来（= 还在 429 backoff 窗口里）则跳过这一 tick；
+    /// 否则 `refreshNow()` + `onPollTick?()`（驱动该 provider 的本机统计刷新）。
+    /// 注：`Task { await p.refreshNow() }` 对 Claude 故意不持有 / 不可 cancel —— 账号切换时这个在飞的 tick 不被 cancel，但 `fetchUsage` 入口 + 写值前都有 `accountSwitchEpoch` 比对兜底（陈旧响应被丢弃）。
     func onBackgroundTick() {
-        for id in availableIDs where id != .claude {
+        for id in availableIDs {
             guard let p = registry.provider(id) else { continue }
+            if let due = p.nextEligibleRefresh, due > Date() { continue }
             Task { await p.refreshNow() }
-            (p as? CodexProvider)?.onPollTick?()
+            p.onPollTick?()
         }
     }
 }

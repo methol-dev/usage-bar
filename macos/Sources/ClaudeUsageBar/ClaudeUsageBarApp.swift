@@ -4,7 +4,7 @@ import SwiftUI
 struct ClaudeUsageBarApp: App {
     // v0.2.5 多供应商重构：用 ProviderCoordinator 装配（内部注册 Claude provider = UsageService）。
     // Claude 的 OAuth/refresh/多账号/polling/backoff 等仍在 coordinator.claude（= UsageService）里，
-    // coordinator 本版本不跑 timer——polling 仍由 coordinator.claude.startPolling() 起。
+    // v0.2.11：所有 provider 的后台轮询由 coordinator.startBackgroundPolling() 的统一 timer 管（含 Claude）。
     @StateObject private var coordinator = ProviderCoordinator(claude: UsageService(),
                                                                additionalProviders: [CodexProvider()])
     @StateObject private var historyService = UsageHistoryService()
@@ -46,13 +46,14 @@ struct ClaudeUsageBarApp: App {
                     if coordinator.claude.isAuthenticated && !UserDefaults.standard.bool(forKey: "setupComplete") {
                         UserDefaults.standard.set(true, forKey: "setupComplete")
                     }
-                    // 首次 refresh 本机 JSONL 统计（polling timer 内会继续更新）
+                    // 首次 refresh 本机 JSONL 统计（之后随后台 tick 的 onPollTick 继续更新）
                     await usageStats.refresh()
                     await codexStats.refresh()
-                    coordinator.claude.startPolling()
-                    // 非-Claude provider 的统一后台 timer（与 Claude 用同一个 `pollingMinutes`）：每 tick 各 refreshNow + onPollTick；
-                    // Codex 的 onPollTick 驱动 codexStats（本机 session 扫描）走同一节奏。Claude 的 timer/backoff 仍归 UsageService。
-                    coordinator.startBackgroundPolling(codexOnPollTick: { Task.detached { await codexStats.refresh() } })
+                    // 各 provider 的本机统计刷新随后台 tick 走 onPollTick（Claude 的逻辑原在已退役的 UsageService timer 里）—— 必须在 startBackgroundPolling 之前设好。
+                    coordinator.claude.onPollTick = { Task.detached { await usageStats.refresh() } }
+                    coordinator.provider(.codex)?.onPollTick = { Task.detached { await codexStats.refresh() } }
+                    // 起统一后台 timer（覆盖所有 enabled provider，含 Claude；监听 pollingMinutes 变化自动重起）+ 立即各拉一次（这一次就拉了 Claude）。
+                    coordinator.startBackgroundPolling()
                 }
         }
         .menuBarExtraStyle(.window)

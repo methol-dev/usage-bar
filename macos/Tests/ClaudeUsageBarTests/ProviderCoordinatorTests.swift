@@ -107,17 +107,51 @@ final class ProviderCoordinatorTests: XCTestCase {
         XCTAssertTrue(c.shouldRefreshClaudeOnOpen)         // 全新 UsageService（未登录）→ runtime.snapshot == nil
     }
 
-    func testRefreshAllEnabledOnOpenDoesNotCrash() async {
+    func testRefreshAllEnabledOnOpenTicksClaudeWhenSnapshotNil() async {
         let c = makeCoordinator(freshDefaults())
-        await c.refreshAllEnabledOnOpen()                  // codex unconfigured → 不发网络；不崩即可
-        // claude unauthenticated → refreshNow 走未登录分支、不发网络；snapshot 仍 nil
+        await c.refreshAllEnabledOnOpen()                  // codex unconfigured → 不发网络；claude snapshot==nil → 被拉一次
         XCTAssertNil(c.claude.runtime.snapshot)
+        XCTAssertEqual(c.claude.runtime.lastError, "Not signed in")   // Claude 被拉过（首屏空 → 兜一次）
     }
 
-    func testOnBackgroundTickDoesNotTouchClaude() async {
+    // v0.2.11：onBackgroundTick 现在也 tick Claude（不再特判跳过）—— 用「未登录 UsageService → refreshNow→fetchUsage 走未登录分支、设 lastError = "Not signed in"」间接验证它被 tick 到了。
+    func testOnBackgroundTickAlsoTicksClaude() async {
         let c = makeCoordinator(freshDefaults())
         c.onBackgroundTick()
-        await Task.yield(); try? await Task.sleep(nanoseconds: 50_000_000)
-        XCTAssertNil(c.claude.runtime.snapshot)            // 后台 tick 只碰非-Claude
+        await Task.yield(); try? await Task.sleep(nanoseconds: 80_000_000)
+        XCTAssertEqual(c.claude.runtime.lastError, "Not signed in")   // 被 tick 到了（v0.2.10 之前 onBackgroundTick 不会碰 Claude）
     }
+
+    // backoff 窗口内的 provider 这一 tick 被跳过；窗口过后被 tick。
+    func testBackoffWindowSkipsProvider() async {
+        let d = freshDefaults()
+        let claude = UsageService(credentialsStore: StoredCredentialsStore(directoryURL: tmpDir()))
+        let stub = StubProviderForCoordTest(id: .cursor)   // cursor 默认 enabled、注册进去
+        let c = ProviderCoordinator(claude: claude, additionalProviders: [stub], defaults: d)
+        XCTAssertTrue(c.availableIDs.contains(.cursor))
+
+        stub.nextEligibleRefreshOverride = Date().addingTimeInterval(3600)   // 还在 backoff 窗口
+        c.onBackgroundTick()
+        await Task.yield(); try? await Task.sleep(nanoseconds: 40_000_000)
+        XCTAssertEqual(stub.refreshNowCallCount, 0)
+
+        stub.nextEligibleRefreshOverride = nil                                // 窗口已过
+        c.onBackgroundTick()
+        await Task.yield(); try? await Task.sleep(nanoseconds: 40_000_000)
+        XCTAssertEqual(stub.refreshNowCallCount, 1)
+    }
+}
+
+/// 给 `ProviderCoordinatorTests` 用的最小 provider（带 refreshNow 计数 + nextEligibleRefresh override）。
+private final class StubProviderForCoordTest: UsageProvider {
+    let id: ProviderID
+    var isConfigured = true
+    var supportsBackgroundPolling = false
+    let runtime = ProviderRuntime(isConfigured: true)
+    var onPollTick: (@MainActor () -> Void)? = nil
+    var nextEligibleRefreshOverride: Date? = nil
+    var nextEligibleRefresh: Date? { nextEligibleRefreshOverride }
+    private(set) var refreshNowCallCount = 0
+    init(id: ProviderID) { self.id = id }
+    func refreshNow() async { refreshNowCallCount += 1 }
 }
