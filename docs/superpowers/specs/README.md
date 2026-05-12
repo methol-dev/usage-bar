@@ -27,7 +27,7 @@ updated: 2026-05-12
 | `2026-05-11-multi-account` | 多账号支持（accounts store + 迁移 + popover 切换器） | implemented | v0.1.3 | [文件](./2026-05-11-multi-account.md) |
 | `2026-05-11-sparkle-beta-channel` | Sparkle 双通道（stable / beta）+ Settings Picker | implemented | v0.2.2 | [文件](./2026-05-11-sparkle-beta-channel.md) |
 | `2026-05-12-usage-store-redesign` | 用量统计与存储重设计（按 provider 持久化 raw events + 聚合 + 消费热力图） | implemented | v0.2.3 | [文件](./2026-05-12-usage-store-redesign.md) |
-| `2026-05-12-popover-redesign` | Popover 重做：provider tab 外壳 + 卡片化视觉 + 折线图 pace 面积（+ ADR 0005 supersede 0002） | accepted | v0.2.4 | [文件](./2026-05-12-popover-redesign.md) |
+| `2026-05-12-popover-redesign` | Popover 重做：provider tab 外壳 + 卡片化视觉 + 折线图 pace 面积（+ ADR 0005 supersede 0002） | implemented | v0.2.4 | [文件](./2026-05-12-popover-redesign.md) |
 
 > 新增 spec 时在表格 append 一行；状态由 spec frontmatter 同步。
 

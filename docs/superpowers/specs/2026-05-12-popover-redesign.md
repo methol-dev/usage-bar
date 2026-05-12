@@ -1,7 +1,7 @@
 ---
 id: 2026-05-12-popover-redesign
 title: Popover 重做 — provider tab 外壳 + 卡片化视觉 + 折线图 pace 面积
-status: accepted
+status: implemented
 created: 2026-05-12
 updated: 2026-05-12
 owner: claude-code
@@ -12,24 +12,24 @@ related_research: []
 spec_criteria:
   - id: SC1
     criterion: "popover 顶部出现 provider tab bar（Claude / Codex / Cursor / Copilot / Gemini）；Claude 为选中态，其余 4 个 dimmed；选中非 Claude 时整个用量区替换为「敬请期待」占位面板，且能切回 Claude"
-    done: false
-    evidence: null
+    done: true
+    evidence: "ProviderTab/ProviderTabBar/ProviderComingSoonView @ 9106c4b；PopoverView 接线 @ 75852df；ProviderTabTests 3 cases 绿；make app + open 启动无崩溃。视觉细节（选中态/dimmed/占位面板）待 user 目测确认。"
   - id: SC2
     criterion: "5h / 7d 用量为圆角卡片：左上 SF Symbol 图标（5h=clock，7d=calendar）+ 标题，右上 百分比 + 趋势箭头；下方 capsule 进度条；底行「Resets in: …」+「Pace: safe/fast」标签 —— 5h（<24h）显示「Xh Ym at H:MM AM/PM」，7d（一般 ≥24h）显示「X days Yh Zm」（此时整行没有「at 时钟」）；popover 背景为柔和渐变（dark mode 自适应、近乎不可见）"
-    done: false
-    evidence: null
+    done: true
+    evidence: "formatResetWithClock @ 662e78d（5 cases 绿）；UsageCard @ 2316efc；UsageHeroCard 三行布局 @ 3e912b0；PopoverView 卡片化 + 渐变背景 @ 75852df。视觉/dark mode 待 user 目测确认。"
   - id: SC3
     criterion: "折线图在原 5h（蓝）/ 7d（橙）两条折线下方叠加 pace 面积：浅蓝 = 5h pace、浅黄 = 7d pace；pace = 当前窗口内 elapsed 比例 ×100（5h 跨多窗口时呈锯齿）；原两条折线、悬停 RuleMark/PointMark/tooltip 行为完全不变；图例仍只显示 5h / 7d 两项"
-    done: false
-    evidence: null
+    done: true
+    evidence: "UsagePaceArea.series @ a28bbe0（5 cases 绿）；chartView 叠 AreaMark（pace 在最前=底层、用 foregroundStyle(Color) 不进图例）@ fac597f；PopoverView 透传 reset 日期 @ 75852df；悬停/tooltip 代码未改动。pace 面积浅度/锯齿/图例待 user 目测确认。"
   - id: SC4
     criterion: "新增 ADR 0005（status accepted，supersedes 0002）；ADR 0002 frontmatter status 改为 superseded-by 0005；docs/adr/README.md 索引更新；docs/versions/v0.2.4-popover-redesign.md 与 docs/versions/README.md 路线表更新"
-    done: false
-    evidence: null
+    done: true
+    evidence: "立项 commit 7d50888：新增 docs/adr/0005-reopen-multi-provider-direction.md（accepted）、0002 status → superseded-by 0005、adr/README.md + versions/README.md + specs/README.md 索引更新、新增 v0.2.4-popover-redesign.md。"
   - id: SC5
-    criterion: "死代码 struct UsageChartView 删除（grep 确认无引用后）；新增 formatResetWithClock / UsagePaceArea.series / UsageProvider 各有单测覆盖（含 nil reset、窗口边界、跨窗口锯齿、clamp 边界、provider 可用性）；cd macos && swift build -c release 与 cd macos && swift test 全绿"
-    done: false
-    evidence: null
+    criterion: "死代码 struct UsageChartView 删除（grep 确认无引用后）；新增 formatResetWithClock / UsagePaceArea.series / ProviderTab 各有单测覆盖（含 nil reset、窗口边界、跨窗口锯齿、clamp 边界、provider 可用性）；cd macos && swift build -c release 与 cd macos && swift test 全绿"
+    done: true
+    evidence: "struct UsageChartView 删除 @ fac597f（grep 仅剩定义已无）；新增测试文件 ResetCountdownFormatterTests(+5)/UsagePaceAreaTests(5)/ProviderTabTests(3)；swift build -c release 绿、swift test 175 tests 0 failures、make release-artifacts（zip+dmg verify）绿。注：plan 里 UsageProvider 因与存储层同名枚举冲突，UI 维度改名 ProviderTab。"
 automated_checks:
   - "SC_AUTO_BUILD: cd macos && swift build -c release"
   - "SC_AUTO_TEST: cd macos && swift test"
@@ -241,8 +241,10 @@ ForEach(pace5h) { p in
 
 > G6 验收依据。每条 SC 完成时勾选并填 evidence。
 
-- [ ] SC1 — pending
-- [ ] SC2 — pending
-- [ ] SC3 — pending
-- [ ] SC4 — pending
-- [ ] SC5 — pending
+- [x] SC1 — provider tab + 占位面板已实现（9106c4b + 75852df）；app 启动无崩溃；视觉待 user 目测
+- [x] SC2 — 卡片化 / 图标 / Resets-at-clock 文案 / Pace 标签 / 渐变背景已实现（662e78d + 2316efc + 3e912b0 + 75852df）；视觉 + dark mode 待 user 目测
+- [x] SC3 — 折线图叠 5h/7d pace 面积（在底层、不进图例）已实现（a28bbe0 + fac597f + 75852df）；悬停/tooltip 未改；浅度/锯齿待 user 目测
+- [x] SC4 — ADR 0005 新增 + 0002 superseded + 各 README/version 索引更新（7d50888）
+- [x] SC5 — 死代码 UsageChartView 删除 + 13 条新单测；swift build -c release / swift test(175) / make release-artifacts 全绿
+
+> 备注：manual_checks 三项（popover 目测、折线图目测、dark mode 目测）尚待 user 在本机确认 —— 实施环境无法做可视化验证，已用 `make app` 烟测确认进程不崩溃。若目测发现样式问题，作为 v0.2.4 范围内的 follow-up 修。
