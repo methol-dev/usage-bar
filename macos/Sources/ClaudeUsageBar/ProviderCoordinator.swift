@@ -51,8 +51,9 @@ final class ProviderCoordinator: ObservableObject {
     func isAvailable(_ id: ProviderID) -> Bool { registry.isAvailable(id) }
     var availableIDs: [ProviderID] { registry.availableIDs }
 
-    /// 已注册且**支持后台轮询**的 provider —— 只有这些能驱动菜单栏 label（否则菜单栏会显示一个只在
-    /// popover 打开时才更新的陈旧数字）。v0.2.6：只有 Claude 满足。
+    /// 「菜单栏 primary 候选」= `supportsBackgroundPolling == true` 的已注册 provider —— 即既有稳定后台数据源、
+    /// 又能在菜单栏 provider-aware 地渲染（否则菜单栏会显示陈旧数字或 Claude 专属图标）。
+    /// v0.2.6/v0.2.8：仍只 Claude 满足（Codex v0.2.8 起有自己的 5 分钟采样 timer，但菜单栏渲染未 provider-aware，故 flag 仍 false）。
     var primaryEligibleIDs: [ProviderID] {
         registry.availableIDs.filter { registry.provider($0)?.supportsBackgroundPolling == true }
     }

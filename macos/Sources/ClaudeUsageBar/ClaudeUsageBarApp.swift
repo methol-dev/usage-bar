@@ -46,6 +46,11 @@ struct ClaudeUsageBarApp: App {
                     // 首次 refresh 本机 JSONL 统计（polling timer 内会继续更新）
                     await usageStats.refresh()
                     coordinator.claude.startPolling()
+                    // Codex provider 的 5 分钟轻量采样（给 popover 的趋势箭头 / 折线图供数）；
+                    // 它 supportsBackgroundPolling 仍 false（不上菜单栏），但有自己的 refresh timer。
+                    if let codex = coordinator.provider(.codex) as? CodexProvider {
+                        codex.startPolling()
+                    }
                 }
         }
         .menuBarExtraStyle(.window)
