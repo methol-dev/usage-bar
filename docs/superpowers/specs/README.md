@@ -23,9 +23,10 @@ updated: 2026-05-11
 | `2026-05-11-menubar-display-modes` | 菜单栏多显示模式 icon / percent / percent+trend | implemented | v0.0.10 | [文件](./2026-05-11-menubar-display-modes.md) |
 | `2026-05-11-pace-tracking` | 5h 配速指示器 On pace / In deficit / In reserve | implemented | v0.0.11 | [文件](./2026-05-11-pace-tracking.md) |
 | `2026-05-11-claude-cli-credentials` | 复用 Claude CLI Keychain 凭证 + Strategy 协议骨架 | implemented | v0.1.1 | [文件](./2026-05-11-claude-cli-credentials.md) |
-| `2026-05-11-local-cost-scan` | 本地 JSONL 成本扫描（30 天 USD + per-model token） | implemented | v0.1.2 | [文件](./2026-05-11-local-cost-scan.md) |
+| `2026-05-11-local-cost-scan` | 本地 JSONL 成本扫描（30 天 USD + per-model token） | superseded | v0.1.2 | [文件](./2026-05-11-local-cost-scan.md) |
 | `2026-05-11-multi-account` | 多账号支持（accounts store + 迁移 + popover 切换器） | implemented | v0.1.3 | [文件](./2026-05-11-multi-account.md) |
 | `2026-05-11-sparkle-beta-channel` | Sparkle 双通道（stable / beta）+ Settings Picker | implemented | v0.2.2 | [文件](./2026-05-11-sparkle-beta-channel.md) |
+| `2026-05-12-usage-store-redesign` | 用量统计与存储重设计（按 provider 持久化 raw events + 聚合 + 消费热力图） | accepted | v0.2.3 | [文件](./2026-05-12-usage-store-redesign.md) |
 
 > 新增 spec 时在表格 append 一行；状态由 spec frontmatter 同步。
 

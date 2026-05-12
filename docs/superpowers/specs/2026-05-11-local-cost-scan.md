@@ -1,14 +1,15 @@
 ---
 id: 2026-05-11-local-cost-scan
 title: 本地 JSONL 成本扫描（30 天 USD 累积 + per-model token）
-status: implemented
+status: superseded
 created: 2026-05-11
-updated: 2026-05-11
+updated: 2026-05-12
 owner: claude-code
 model: claude-opus-4-7
 target_version: v0.1.2
 related_adrs: [0001, 0002]
 related_research: [competitive-analysis]
+superseded_by: 2026-05-12-usage-store-redesign
 spec_criteria:
   - id: SC1
     criterion: "新增 macos/Sources/ClaudeUsageBar/ClaudePricing.swift：内嵌 LiteLLM-compatible 离线快照价格表（截至 2026-05 公开模型）；提供 struct ClaudeModelPricing { inputUSDPerMTok, outputUSDPerMTok, cacheReadUSDPerMTok, cacheWriteUSDPerMTok }；提供 lookup(model:) -> ClaudeModelPricing? 返回 nil 表示未知模型（unknown 落盘但 cost=0 且 unknownModelCount++）"
