@@ -1,7 +1,7 @@
 ---
 id: 2026-05-12-codex-provider
 title: Codex provider 对接（第一条数据源：~/.codex/auth.json OAuth → wham/usage）
-status: accepted
+status: implemented
 created: 2026-05-12
 updated: 2026-05-12
 owner: claude-code
