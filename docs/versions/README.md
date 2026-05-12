@@ -38,7 +38,7 @@ placeholder ─首个 spec 落地─► planned ─开发开始─► in-progres
 | [v0.2.0](./v0.2.0-phase2-milestone.md) | phase2-milestone | shipped | 2026-05-11 | 🏁 Phase 2 里程碑（逻辑标记） |
 | [v0.2.1](./v0.2.1-apple-notarization.md) | apple-notarization | placeholder | — | 🔧 Apple 公证 |
 | [v0.2.2](./v0.2.2-sparkle-beta-channel.md) | sparkle-beta-channel | in-progress | 2026-05-12 | 🔧 Sparkle beta 通道 |
-| [v0.2.3](./v0.2.3-usage-store-redesign.md) | usage-store-redesign | planned | 2026-05-12 | 🔌 用量统计与存储重设计（持久化 + 消费热力图） |
+| [v0.2.3](./v0.2.3-usage-store-redesign.md) | usage-store-redesign | in-progress | 2026-05-12 | 🔌 用量统计与存储重设计（持久化 + 消费热力图） |
 
 > **路线截止于 v0.2.3**（v0.2.3 于 2026-05-12 新立项；2026-05-11 user 决策曾清理 v0.2.3+ 旧路线，详见 commit history）。新版本立项时按 §7.1 命名规范 append 即可。
 >

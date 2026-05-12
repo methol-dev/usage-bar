@@ -9,6 +9,33 @@
 
 ---
 
+## [v0.2.3] — 用量统计与存储重设计
+
+> spec: [`2026-05-12-usage-store-redesign`](./docs/superpowers/specs/2026-05-12-usage-store-redesign.md) · 版本: [`v0.2.3`](./docs/versions/v0.2.3-usage-store-redesign.md)（supersede v0.1.2 local-cost-scan）
+
+### 改进（Changed）
+
+- 本地用量从「一次性 30 天估算」升级为**持久化存储**：`~/.config/claude-usage-bar/data/claude/` 下按月份文件保存每次调用的 token 明细（`2026-05.json` 等），另维护按天/月/年三个聚合文件（`agg-day/month/year.json`）
+- 后台采集改为增量：挂在和 API 用量同一个刷新周期上，但每次只读有变化的本地日志文件（per-file size/mtime/行偏移游标），绝大多数刷新近乎零开销；启动时一次性回填全部历史
+- 金额不落盘：明细与聚合只存 token 数，金额按**当前价格表**实时折算 —— 价格表升级后历史消费自动按新价重算
+
+### 新增（Added）
+
+- popover 新增 **GitHub 贡献图风格的消费热力图**：整年 53 周网格，每格一天，颜色按当天估算消费额分 9 档（轻度用户也能看出梯度）；悬停显示「日期 · ≈ $X · N 次调用」；统计中显示「统计中…」骨架
+- 「本地 30 天估算 ≈ $X.XX」卡片保留（数据源切到新存储层，外观不变）
+
+### 安全隐私（Security & Privacy）
+
+- 隐私架构守护延续 + 扩展：parser schema 层不读 `message.content`；明细与游标文件含 sessionId / 绝对路径 → 文件权限 0600（目录 0700）；错误日志只记录错误类型，不记录文件名 / 路径 / 会话 ID / 对话内容
+
+### 内部（Internal）
+
+- 新增 `UsageEventStore` / `ScanCursorStore` / `ClaudeUsageCollector`（actor）+ `UsageAggregator`（纯函数）+ `UsageStatsService`（`@MainActor ObservableObject`）+ `UsageHeatmapView` / `UsageHeatmapModel`
+- 退役 `LocalCostScanner`（被存储层 + 采集器取代）；启动时清理 v0.1.2 旧的 `~/Library/Caches/claude-usage-bar/cost-usage/`
+- 多账号场景：本机用量统计是跨账号的，切换账号不再清空 / 重算（避免无意义闪烁）
+- 新增约 36 个测试（基线 131 → 160）：UsageEventStore / UsageAggregator / ScanCursorStore / ClaudeUsageCollector / UsageStatsService / UsageHeatmapModel 各套；删除 7 个 LocalCostScannerTests
+- 治理：spec 过 G2（含 security/privacy）/ plan 过 G3 / 实现过 G5（含 security/privacy，命中并修复「损坏月明细不清游标导致 pre-cursor 事件丢失」）；每个实施 Task 一轮 spec+quality review
+
 ## [v0.2.2] — 2026-05-11
 
 ### 新增（Added）
