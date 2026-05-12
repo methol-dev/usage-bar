@@ -30,7 +30,7 @@ updated: 2026-05-12
 | `2026-05-12-popover-redesign` | Popover 重做：provider tab 外壳 + 卡片化视觉 + 折线图 pace 面积（+ ADR 0005 supersede 0002） | implemented | v0.2.4 | [文件](./2026-05-12-popover-redesign.md) |
 | `2026-05-12-multi-provider-refactor` | 多供应商架构重构：`UsageProvider` 协议 + `ProviderUsageSnapshot` 统一形状 + per-provider `ProviderRuntime` + Claude 改写成 provider（纯重构） | implemented | v0.2.5 | [文件](./2026-05-12-multi-provider-refactor.md) |
 | `2026-05-12-codex-provider` | Codex provider 第一条数据源：`CodexProvider: UsageProvider` 读 `~/.codex/auth.json` OAuth → `wham/usage`，复用 v0.2.5 泛化视图层 | implemented | v0.2.6 | [文件](./2026-05-12-codex-provider.md) |
-| `2026-05-12-claude-keychain-reimport` | Claude refresh 永久失败时回退读 Claude CLI Keychain 续上凭证（修「Session expired」误报）；复用 v0.1.1 的 `ClaudeCLICredentialsStrategy` | draft | v0.2.7 | [文件](./2026-05-12-claude-keychain-reimport.md) |
+| `2026-05-12-claude-keychain-reimport` | Claude refresh 永久失败（单账号）时回退读 Claude CLI Keychain 续上凭证（修「Session expired」误报）；复用 v0.1.1 的 `ClaudeCLICredentialsStrategy` | accepted | v0.2.7 | [文件](./2026-05-12-claude-keychain-reimport.md) |
 
 > 新增 spec 时在表格 append 一行；状态由 spec frontmatter 同步。
 
