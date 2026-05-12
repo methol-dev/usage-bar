@@ -3,6 +3,8 @@ import Combine
 
 @MainActor
 final class UsageStatsService: ObservableObject {
+    static let shared = UsageStatsService()
+
     @Published private(set) var rolling30d: CostSummary? = nil
     @Published private(set) var dailySpend: [DaySpend] = []
     @Published private(set) var monthlySpend: [MonthSpend] = []

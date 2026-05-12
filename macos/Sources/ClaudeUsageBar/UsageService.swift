@@ -10,8 +10,6 @@ class UsageService: ObservableObject {
     @Published var isAuthenticated = false
     @Published var isAwaitingCode = false
     @Published private(set) var accountEmail: String?
-    @Published var localCost30d: CostSummary?
-
     // v0.1.3 multi-account (G3-B3/G2-B1: race fix via epoch + currentFetchTask)
     @Published private(set) var accounts: [StoredAccount] = []
     @Published private(set) var activeAccountId: UUID?
@@ -21,6 +19,7 @@ class UsageService: ObservableObject {
     var historyService: UsageHistoryService?
     var notificationService: NotificationService?
 
+    private let usageStats: UsageStatsService
     private var timer: Timer?
     private let session: URLSession
     private let usageEndpoint: URL
@@ -89,8 +88,10 @@ class UsageService: ObservableObject {
         tokenEndpoint: URL = UsageService.defaultTokenEndpoint,
         redirectUri: String = UsageService.defaultRedirectURI,
         credentialsStore: StoredCredentialsStore = StoredCredentialsStore(),
-        localProfileLoader: @MainActor @escaping () -> String? = UsageService.loadLocalProfile
+        localProfileLoader: @MainActor @escaping () -> String? = UsageService.loadLocalProfile,
+        usageStats: UsageStatsService = .shared
     ) {
+        self.usageStats = usageStats
         self.session = session
         self.usageEndpoint = usageEndpoint
         self.userinfoEndpoint = userinfoEndpoint
@@ -184,33 +185,16 @@ class UsageService: ObservableObject {
         // 清前账号瞬态状态（SC8）
         self.usage = nil
         self.lastError = nil
-        self.localCost30d = nil
+        // 本机 JSONL 统计是跨账号的，不随账号清/重算（spec 2026-05-12 §5 风险12）
         self.accountEmail = nil
 
         // 重启 polling + 重新 fetch（捕获 epoch via currentFetchTask）
         startPolling()
-        Task { await refreshLocalCostIfNeeded() }
     }
 
     /// 触发 PKCE flow 添加新账号。保持 active 不变；UI 通过 isAwaitingCode 切到 CodeEntry。
     func beginAddAccount() {
         startOAuthFlow()  // G3-B1: 实际函数名（不是 startSignInFlow）
-    }
-
-    // MARK: - Local cost scan (v0.1.2)
-
-    /// 启动期一次性扫本地 JSONL 算 30 天 cost。
-    /// G3 #2: 内部用 Task.detached 把扫描挪到 cooperative pool；MainActor 在 await 期间释放，
-    /// 仅最后写回 self.localCost30d 时回到 main。
-    /// G5 R1: 显式 await MainActor.run 标注写回意图，便于未来重构时不破坏此不变量。
-    /// 注意：polling timer 内**不**调用此方法（避免 IO 抖动；60s in-memory + on-disk 缓存兜底）。
-    func refreshLocalCostIfNeeded() async {
-        let summary = await Task.detached(priority: .utility) {
-            await LocalCostScanner.shared.scan()
-        }.value
-        await MainActor.run {
-            self.localCost30d = summary.scannedFileCount > 0 ? summary : nil
-        }
     }
 
     // MARK: - Polling
@@ -235,6 +219,7 @@ class UsageService: ObservableObject {
                 self.currentFetchTask = Task { [weak self] in
                     await self?.fetchUsage()
                 }
+                Task.detached { [usageStats = self.usageStats] in await usageStats.refresh() }
             }
         }
         RunLoop.main.add(t, forMode: .common)
@@ -368,7 +353,7 @@ class UsageService: ObservableObject {
             // 清前账号瞬态
             self.usage = nil
             self.lastError = nil
-            self.localCost30d = nil
+            // 本机 JSONL 统计是跨账号的，不随账号清/重算（spec 2026-05-12 §5 风险12）
             self.accountEmail = nil
         }
         do {
@@ -398,9 +383,6 @@ class UsageService: ObservableObject {
 
         await fetchProfile()
         startPolling()
-        if !isFirst {
-            Task { await refreshLocalCostIfNeeded() }
-        }
     }
 
     func signOut() {
@@ -416,7 +398,6 @@ class UsageService: ObservableObject {
         usage = nil
         lastUpdated = nil
         accountEmail = nil
-        localCost30d = nil
         timer?.invalidate()
         timer = nil
         refreshTask?.cancel()

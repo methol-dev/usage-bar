@@ -5,6 +5,7 @@ struct PopoverView: View {
     @ObservedObject var historyService: UsageHistoryService
     @ObservedObject var notificationService: NotificationService
     @ObservedObject var appUpdater: AppUpdater
+    @EnvironmentObject var usageStats: UsageStatsService
     @AppStorage("setupComplete") private var setupComplete = false
 
     var body: some View {
@@ -128,10 +129,15 @@ struct PopoverView: View {
             ExtraUsageRow(extra: extra)
         }
 
-        // v0.1.2: 本地 30 天 cost 估算；nil 或 scannedFileCount==0 时整张隐藏
-        if let cost = service.localCost30d {
+        // v0.1.2+: 本地 30 天 cost 估算（数据源已切到 usageStats）；nil 时整张隐藏
+        if let cost = usageStats.rolling30d {
             Divider()
             LocalCostCard(summary: cost)
+        }
+
+        if !usageStats.dailySpend.isEmpty && !usageStats.dailySpend.allSatisfy({ $0.usd == 0 }) {
+            Divider()
+            UsageHeatmapView(daySpends: usageStats.dailySpend, isInitializing: usageStats.isInitializing)
         }
 
         Divider()

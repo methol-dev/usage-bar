@@ -75,15 +75,14 @@ final class UsageServiceMultiAccountTests: XCTestCase {
         XCTAssertEqual(service.activeAccountId, a.id)
         // 模拟前账号瞬态数据
         service.lastError = "stale"
-        service.localCost30d = CostSummary(generatedAt: Date(), windowDays: 30, totalUSD: 9.99, perModel: [], unknownModelCount: 0, parseErrorCount: 0, scannedFileCount: 1)
 
         service.switchAccount(to: b.id)
 
         XCTAssertEqual(service.activeAccountId, b.id)
         XCTAssertNil(service.usage)
         XCTAssertNil(service.lastError)
-        XCTAssertNil(service.localCost30d)
         XCTAssertNil(service.accountEmail)
+        // 本机 JSONL 统计跨账号不清（spec 2026-05-12 §5 风险12）
     }
 
     func testSwitchAccountUpdatesLastUsed() throws {

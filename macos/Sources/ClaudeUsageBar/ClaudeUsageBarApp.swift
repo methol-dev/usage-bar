@@ -6,6 +6,7 @@ struct ClaudeUsageBarApp: App {
     @StateObject private var historyService = UsageHistoryService()
     @StateObject private var notificationService = NotificationService()
     @StateObject private var appUpdater = AppUpdater()
+    @StateObject private var usageStats = UsageStatsService.shared
 
     var body: some Scene {
         MenuBarExtra {
@@ -15,9 +16,14 @@ struct ClaudeUsageBarApp: App {
                 notificationService: notificationService,
                 appUpdater: appUpdater
             )
+            .environmentObject(usageStats)
         } label: {
             MenuBarLabel(service: service, historyService: historyService)
                 .task {
+                    // 退役 v0.1.2 的 cost-usage cache（已被 ~/.config/claude-usage-bar/data/ 取代）
+                    if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+                        try? FileManager.default.removeItem(at: caches.appendingPathComponent("claude-usage-bar/cost-usage", isDirectory: true))
+                    }
                     historyService.loadHistory()
                     service.historyService = historyService
                     service.notificationService = notificationService
@@ -28,8 +34,8 @@ struct ClaudeUsageBarApp: App {
                     if service.isAuthenticated && !UserDefaults.standard.bool(forKey: "setupComplete") {
                         UserDefaults.standard.set(true, forKey: "setupComplete")
                     }
-                    // v0.1.2: 启动期一次性扫本地 JSONL 算 30 天 cost；polling timer 内不重复
-                    await service.refreshLocalCostIfNeeded()
+                    // 首次 refresh 本机 JSONL 统计（polling timer 内会继续更新）
+                    await usageStats.refresh()
                     service.startPolling()
                 }
         }
