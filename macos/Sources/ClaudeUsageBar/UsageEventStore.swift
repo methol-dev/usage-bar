@@ -142,15 +142,15 @@ actor UsageEventStore {
         return loadAgg(kind)?.buckets ?? [:]
     }
 
-    func rebuildAllAggregates() {
+    func rebuildAllAggregates(normalize: @Sendable (String) -> String = { ClaudePricing.normalize($0) }) {
         let allEvents = allMonthKeys().flatMap { eventsForMonth($0) }
-        saveAgg("day", buckets: UsageAggregator.foldByDay(events: allEvents))
-        saveAgg("month", buckets: UsageAggregator.foldByMonth(events: allEvents))
-        saveAgg("year", buckets: UsageAggregator.foldByYear(events: allEvents))
+        saveAgg("day", buckets: UsageAggregator.foldByDay(events: allEvents, normalize: normalize))
+        saveAgg("month", buckets: UsageAggregator.foldByMonth(events: allEvents, normalize: normalize))
+        saveAgg("year", buckets: UsageAggregator.foldByYear(events: allEvents, normalize: normalize))
     }
 
     /// 增量重建：只读受影响的月明细文件，重算受影响的 day/month/year 桶覆盖回去。
-    func rebuildAggregates(forDayKeys dayKeys: Set<String>) {
+    func rebuildAggregates(forDayKeys dayKeys: Set<String>, normalize: @Sendable (String) -> String = { ClaudePricing.normalize($0) }) {
         guard !dayKeys.isEmpty else { return }
         let dayFmt = DateFormatter(); dayFmt.calendar = Calendar(identifier: .gregorian)
         dayFmt.timeZone = TimeZone.current; dayFmt.locale = Locale(identifier: "en_US_POSIX"); dayFmt.dateFormat = "yyyy-MM-dd"
@@ -178,9 +178,9 @@ actor UsageEventStore {
         for k in touchedYearKeys { year[k] = nil }
         let monthEvents = loadedEvents.filter { touchedMonthKeys.contains(UsageAggregator.utcMonthKey($0.ts)) }
         let yearEvents = loadedEvents.filter { touchedYearKeys.contains(UsageAggregator.utcYearKey($0.ts)) }
-        for (k, v) in UsageAggregator.foldByDay(events: touchedEvents) { day[k] = v }
-        for (k, v) in UsageAggregator.foldByMonth(events: monthEvents) { month[k] = v }
-        for (k, v) in UsageAggregator.foldByYear(events: yearEvents) { year[k] = v }
+        for (k, v) in UsageAggregator.foldByDay(events: touchedEvents, normalize: normalize) { day[k] = v }
+        for (k, v) in UsageAggregator.foldByMonth(events: monthEvents, normalize: normalize) { month[k] = v }
+        for (k, v) in UsageAggregator.foldByYear(events: yearEvents, normalize: normalize) { year[k] = v }
         saveAgg("day", buckets: day); saveAgg("month", buckets: month); saveAgg("year", buckets: year)
     }
 }

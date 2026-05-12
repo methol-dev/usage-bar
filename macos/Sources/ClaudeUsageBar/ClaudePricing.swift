@@ -67,3 +67,17 @@ enum ClaudePricing {
               + Double(cacheWrite) * p.cacheWriteUSDPerMTok) / 1_000_000.0
     }
 }
+
+/// `ModelPriceTable` 适配器 —— 转发到 `ClaudePricing` 既有静态方法（表 / 静态方法本身不变）。
+struct ClaudeModelPriceTable: ModelPriceTable {
+    static let shared = ClaudeModelPriceTable()
+    func normalize(_ model: String) -> String { ClaudePricing.normalize(model) }
+    func displayName(_ model: String) -> String { ClaudePricing.displayName(model) }
+    func lookup(_ model: String) -> ModelUnitPricing? {
+        guard let p = ClaudePricing.lookup(model: model) else { return nil }
+        return ModelUnitPricing(inputUSDPerMTok: p.inputUSDPerMTok,
+                                outputUSDPerMTok: p.outputUSDPerMTok,
+                                cacheReadUSDPerMTok: p.cacheReadUSDPerMTok,
+                                cacheWriteUSDPerMTok: p.cacheWriteUSDPerMTok)
+    }
+}

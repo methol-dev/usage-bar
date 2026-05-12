@@ -29,6 +29,8 @@ struct UsageMetricBadges: View {
 
 struct LocalCostCard: View {
     let summary: CostSummary
+    /// 把规范化模型名映成显示名 —— 默认 Claude（`ClaudePricing.displayName`）；Codex 传 `OpenAIPricing.displayName`。
+    var displayName: (String) -> String = { ClaudePricing.displayName($0) }
     @State private var expanded = false
 
     private var totalCalls: Int { summary.perModel.reduce(0) { $0 + $1.calls } }
@@ -85,7 +87,7 @@ struct LocalCostCard: View {
                     ForEach(summary.perModel.sorted(by: { $0.usd > $1.usd }), id: \.normalizedModel) { row in
                         let rowTokens = row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens
                         GridRow {
-                            Text(ClaudePricing.displayName(row.normalizedModel))
+                            Text(displayName(row.normalizedModel))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .gridColumnAlignment(.leading)
                                 .foregroundStyle(row.isUnknownPricing ? Color.orange.opacity(0.8) : .secondary)
