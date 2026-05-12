@@ -1,7 +1,7 @@
 ---
 id: 2026-05-12-multi-provider-refactor
 title: 多供应商架构重构 — UsageProvider 协议 + ProviderUsageSnapshot 统一形状 + per-provider 运行时（Claude 行为不变）
-status: draft
+status: accepted
 created: 2026-05-12
 updated: 2026-05-12
 owner: claude-code
@@ -11,12 +11,16 @@ related_adrs: [0005, 0002]
 related_research: [competitive-analysis, codex-data-sources]
 related_specs: [2026-05-12-popover-redesign, 2026-05-12-codex-provider]
 spec_criteria:
+  - id: SC0
+    criterion: 命名冲突先行解决 —— 现有 `UsageStoreTypes.UsageProvider`（存储用 enum，仅 `.claude`）与 `ProviderTab`（UI 枚举）合并为单一 `ProviderID`（`claude/codex/cursor/copilot/gemini`），同 module 内不再有名为 `UsageProvider` 的 enum；磁盘 `data/claude/` 目录名不受影响（`ProviderID.claude.rawValue == "claude"`）
+    done: false
+    evidence: null
   - id: SC1
-    criterion: 存在 `protocol UsageProvider`（`id: ProviderID` / `displayName` / `isConfigured` / `fetchSnapshot() async throws -> ProviderUsageSnapshot` / `supportsBackgroundPolling` / `defaultPollMinutes`）与统一模型 `ProviderUsageSnapshot`（`primaryWindow`/`secondaryWindow`/`extraWindows`/`creditLine`/`planLabel`）+ `UsageWindow`（`utilizationPct`/`resetsAt`/`windowDuration`）+ `CreditLine`；Claude 以 `ClaudeUsageProvider` 形式实现该协议（沿用现有 OAuth/refresh/多账号/backoff/polling 全部逻辑，`fetchSnapshot` = 现有 endpoint → 解码 `UsageResponse` → 映射成 snapshot）
+    criterion: 存在 `protocol UsageProvider`（`id: ProviderID` / `displayName` / `isConfigured` / `supportsBackgroundPolling` / `defaultPollMinutes` / `fetchSnapshot() async throws -> ProviderUsageSnapshot` / `refreshNow() async`）与统一模型 `ProviderUsageSnapshot`（`primaryWindow`/`secondaryWindow`/`extraWindows`/`creditLine`/`planLabel`）+ `UsageWindow`（`label`/`utilizationPct`/`resetsAt`/`windowDuration`）+ `CreditLine`；Claude 以 `ClaudeUsageProvider` 形式实现该协议（沿用现有 OAuth/refresh/多账号/backoff/polling 全部逻辑，`fetchSnapshot` = 现有 endpoint → 解码 `UsageResponse` → 映射成 snapshot）
     done: false
     evidence: null
   - id: SC2
-    criterion: 存在 `ProviderRegistry`（当前只注册 Claude 一个）+ 每 provider 一个 `ProviderRuntime`（`ObservableObject`：`snapshot`/`lastUpdated`/`lastError`/`isConfigured`/`trendPrimary`/`trendSecondary`）+ `ProviderCoordinator`（持有 registry 与 `[ProviderID: ProviderRuntime]`，驱动 `supportsBackgroundPolling` 的 provider 的 polling）；`ClaudeUsageBarApp` 通过 `ProviderCoordinator` 装配，不再直接 `@StateObject UsageService()`（或 `UsageService` 被 `ClaudeUsageProvider` 取代/包裹）
+    criterion: 存在 `ProviderRegistry`（当前只注册 Claude 一个）+ 每 provider 一个 `ProviderRuntime`（`@MainActor ObservableObject`：`snapshot`/`lastUpdated`/`lastError`/`isConfigured`/`trendPrimary`/`trendSecondary`，**由所属 provider 写入**）+ `ProviderCoordinator`（持有 registry 与 `[ProviderID: ProviderRuntime]` + `primaryProviderID`，提供 `runtime(for:)`/`primaryRuntime`/`refreshNow(id:)`；**本版本 coordinator 不自己跑 timer**——Claude 的后台 polling 仍归 `ClaudeUsageProvider` 自己，它每次 fetch 成功后把映射出的 snapshot 写进自己的 `ProviderRuntime`）；`ClaudeUsageBarApp` 通过 `ProviderCoordinator` 装配，不再直接 `@StateObject UsageService()`（`UsageService` 演化成 `ClaudeUsageProvider`）
     done: false
     evidence: null
   - id: SC3
@@ -28,7 +32,7 @@ spec_criteria:
     done: false
     evidence: null
   - id: SC5
-    criterion: Claude 用户行为零回归 —— 启动→（CLI 凭证 bootstrap / OAuth 登录 / 添加账号 / code 粘贴）→ polling → 菜单栏 icon/percent/percent+trend → popover 两卡 + 趋势 + pace + per-model + extra usage + 折线图 + 热力图 + 错误提示 + 通知阈值，全部与重构前一致；`swift test` 现有用例全过（必要处只改类型引用，不改断言语义）；新增/改写的用例覆盖 snapshot 映射、registry/coordinator 装配、primary provider 读取
+    criterion: Claude 用户行为零回归 —— 启动→（CLI 凭证 bootstrap / OAuth 登录 / 添加账号 / code 粘贴）→ polling → 菜单栏 icon/percent/percent+trend → popover 两卡 + 趋势 + pace + per-model + extra usage + 折线图 + 热力图 + 错误提示 + 通知阈值，全部与重构前一致。**可审计证据**（不止"目测"）：(a) `swift test` 现有用例全过（必要处只改类型引用，不改断言语义）；(b) 新增 `ProviderAbstractionTests` 含 `UsageResponse → ProviderUsageSnapshot` 的 fixture 映射用例（断言每个目标字段值，相当于重构前后字段快照对比）；(c) 一个 spy 测试断言"`ClaudeUsageProvider` 一次成功 fetch 后仍调用 `historyService.recordDataPoint` 和 `notificationService` 的阈值检查"（注入 spy 替身），证明 history/notification 调用路径未被抽象层吞掉；(d) manual_checks 逐项目测
     done: false
     evidence: null
   - id: SC6
@@ -36,16 +40,22 @@ spec_criteria:
     done: false
     evidence: null
   - id: SC7
-    criterion: `git grep` 在 `Sources/` 下无遗留的"对 Claude 写死"的活体用量引用绕过抽象（除 `ClaudeUsageProvider` 内部）—— 即除该文件外，没有别处直接 `import` 并构造 `UsageResponse`/`UsageBucket` 来驱动 UI；菜单栏与 popover 用量渲染只走 `ProviderRuntime`
+    criterion: 活体用量渲染只走抽象层 —— `git grep -n 'UsageResponse\|UsageBucket' macos/Sources/ClaudeUsageBar` 的命中只出现在 `ClaudeUsageProvider.swift` / `UsageModel.swift`（Claude 内部解码模型与映射）及其测试里，菜单栏（`MenuBarLabel`）与 popover 用量区（`ProviderUsageSection`/`UsageHeroCard`）不引用它们，只读 `ProviderRuntime`/`ProviderUsageSnapshot`/`UsageWindow`
     done: false
     evidence: null
 automated_checks:
   - "SC_AUTO_BUILD: cd macos && swift build -c release"
   - "SC_AUTO_TEST: cd macos && swift test"
   - "SC_AUTO_ARTIFACTS: make release-artifacts"
+  - "SC_AUTO_GREP_SC7: git grep -n 'UsageResponse\\|UsageBucket' macos/Sources/ClaudeUsageBar -- ':!*ClaudeUsageProvider.swift' ':!*UsageModel.swift'  # 期望无输出（除注释）"
 manual_checks:
   - "目测：Claude 已登录态下 popover/菜单栏/Settings 与重构前肉眼无差异；Settings 出现主 provider Picker（Claude-only）；切到 Codex/Cursor 等 tab 仍是占位"
-reviews: []
+reviews:
+  - gate: G2
+    by: codex (gpt-5.x, codex-rescue subagent)
+    date: 2026-05-12
+    verdict: approved-after-revisions
+    notes: "3 必改：①命名冲突（旧 enum UsageProvider vs 新协议）— 已加 SC0/阶段 A0 先合并成 ProviderID；②ownership 不唯一（polling timer / recordDataPoint / checkNotify）— 已在 SC2/§3.3 明确归 ClaudeUsageProvider，coordinator 本版本不跑 timer；③SC5 证据太软 — 已加 fixture 映射测试 + history/notification spy 测试。可选建议（UsageWindow 加 label / 拆 A 阶段 / SC7 grep 命令）已采纳。"
 ---
 
 # 多供应商架构重构（Claude 行为不变）
@@ -77,13 +87,13 @@ reviews: []
 | 类型 | 形态 | 说明 |
 |---|---|---|
 | `ProviderID` | `enum ProviderID: String, Codable, CaseIterable { case claude, codex, cursor, copilot, gemini }` | 规范 provider 标识。取代现有 `ProviderTab`（UI）和 `UsageStoreTypes.UsageProvider`（存储）两个枚举。`displayName` 计算属性（`"claude" → "Claude"`）。 |
-| `UsageWindow` | `struct UsageWindow: Equatable { var utilizationPct: Double?; var resetsAt: Date?; var windowDuration: TimeInterval? }` | 一个滚动额度窗口的统一形状。`windowDuration` 让 pace（"此刻应该用到多少 %"）对所有 provider 通用。 |
+| `UsageWindow` | `struct UsageWindow: Equatable { var label: String?; var utilizationPct: Double?; var resetsAt: Date?; var windowDuration: TimeInterval? }` | 一个滚动额度窗口的统一形状。`windowDuration` 让 pace（"此刻应该用到多少 %"）对所有 provider 通用；`label`（如 `"Session"`/`"Weekly"`）让渲染层不用再硬编码文案（G2 可选建议）—— Claude 映射时 primary 给 `"Session"`、secondary 给 `"Weekly"`，与现状一致。 |
 | `CreditLine` | `struct CreditLine: Equatable { var isEnabled: Bool; var usedAmount: Double?; var limitAmount: Double?; var utilizationPct: Double?; var currencyCode: String? }` | 统一"按量计费/额外用量"行 —— 覆盖 Claude 的 `extra_usage` 与 Codex 的 `credits`。 |
 | `ProviderUsageSnapshot` | `struct ProviderUsageSnapshot: Equatable { var primaryWindow: UsageWindow?; var secondaryWindow: UsageWindow?; var extraWindows: [NamedUsageWindow]; var creditLine: CreditLine?; var planLabel: String? }`；`NamedUsageWindow { id; title; window: UsageWindow }`（承载 Claude 的 Opus/Sonnet per-model 行） | 一次拉取的统一结果。各 provider 的 `fetchSnapshot()` 负责把自家 API 形状映射到这里。 |
 | `UsageProvider` | `protocol UsageProvider: AnyObject { var id: ProviderID { get }; var displayName: String { get }; var isConfigured: Bool { get }; var supportsBackgroundPolling: Bool { get }; var defaultPollMinutes: Int { get }; func fetchSnapshot() async throws -> ProviderUsageSnapshot }` | 活体用量数据源契约。**只管"取数"**——凭证管理/登录流程是各 provider 的内部细节（Claude 有 OAuth 那一大套；Codex 只读文件），不进协议。 |
 | `ProviderRuntime` | `@MainActor final class ProviderRuntime: ObservableObject`：`@Published var snapshot: ProviderUsageSnapshot?` / `lastUpdated: Date?` / `lastError: String?` / `isConfigured: Bool`；`trendPrimary: TrendIndicator?` / `trendSecondary: TrendIndicator?`（计算属性或 published，Claude 实例接 `UsageHistoryService`，其它返回 nil）；`func refresh(force: Bool) async`（调 provider.fetchSnapshot，更新 published；401-ish 失败时清 snapshot，网络失败保留 snapshot——把这条作为通用策略） | 每 provider 一个；视图直接 `@ObservedObject` 它。 |
 | `ProviderRegistry` | `struct ProviderRegistry { let providers: [ProviderID: UsageProvider] }`（当前只放 `.claude`），`var availableIDs: [ProviderID]`，`var orderedTabIDs: [ProviderID] = ProviderID.allCases`（tab 排序固定，可用性 = `providers[id] != nil`） | provider 注册表。新增 provider = 往这里加一项 + 在 registry 构造处 new 它。 |
-| `ProviderCoordinator` | `@MainActor final class ProviderCoordinator: ObservableObject`：持有 `ProviderRegistry` 与 `[ProviderID: ProviderRuntime]`；`@AppStorage primaryProviderID`（default `.claude`）；`func runtime(for: ProviderID) -> ProviderRuntime?`；`var primaryRuntime: ProviderRuntime`；启动时给所有 `supportsBackgroundPolling` 的 provider（= Claude）起 polling timer（沿用现有 `UsageService` 的 polling 间隔设置与 backoff——见 §3.3）；`func refreshNow(_ id:)` 给 popover 的 Refresh 按钮与"切 tab 拉一次"用 | 取代现在散在 `ClaudeUsageBarApp.task` + `UsageService` 里的装配/起停逻辑的"协调"职责（OAuth/refresh 细节仍在 `ClaudeUsageProvider` 内）。 |
+| `ProviderCoordinator` | `@MainActor final class ProviderCoordinator: ObservableObject`：持有 `ProviderRegistry` 与 `[ProviderID: ProviderRuntime]`；`@AppStorage primaryProviderID`（default `.claude`）；`func provider(_:) -> UsageProvider?` / `func runtime(for:) -> ProviderRuntime?` / `var primaryRuntime: ProviderRuntime` / `var claude: ClaudeUsageProvider`（便捷）；`func refreshNow(_ id:) async`（给 popover Refresh 与"切 tab 拉一次"用，委托给 `provider.refreshNow()`）。**本版本 coordinator 不自己跑 timer**——Claude 的后台 polling timer / backoff / `recordDataPoint` / `checkAndNotify` 仍归 `ClaudeUsageProvider` 自己（G2 必改 ②），coordinator 只是注册表 + 主 provider 选择 + 按需 refresh 的"门面"。 | 把现在散在 `ClaudeUsageBarApp.task` 里的"装配/查找 provider"职责收口；Claude 自己的 OAuth/refresh/polling 细节不动。 |
 
 ### 3.2 Claude 改写
 
@@ -91,15 +101,15 @@ reviews: []
   - 保留：OAuth PKCE 流程、`submitOAuthCode`、token refresh、`bootstrapFromCLIIfNeeded`、多账号（`accounts`/`StoredAccount`）、`isAuthenticated`/`isAwaitingCode`、polling 间隔设置（`pollingMinutes`/`pollingOptions`/`updatePollingInterval`）、指数 backoff、推样本给 `historyService`/`notificationService`。
   - 改：`fetchUsage()` 的"拉到 `UsageResponse` 之后"那段——拆成 `func fetchSnapshot() async throws -> ProviderUsageSnapshot`，内部仍调原 endpoint、解码 `UsageResponse`（保留 reconcile 逻辑）、再 `mapToSnapshot()`。`UsageResponse`→`ProviderUsageSnapshot` 映射：`fiveHour`→`primaryWindow`（`windowDuration: 5*3600`）、`sevenDay`→`secondaryWindow`（`windowDuration: 7*86400`）、`sevenDayOpus`/`sevenDaySonnet`→`extraWindows`、`extraUsage`→`creditLine`、plan 暂无 → `planLabel = nil`。
   - `isConfigured` = `isAuthenticated`。`supportsBackgroundPolling = true`。`defaultPollMinutes` = 现默认值。
-  - `@Published var usage: UsageResponse?` 等可保留为内部，但 UI 不再读它——UI 读 `ProviderRuntime.snapshot`。`ProviderRuntime` 的 `refresh()` 对 Claude = 调 `ClaudeUsageProvider.fetchSnapshot()`（含登录态判断）。注意：Claude 的"未登录/等 code/添加账号"这些 UI 状态仍由 `PopoverView` 直接观察 `ClaudeUsageProvider`（这部分不泛化——是 Claude 特有的登录 UX），泛化的只是"已登录之后的用量展示区"。
+  - `@Published var usage: UsageResponse?` 等可保留为内部，但 UI 不再读它——UI 读 `ProviderRuntime.snapshot`。**所有权（G2 必改 ②）**：polling timer / backoff / `recordDataPoint` / `checkAndNotify` 全部继续归 `ClaudeUsageProvider` 自己——位置和时机不变（仍在它现有的 fetch 成功分支里）；唯一新增的一行是"fetch 成功后把 `mapToSnapshot(usage)` 写进自己的 `ProviderRuntime`（连同 `lastUpdated`/清 `lastError`；fetch 失败按通用策略：401-ish 清 snapshot、网络错误保留 snapshot 但设 lastError）"。`coordinator.refreshNow(.claude)` = 调 `ClaudeUsageProvider` 现有的 `fetchUsage()`（带"距上次 <Ns 不重拉"的节流，给 popover Refresh 按钮和切 tab 用）。注意：Claude 的"未登录/等 code/添加账号"这些 UI 状态仍由 `PopoverView` 直接观察 `ClaudeUsageProvider`（这部分不泛化——是 Claude 特有的登录 UX），泛化的只是"已登录之后的用量展示区"。
 
 ### 3.3 polling / 装配迁移
 
 现状：`ClaudeUsageBarApp.task` 里做 history load、wire services、`bootstrapFromCLIIfNeeded`、首次 `usageStats.refresh()`、`service.startPolling()`。重构后：
 
 - `ClaudeUsageBarApp` `@StateObject` 改成持有 `ProviderCoordinator`（内部 new `ProviderRegistry` → new `ClaudeUsageProvider` + 它的 `ProviderRuntime`）、`UsageHistoryService`、`NotificationService`、`AppUpdater`、`UsageStatsService`。
-- `.task` 里：`historyService.loadHistory()` → wire `ClaudeUsageProvider.historyService/notificationService` → `await claudeProvider.bootstrapFromCLIIfNeeded()` → setupComplete 标记 → `await usageStats.refresh()` → `coordinator.startBackgroundPolling()`（内部对每个 `supportsBackgroundPolling` provider 起 timer；Claude 的 timer 走原 `pollingMinutes`/backoff）。
-- `PopoverView`/`MenuBarLabel` 注入：传 `coordinator`（+ 仍需 `claudeProvider` 引用给登录 UX 区，可由 `coordinator.providers[.claude] as? ClaudeUsageProvider` 取，或 coordinator 暴露一个 `claude` 便捷属性）、`historyService`（折线图区还要它）、`notificationService`、`appUpdater`、`usageStats`。
+- `.task` 里：`historyService.loadHistory()` → wire `ClaudeUsageProvider.historyService/notificationService` → `await claudeProvider.bootstrapFromCLIIfNeeded()` → setupComplete 标记 → `await usageStats.refresh()` → `claudeProvider.startPolling()`（**注意：polling timer 仍由 `ClaudeUsageProvider` 自己起，不是 coordinator**——G2 必改 ②；coordinator 本版本只做注册/查找/`refreshNow`，将来要给 Codex 那种 `supportsBackgroundPolling == false` 的 provider 做按需拉取或要统一调度时再扩 coordinator）。
+- `PopoverView`/`MenuBarLabel` 注入：传 `coordinator`（+ 仍需 `claudeProvider` 引用给登录 UX 区，可由 `coordinator.provider(.claude) as? ClaudeUsageProvider` 取，或 coordinator 暴露一个 `claude` 便捷属性）、`historyService`（折线图区还要它）、`notificationService`、`appUpdater`、`usageStats`。
 
 ### 3.4 视图泛化
 
@@ -159,13 +169,15 @@ reviews: []
 4. **`UsageStoreTypes.UsageProvider` 合并 vs 共存**。它现在只有 `.claude` 一个 case、用作磁盘目录名。并入 `ProviderID` 最干净，但要确认磁盘上已有的 `data/claude/` 目录名不受影响（`ProviderID.claude.rawValue == "claude"`，一致，安全）。倾向合并；若合并牵扯太多就留 `typealias ProviderProvider = ProviderID` 类的桥。
 5. **是否该是个 ADR**？引入 `UsageProvider` 协议算架构决策。但 ADR 0005 已经定了"分两步、复用 per-provider 抽象、新建 strategy"的方向，本 spec 是它的"how"落地。倾向不另开 ADR，spec §2 决策摘要足够；若 G2 reviewer 认为该有 ADR，再补一个轻量 ADR 0006 引用本 spec。
 
-### 实施分期（供 G3 plan 细化）
+### 实施分期（供 G3 plan 细化；G2 必改 ①③ 已并入 A0 / A1）
 
-- **A. 核心抽象，零行为变化**：新增 `ProviderID`/`UsageWindow`/`CreditLine`/`ProviderUsageSnapshot`/`UsageProvider`/`ProviderRuntime`/`ProviderRegistry`/`ProviderCoordinator`；`UsageService` 加 `fetchSnapshot()`+`mapToSnapshot()` 并 conform `UsageProvider`；`ProviderAbstractionTests` 加映射/registry/coordinator/runtime 用例。视图仍走老路径。→ build+test 绿。
-- **B. 装配迁移**：`ClaudeUsageBarApp` 改 `@StateObject ProviderCoordinator`；`.task` 装配迁移；polling 由 coordinator 起。视图暂时还可经 coordinator 拿到 `ClaudeUsageProvider` 走老 API。→ 绿。
-- **C. 视图泛化**：抽 `ProviderUsageSection`；`UsageHeroCard`/`UsageBucketRow`/`ExtraUsageRow` 改吃 `UsageWindow`/`CreditLine`；`PopoverView` 用量区委托；`MenuBarLabel` 改读 primary runtime；`ProviderTabBar` 改吃 `ProviderID`。→ 绿 + 目测。
-- **D. 主 provider 设置**：`primaryProviderID` Picker 进 Settings；`MenuBarLabel` 确认走 primary。→ 绿 + 目测。
-- **E. 清理**：合并 `UsageProvider` 枚举到 `ProviderID`；删死代码；`git grep` 自查 SC7；更新仍引用旧符号的测试。→ 绿。
+- **A0. 命名清理（先做，纯 rename）**：新增 `ProviderID`（5 case）；把 `UsageStoreTypes.UsageProvider` enum 的用法全部改指 `ProviderID` 并删掉旧 enum；把 `ProviderTabBar.swift` 的 `ProviderTab` 也并到 `ProviderID`（`isAvailable` 暂时仍硬编码 `== .claude`，registry 还没来）。跟随的测试改引用。→ build+test 绿。**目的**：消除"协议名 vs 旧 enum 名"冲突，让 A1 能编译。
+- **A1. 统一模型 + Claude 映射 + 映射测试**：新增 `UsageWindow`/`NamedUsageWindow`/`CreditLine`/`ProviderUsageSnapshot`；`UsageService`（暂不改名）加 `mapToSnapshot()`（`UsageResponse` → snapshot，含 extra_usage 分→元换算）+ `fetchSnapshot()`（= 现有 endpoint 调用 + reconcile + 映射，不动 recordDataPoint/checkNotify/timer）；`ProviderAbstractionTests` 加 fixture 映射用例（SC5-b）。视图仍走老路径。→ 绿。
+- **A2. 协议 + runtime + registry + coordinator（stub 接线）**：新增 `protocol UsageProvider` + `ProviderRuntime` + `ProviderRegistry` + `ProviderCoordinator`；`UsageService` conform `UsageProvider`（`refreshNow` = 现有 `fetchUsage` + 节流；fetch 成功分支加"写 snapshot 进自己的 runtime"那一行）；`UsageService` rename → `ClaudeUsageProvider`（连带文件名 + 全量引用替换 + 测试）；`ProviderAbstractionTests` 加 registry/coordinator/runtime（stub provider）用例 + history/notification spy 用例（SC5-c）。`ClaudeUsageBarApp` 暂时仍可直接持有 `ClaudeUsageProvider`（下阶段再换 coordinator）。→ 绿。
+- **B. 装配迁移**：`ClaudeUsageBarApp` 改 `@StateObject ProviderCoordinator`（内部 new registry + Claude provider + runtime）；`.task` 装配迁移（polling 仍由 `ClaudeUsageProvider.startPolling()` 起，不是 coordinator）；`PopoverView`/`MenuBarLabel` 注入改成经 coordinator 拿 Claude provider（暂时还走老 API）。→ 绿。
+- **C. 视图泛化**：抽 `ProviderUsageSection(runtime:historyService:usageStats:)`；`UsageHeroCard`/`UsageBucketRow`/`ExtraUsageRow` 改吃 `UsageWindow`/`NamedUsageWindow`/`CreditLine`；`PopoverView` 已登录用量区委托给 `ProviderUsageSection`（登录 UX 区留 Claude 专用）；`MenuBarLabel` 改读 `coordinator.primaryRuntime`；`ProviderTabBar` 的 `isAvailable` 改由 registry 决定。→ 绿 + 目测。
+- **D. 主 provider 设置**：`primaryProviderID`（`@AppStorage` on coordinator）+ Settings Picker（`availableIDs.count <= 1` 时隐藏/置灰）；确认 `MenuBarLabel` 走 `primaryRuntime`。→ 绿 + 目测。
+- **E. 清理 + G5/G6**：`git grep` 自查 SC7（含 `SC_AUTO_GREP_SC7` 命令）；删死代码（旧 `usage` 读取点等）；回填 spec `spec_criteria`/Verification log；code-review（G5，跨模型）；CHANGELOG + version `release_notes_zh`。→ 绿。
 
 ## 6. 后续工作（不在本 spec 范围）
 
