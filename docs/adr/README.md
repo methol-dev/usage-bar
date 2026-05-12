@@ -3,7 +3,7 @@ slug: adr-index
 title: ADR 索引
 type: index
 created: 2026-05-11
-updated: 2026-05-11
+updated: 2026-05-12
 ---
 
 # Architecture Decision Records
@@ -18,9 +18,10 @@ updated: 2026-05-11
 | ID | Title | Status | 一句话 |
 |---|---|---|---|
 | [0001](./0001-swift-native-only.md) | Swift native only | accepted | 全栈 Swift / SwiftUI / SwiftPM；拒非原生 |
-| [0002](./0002-claude-only-not-multi-provider.md) | Claude-only, not multi-provider | accepted | 差异化做"最精致的 Claude 专用条" |
+| [0002](./0002-claude-only-not-multi-provider.md) | Claude-only, not multi-provider | superseded-by 0005 | 差异化做"最精致的 Claude 专用条"（已被 0005 放宽） |
 | [0003](./0003-ai-led-development.md) | AI-led development | accepted | AI 主导调研 / 设计 / 实施，人类辅助 |
 | [0004](./0004-fork-divergence-from-blimp-labs.md) | Fork divergence from Blimp-Labs | accepted | 自 v0.0.7 起独立编号 + URL 校准 |
+| [0005](./0005-reopen-multi-provider-direction.md) | 重新开放多 provider 方向 | accepted | supersede 0002；先搭 UI 外壳，逐步对接（首个 Codex） |
 
 ## 状态机
 

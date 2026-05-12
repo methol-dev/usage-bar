@@ -1,7 +1,7 @@
 ---
 id: 0002
 title: Claude-only, not multi-provider — 差异化做"最精致的 Claude 专用条"
-status: accepted
+status: superseded-by 0005
 date: 2026-05-11
 deciders: claude-code, methol
 ---
