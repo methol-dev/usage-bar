@@ -43,8 +43,6 @@ class UsageService: ObservableObject {
 
     static let defaultPollingMinutes = 30
     static let pollingOptions = [5, 15, 30, 60]
-    /// `refreshNow()`（切 tab / Refresh 按钮触发）的节流窗口：距上次成功 < 此值则不重拉。
-    nonisolated static let refreshThrottleSeconds: TimeInterval = 30
     nonisolated static let maxBackoffInterval: TimeInterval = 60 * 60
     nonisolated static let defaultOAuthScopes = ["user:profile", "user:inference"]
     nonisolated private static let authorizeEndpoint = URL(string: "https://claude.ai/oauth/authorize")!
@@ -82,11 +80,11 @@ class UsageService: ObservableObject {
     private var codeVerifier: String?
     private var oauthState: String?
 
+    // `usage` 现在只供 UsageService 内部用（reconcile + 下面三个便捷比例 + mapToSnapshot 经由 asProviderSnapshot()）；
+    // UI 层读 `runtime.snapshot`（v0.2.5 多供应商重构）。
     var pct5h: Double { (usage?.fiveHour?.utilization ?? 0) / 100.0 }
     var pct7d: Double { (usage?.sevenDay?.utilization ?? 0) / 100.0 }
     var pctExtra: Double { (usage?.extraUsage?.utilization ?? 0) / 100.0 }
-    var reset5h: Date? { usage?.fiveHour?.resetsAtDate }
-    var reset7d: Date? { usage?.sevenDay?.resetsAtDate }
 
     init(
         session: URLSession = .shared,
