@@ -22,7 +22,7 @@
 
 **Files:** Create `Tests/.../ProviderCoordinatorTests.swift`；Modify `ProviderCoordinator.swift`、`CodexProvider.swift`（先加 `init(defaults:)` + 实例 `pollIntervalSeconds`，删 static 那个 —— Task 1 一并做以便 coordinator 用得上）。
 
-- [ ] **Step 1: 写 `ProviderCoordinatorTests.swift`（失败测试）**
+- [x] **Step 1: 写 `ProviderCoordinatorTests.swift`（失败测试）**
 
 ```swift
 import XCTest
@@ -105,9 +105,9 @@ final class ProviderCoordinatorTests: XCTestCase {
 
 > 注：本 Task 还要**删掉 `CodexProviderTests` 里引用旧 API 的用例** —— `testCoordinatorPrimaryEligibleExcludesNonPollingProvider`（引用被删的 `coord.primaryEligibleIDs`/`coord.primaryProviderID`/`ProviderCoordinator.primaryProviderKey`）整个删掉（等价覆盖已搬到 `ProviderCoordinatorTests.testMenuBarProviderIDRejectsUnregistered/Disabled`）。`UsageService(defaults:)` 若不存在就用现成 `UsageService()`（这些测试不依赖它的内部状态，只断言 coordinator）。`CodexProvider(environment:[:], defaults:d)` 需要 Task 1 同步给 `CodexProvider` 加 `defaults:` 参数（见 Step 4）。`ProviderCoordinator(... defaults:)` 是 Task 1 新增的注入点。
 
-- [ ] **Step 2: 跑确认失败** — `cd /Users/methol/data/code-methol/usage-bar/macos && swift test --filter ProviderCoordinatorTests` → 编译失败（`ProviderCoordinator.init(claude:additionalProviders:defaults:)` / `orderedProviderIDs` / `enabledProviderIDs` / `menuBarProviderID` / `setEnabled` / `moveProvider` 不存在）。
+- [x] **Step 2: 跑确认失败** — `cd /Users/methol/data/code-methol/usage-bar/macos && swift test --filter ProviderCoordinatorTests` → 编译失败（`ProviderCoordinator.init(claude:additionalProviders:defaults:)` / `orderedProviderIDs` / `enabledProviderIDs` / `menuBarProviderID` / `setEnabled` / `moveProvider` 不存在）。
 
-- [ ] **Step 3: 改 `ProviderCoordinator.swift`**
+- [x] **Step 3: 改 `ProviderCoordinator.swift`**
 
 ```swift
 import Foundation
@@ -212,7 +212,7 @@ final class ProviderCoordinator: ObservableObject {
 
 （注意：`firstMenuBarEligible()` 在 `enabledProviderIDs.didSet` 里被调，那时 `orderedProviderIDs` / `registry` 都已初始化 —— OK。`enabledProviderIDs` 的 `didSet` 里既改 `menuBarProviderID` 又可能 re-enter 自己 —— re-enter 的那次 `s == enabledProviderIDs` 为 true 跳过、不无限递归。读现有文件确认没漏 import / 旧引用。）
 
-- [ ] **Step 4: 改 `CodexProvider.swift`（加 `defaults:` + 实例 `pollIntervalSeconds`，删 static + 自持 timer 留到 Task 5；本 Task 先把构造参数和计算属性加上）**
+- [x] **Step 4: 改 `CodexProvider.swift`（加 `defaults:` + 实例 `pollIntervalSeconds`，删 static + 自持 timer 留到 Task 5；本 Task 先把构造参数和计算属性加上）**
 
 在 `CodexProvider` 里：
 ```swift
@@ -233,13 +233,13 @@ init(environment: [String: String] = ProcessInfo.processInfo.environment,
 // startPolling() 里把 `Timer.publish(every: Self.pollIntervalSeconds, ...)` 暂改成 `Timer.publish(every: pollIntervalSeconds, ...)` —— Task 5 会整段撤掉自持 timer，本 Task 先保编译过。
 ```
 
-- [ ] **Step 5: 改各调用点编译过** — `ClaudeUsageBarApp.swift` 里 `coordinator.primaryRuntime` → `coordinator.menuBarRuntime`、`coordinator.primaryProviderID` → `coordinator.menuBarProviderID`；`ProviderCoordinator(claude:additionalProviders:)` 调用点（App + 测试）若没传 `defaults:` 用默认即可，不用改。`SettingsView.swift` 里 `$coordinator.primaryProviderID` / `coordinator.primaryEligibleIDs` 暂时会编译失败 —— Task 4 处理 Settings；本 Task 为了 build 过，先把 SettingsView 那个 Picker 临时改成读 `coordinator.menuBarProviderID` + `coordinator.availableIDs`（Task 4 再换成 Providers section）。`grep -rn "primaryProviderID\|primaryEligibleIDs\|primaryRuntime" macos/Sources/` → 只剩 `menuBarProviderKey = "primaryProviderID"` 这条字面量（持久化 key 沿用），无 `primaryEligibleIDs`/`primaryRuntime`/`@Published var primaryProviderID`；`grep ... macos/Tests/` 清掉旧引用（删 `testCoordinatorPrimaryEligibleExcludesNonPollingProvider`）。**注**：协议属性 `supportsBackgroundPolling` 留着不删（Codex `= false`、Claude `= true`）—— 本版它失去「primary 候选资格」用途、暂无消费者，加 `// TODO(后续): 这个 flag 现在没消费者了——要么彻底退役、要么改用途`；`CodexProviderTests.testSupportsBackgroundPollingIsFalse` 保留。
+- [x] **Step 5: 改各调用点编译过** — `ClaudeUsageBarApp.swift` 里 `coordinator.primaryRuntime` → `coordinator.menuBarRuntime`、`coordinator.primaryProviderID` → `coordinator.menuBarProviderID`；`ProviderCoordinator(claude:additionalProviders:)` 调用点（App + 测试）若没传 `defaults:` 用默认即可，不用改。`SettingsView.swift` 里 `$coordinator.primaryProviderID` / `coordinator.primaryEligibleIDs` 暂时会编译失败 —— Task 4 处理 Settings；本 Task 为了 build 过，先把 SettingsView 那个 Picker 临时改成读 `coordinator.menuBarProviderID` + `coordinator.availableIDs`（Task 4 再换成 Providers section）。`grep -rn "primaryProviderID\|primaryEligibleIDs\|primaryRuntime" macos/Sources/` → 只剩 `menuBarProviderKey = "primaryProviderID"` 这条字面量（持久化 key 沿用），无 `primaryEligibleIDs`/`primaryRuntime`/`@Published var primaryProviderID`；`grep ... macos/Tests/` 清掉旧引用（删 `testCoordinatorPrimaryEligibleExcludesNonPollingProvider`）。**注**：协议属性 `supportsBackgroundPolling` 留着不删（Codex `= false`、Claude `= true`）—— 本版它失去「primary 候选资格」用途、暂无消费者，加 `// TODO(后续): 这个 flag 现在没消费者了——要么彻底退役、要么改用途`；`CodexProviderTests.testSupportsBackgroundPollingIsFalse` 保留。
 
-- [ ] **Step 6: 跑确认通过** — `swift test --filter ProviderCoordinatorTests` → all PASS。
+- [x] **Step 6: 跑确认通过** — `swift test --filter ProviderCoordinatorTests` → all PASS。
 
-- [ ] **Step 7: build + 全量 test** — `swift build -c release && swift test` → 全绿（既有测试不动）。
+- [x] **Step 7: build + 全量 test** — `swift build -c release && swift test` → 全绿（既有测试不动）。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /Users/methol/data/code-methol/usage-bar
@@ -255,15 +255,15 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:** Modify `ProviderUsageSnapshot.swift`、`UsageModel.swift`、`CodexUsageModel.swift`；（`UsageModelTests` / `CodexUsageModelTests` 若有则确保不挂）。
 
-- [ ] **Step 1: 改 `ProviderUsageSnapshot.swift`** —— `UsageWindow` 加 `var shortLabel: String`，init 加 `shortLabel: String? = nil` 参数，body 里 `self.shortLabel = shortLabel ?? (label.map { String($0.prefix(2)) } ?? "")`。
+- [x] **Step 1: 改 `ProviderUsageSnapshot.swift`** —— `UsageWindow` 加 `var shortLabel: String`，init 加 `shortLabel: String? = nil` 参数，body 里 `self.shortLabel = shortLabel ?? (label.map { String($0.prefix(2)) } ?? "")`。
 
-- [ ] **Step 2: 改 `UsageModel.swift`** —— `UsageBucket.asUsageWindow(label:windowDuration:)` 加 `shortLabel: String? = nil` 透传；`asProviderSnapshot()` 里 `fiveHour?.asUsageWindow(label: "Session", windowDuration: 5*60*60, shortLabel: "5h")`、`sevenDay?.asUsageWindow(label: "Weekly", ..., shortLabel: "7d")`（per-model extras 不用菜单栏 → 不填，默认取前 2 字符）。
+- [x] **Step 2: 改 `UsageModel.swift`** —— `UsageBucket.asUsageWindow(label:windowDuration:)` 加 `shortLabel: String? = nil` 透传；`asProviderSnapshot()` 里 `fiveHour?.asUsageWindow(label: "Session", windowDuration: 5*60*60, shortLabel: "5h")`、`sevenDay?.asUsageWindow(label: "Weekly", ..., shortLabel: "7d")`（per-model extras 不用菜单栏 → 不填，默认取前 2 字符）。
 
-- [ ] **Step 3: 改 `CodexUsageModel.swift`** —— `win(_:_:)` 里 `UsageWindow(label: label, ..., )` 后加 shortLabel：session 窗 `"5h"`（Codex 的 session 也是 ~5h 类）、weekly 窗 `"7d"`。具体：把 `func win(_ w:, _ label:)` 改成 `func win(_ w:, _ label:, _ short: String)`，两个调用点传 `"5h"` / `"7d"`。
+- [x] **Step 3: 改 `CodexUsageModel.swift`** —— `win(_:_:)` 里 `UsageWindow(label: label, ..., )` 后加 shortLabel：session 窗 `"5h"`（Codex 的 session 也是 ~5h 类）、weekly 窗 `"7d"`。具体：把 `func win(_ w:, _ label:)` 改成 `func win(_ w:, _ label:, _ short: String)`，两个调用点传 `"5h"` / `"7d"`。
 
-- [ ] **Step 4: build + test** — `swift build -c release && swift test` → 全绿（`UsageWindow` 多个字段，`Equatable` 自动；若有断言精确比较 `UsageWindow(...)` 的旧测试需补 `shortLabel:` —— 跑一遍看哪挂了再补）。
+- [x] **Step 4: build + test** — `swift build -c release && swift test` → 全绿（`UsageWindow` 多个字段，`Equatable` 自动；若有断言精确比较 `UsageWindow(...)` 的旧测试需补 `shortLabel:` —— 跑一遍看哪挂了再补）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add macos/Sources/ClaudeUsageBar/{ProviderUsageSnapshot,UsageModel,CodexUsageModel}.swift macos/Tests/ClaudeUsageBarTests/*
@@ -278,18 +278,18 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:** Modify `MenuBarIconRenderer.swift`、`MenuBarLabel.swift`、`ClaudeUsageBarApp.swift`；（`MenuBarLabelTests` / renderer 测试若有则确保不挂）。
 
-- [ ] **Step 1: 改 `MenuBarIconRenderer.swift`**
+- [x] **Step 1: 改 `MenuBarIconRenderer.swift`**
   - `cachedLabels` 改成动态：把 `for label in ["5h", "7d"]` 预生成的 dict 改成一个 `func cachedLabel(_ s: String) -> CachedLabel`（按需生成 + 进 cache dict，加锁或就接受偶发重算 —— 菜单栏 label 集合很小、调用在 main，直接用一个 `var` dict 即可）。
   - `drawClaudeLogo(x:y:size:)` → `drawProviderGlyph(for providerID: ProviderID, x:y:size:)`：`case .claude:` 走现有 `claudeLogoImage.draw(...)`（字节不变）；`default:` 用 SF Symbol 渲染成 template image —— `let name = providerID == .codex ? "terminal" : "circle"; if let img = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: .medium)) { img.isTemplate = true; img.draw(in: NSRect(x:x,y:y,width:size,height:size)) }`（SF Symbol 在 macOS 11+ 有；`NSImage(systemSymbolName:)` macOS 11+ —— app target 14+ OK）。
   - `renderIcon(pct5h:pct7d:)` → `renderIcon(providerID: ProviderID, primaryLabel: String, secondaryLabel: String, pct5h: Double, pct7d: Double)`：里面 `drawClaudeLogo(...)` → `drawProviderGlyph(for: providerID, ...)`；`drawRow(label: "5h", ...)` → `drawRow(label: primaryLabel, ...)`、`drawRow(label: "7d", ...)` → `drawRow(label: secondaryLabel, ...)`。`renderUnauthenticatedIcon()` → `renderUnauthenticatedIcon(providerID: ProviderID, primaryLabel: String, secondaryLabel: String)` 同样改。
 
-- [ ] **Step 2: 改 `MenuBarLabel.swift`** —— 加 `var providerID: ProviderID`；`iconView` 调 renderer 时传 `providerID: providerID, primaryLabel: shortPrimary, secondaryLabel: shortSecondary`，其中 `shortPrimary = runtime.snapshot?.primaryWindow?.shortLabel ?? "5h"`、`shortSecondary = runtime.snapshot?.secondaryWindow?.shortLabel ?? "7d"`；`percentText` 里 `formatMenuBarPercent(..., prefix: "5h")` 的 `"5h"` 改成 `shortPrimary`（保持一致）。其余不动（`trend` / `showTrend` 不变）。
+- [x] **Step 2: 改 `MenuBarLabel.swift`** —— 加 `var providerID: ProviderID`；`iconView` 调 renderer 时传 `providerID: providerID, primaryLabel: shortPrimary, secondaryLabel: shortSecondary`，其中 `shortPrimary = runtime.snapshot?.primaryWindow?.shortLabel ?? "5h"`、`shortSecondary = runtime.snapshot?.secondaryWindow?.shortLabel ?? "7d"`；`percentText` 里 `formatMenuBarPercent(..., prefix: "5h")` 的 `"5h"` 改成 `shortPrimary`（保持一致）。其余不动（`trend` / `showTrend` 不变）。
 
-- [ ] **Step 3: 改 `ClaudeUsageBarApp.swift`** —— `MenuBarLabel(runtime: coordinator.menuBarRuntime, historyService: historyService, showTrend: coordinator.menuBarProviderID == .claude, providerID: coordinator.menuBarProviderID)`（注意：`MenuBarLabel` 现在依赖 `coordinator.menuBarProviderID` 这个 `@Published` —— `coordinator` 在 `MenuBarExtra { } label: { }` 里需作为 `@ObservedObject` 可观察，已是 `@StateObject coordinator` → OK）。
+- [x] **Step 3: 改 `ClaudeUsageBarApp.swift`** —— `MenuBarLabel(runtime: coordinator.menuBarRuntime, historyService: historyService, showTrend: coordinator.menuBarProviderID == .claude, providerID: coordinator.menuBarProviderID)`（注意：`MenuBarLabel` 现在依赖 `coordinator.menuBarProviderID` 这个 `@Published` —— `coordinator` 在 `MenuBarExtra { } label: { }` 里需作为 `@ObservedObject` 可观察，已是 `@StateObject coordinator` → OK）。
 
-- [ ] **Step 4: build + test** — `swift build -c release && swift test` → 全绿。
+- [x] **Step 4: build + test** — `swift build -c release && swift test` → 全绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add macos/Sources/ClaudeUsageBar/{MenuBarIconRenderer,MenuBarLabel,ClaudeUsageBarApp}.swift macos/Tests/ClaudeUsageBarTests/*
@@ -304,7 +304,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:** Modify `SettingsView.swift`。无新单测（纯 SwiftUI 组合，靠 build + manual_checks）。
 
-- [ ] **Step 1: 改 `SettingsView.swift`**
+- [x] **Step 1: 改 `SettingsView.swift`**
   - 删「Primary Provider」`Picker`（连同 `if coordinator.primaryEligibleIDs.count <= 1 { Text(...) }`，以及 Task 1 Step 5 临时塞的那版）。
   - 删最底下 `if service.isAuthenticated { Section("Account") { ... } }` 整块。
   - 在 `Section("General") { ... }` 之后、`Section("Notifications") { ... }` 之前，加：
@@ -342,9 +342,9 @@ Section("Providers") {
 ```
   - **Fallback（若拖不动）**：`swift build` + 跑起来看 Settings 里 Providers section 能否拖（`make install` 后开 Settings）。若 `.onMove` 在 grouped `Form` 里不出拖动手柄：在每行 `Spacer()` 前加 `VStack { Button { coordinator.moveProvider(from: IndexSet(integer: idx), to: max(idx-1,0)) } label: { Image(systemName: "chevron.up") }.disabled(idx==0); Button { coordinator.moveProvider(from: IndexSet(integer: idx), to: idx+2) } label: { Image(systemName: "chevron.down") }.disabled(idx==coordinator.orderedProviderIDs.count-1) }.buttonStyle(.borderless).imageScale(.small)`（`idx = coordinator.orderedProviderIDs.firstIndex(of: id)!`），并去掉 `.onMove`。done 判据相同（能改顺序 + `coordinator.orderedProviderIDs` + `UserDefaults["providerOrder"]` 更新）。本 plan 先按 `.onMove` 写，manual check 失败再降级。
 
-- [ ] **Step 2: build** — `swift build -c release` → OK。
+- [x] **Step 2: build** — `swift build -c release` → OK。
 
-- [ ] **Step 3: Commit**（先不 install，Task 6 统一 install + 验拖动）
+- [x] **Step 3: Commit**（先不 install，Task 6 统一 install + 验拖动）
 
 ```bash
 git add macos/Sources/ClaudeUsageBar/SettingsView.swift
@@ -359,7 +359,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:** Modify `ProviderCoordinator.swift`、`PopoverView.swift`、`ProviderTabBar.swift`、`CodexProvider.swift`、`ClaudeUsageBarApp.swift`；`ProviderCoordinatorTests.swift`（追加）；`CodexProviderTests.swift`（追加）。
 
-- [ ] **Step 1: 写失败测试（追加到 `ProviderCoordinatorTests.swift`）**
+- [x] **Step 1: 写失败测试（追加到 `ProviderCoordinatorTests.swift`）**
 
 ```swift
     func testRefreshAllEnabledOnOpen_codexRefreshedClaudeOnlyIfEmpty() async {
@@ -403,9 +403,9 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
     }
 ```
 
-- [ ] **Step 2: 跑确认失败** — `swift test --filter ProviderCoordinatorTests` → 编译失败（`backgroundIntervalSeconds` / `shouldRefreshClaudeOnOpen` / `onBackgroundTick` / `refreshAllEnabledOnOpen` 不存在）。
+- [x] **Step 2: 跑确认失败** — `swift test --filter ProviderCoordinatorTests` → 编译失败（`backgroundIntervalSeconds` / `shouldRefreshClaudeOnOpen` / `onBackgroundTick` / `refreshAllEnabledOnOpen` 不存在）。
 
-- [ ] **Step 3: 改 `ProviderCoordinator.swift`（加刷新纪律 + 后台 timer）**
+- [x] **Step 3: 改 `ProviderCoordinator.swift`（加刷新纪律 + 后台 timer）**
 
 ```swift
 import Foundation
@@ -460,9 +460,9 @@ import Combine
 
 （`NotificationCenter` observer 在 coordinator 生命周期 = app 生命周期，不显式 remove —— 与既有 timer 同理。`UserDefaults.didChangeNotification` 比对 `lastBackgroundInterval` 避免每次任意 key 改都重起。）
 
-- [ ] **Step 4: 改 `CodexProvider.swift`** —— 撤掉自持 timer：删 `private var pollCancellable: AnyCancellable?` / `var isPolling: Bool { ... }`；`startPolling()` 改成只「立即拉一次 + onPollTick 一次」（不再 `Timer.publish`）—— 实际上 `startPolling()` 现在已无人调（App 改调 `coordinator.startBackgroundPolling`）；保留它作 no-arg「立即拉一次」也行，或干脆删掉并让 coordinator 的 `onBackgroundTick()` 立即那次代劳。**实施挑：删 `startPolling()` 整个方法**（coordinator 接管），把 `import Combine` 若不再用也删。同步删 `CodexProviderTests.testStartPollingIsIdempotent`（引用没了的 `startPolling`/`isPolling`）及任何断言 `isPolling` 的用例；`testSupportsBackgroundPollingIsFalse` 保留。
+- [x] **Step 4: 改 `CodexProvider.swift`** —— 撤掉自持 timer：删 `private var pollCancellable: AnyCancellable?` / `var isPolling: Bool { ... }`；`startPolling()` 改成只「立即拉一次 + onPollTick 一次」（不再 `Timer.publish`）—— 实际上 `startPolling()` 现在已无人调（App 改调 `coordinator.startBackgroundPolling`）；保留它作 no-arg「立即拉一次」也行，或干脆删掉并让 coordinator 的 `onBackgroundTick()` 立即那次代劳。**实施挑：删 `startPolling()` 整个方法**（coordinator 接管），把 `import Combine` 若不再用也删。同步删 `CodexProviderTests.testStartPollingIsIdempotent`（引用没了的 `startPolling`/`isPolling`）及任何断言 `isPolling` 的用例；`testSupportsBackgroundPollingIsFalse` 保留。
 
-- [ ] **Step 5: 改 `PopoverView.swift`**
+- [x] **Step 5: 改 `PopoverView.swift`**
   - 删 `.task(id: selectedProvider) { guard selectedProvider != .claude, coordinator.isAvailable(selectedProvider) else { return }; await coordinator.refreshNow(selectedProvider) }`。
   - 加 `.task { await coordinator.refreshAllEnabledOnOpen() }`（无 id）。
   - `ProviderTabBar(selection: $selectedProvider, availableIDs: coordinator.availableIDs)` —— `availableIDs` 现在是 enabled∩registered∩ordered。
@@ -470,9 +470,9 @@ import Combine
   - `bottomBar`：在 `Refresh` 按钮之后、`Check for Updates…` 之前（或 `Quit` 之前）加 `if claude.isAuthenticated { Button("Sign Out") { claude.signOut() }.buttonStyle(.borderless).font(.caption) }`。
   - `.task(id:)` 删了之后，`import` 不变。
 
-- [ ] **Step 6: 改 `ProviderTabBar.swift`** —— `ForEach(ProviderID.allCases)` → `ForEach(availableIDs, id: \.self)`；`pillForeground(for:)` 里 `availableIDs.contains(provider)` 那个分支恒 true 了 —— 简化成「选中=primary、否则=secondary」（不再有「占位 provider」的 0.5 透明态，因为占位的不在 `availableIDs` 里了）。
+- [x] **Step 6: 改 `ProviderTabBar.swift`** —— `ForEach(ProviderID.allCases)` → `ForEach(availableIDs, id: \.self)`；`pillForeground(for:)` 里 `availableIDs.contains(provider)` 那个分支恒 true 了 —— 简化成「选中=primary、否则=secondary」（不再有「占位 provider」的 0.5 透明态，因为占位的不在 `availableIDs` 里了）。
 
-- [ ] **Step 7: 改 `ClaudeUsageBarApp.swift`** —— `.task` 里把
+- [x] **Step 7: 改 `ClaudeUsageBarApp.swift`** —— `.task` 里把
 ```swift
 if let codex = coordinator.provider(.codex) as? CodexProvider {
     codex.onPollTick = { Task.detached { await codexStats.refresh() } }
@@ -485,11 +485,11 @@ coordinator.startBackgroundPolling(codexOnPollTick: { Task.detached { await code
 ```
 （`coordinator.claude.startPolling()` 那行 —— Claude 的 —— 不动。）**注**：spec §3.1 写的是无参 `coordinator.startBackgroundPolling()`，但 coordinator 够不到 `codexStats` 这个 `@StateObject` —— 本 plan 有意改成 `startBackgroundPolling(codexOnPollTick:)` 由 App 注入回调。
 
-- [ ] **Step 8: 跑确认通过** — `swift test --filter ProviderCoordinatorTests` + `--filter CodexProviderTests` → all PASS（`CodexProviderTests` 里若有断言 `isPolling` / `startPolling` 的，删掉或改 —— spec SC6 说退役 `isPolling`）。
+- [x] **Step 8: 跑确认通过** — `swift test --filter ProviderCoordinatorTests` + `--filter CodexProviderTests` → all PASS（`CodexProviderTests` 里若有断言 `isPolling` / `startPolling` 的，删掉或改 —— spec SC6 说退役 `isPolling`）。
 
-- [ ] **Step 9: build + 全量 test** — `swift build -c release && swift test` → 全绿。
+- [x] **Step 9: build + 全量 test** — `swift build -c release && swift test` → 全绿。
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add macos/Sources/ClaudeUsageBar/{ProviderCoordinator,CodexProvider,PopoverView,ProviderTabBar,ClaudeUsageBarApp}.swift macos/Tests/ClaudeUsageBarTests/{ProviderCoordinatorTests,CodexProviderTests}.swift
@@ -502,7 +502,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ## Task 6: 全量验收 + 回填文档（G6）
 
-- [ ] **Step 1: build + test + artifacts + verify**
+- [x] **Step 1: build + test + artifacts + verify**
 
 ```bash
 cd /Users/methol/data/code-methol/usage-bar/macos && swift build -c release && swift test
@@ -511,14 +511,14 @@ grep -rn "primaryProviderID\|primaryEligibleIDs\|primaryRuntime" macos/Sources/ 
 ```
 Expected: build OK；全部 tests PASS；zip/dmg 产出 + verify「Release archive looks good」。
 
-- [ ] **Step 2: `make install` + 手动 smoke** —
+- [x] **Step 2: `make install` + 手动 smoke** —
   - Settings → Providers section：拖动 Claude/Codex 重排（**拖不动 → 走 Task 4 Step 1 的 ↑/↓ fallback**，改完重 build/test/commit）；Codex 关掉 Enabled → popover 顶 tab 不再有 Codex、Codex 后台刷新停；Claude 的 Enabled 禁用；点 Codex 行 ✓ → 菜单栏变 Codex 图标（SF Symbol terminal）+ Codex 窗口 %；点回 Claude ✓ → 恢复 Claude logo + 5h/7d。
   - Settings 最底下无「Account」；popover 底栏有「Sign Out」（已登录时）。
   - Polling Interval 改 5min → Codex 后台刷新跟随（看 Codex tab 的 Updated 时间）。
   - 打开 popover → 各 enabled provider 拉一次（先显缓存）；tab 间来回切 → 不重拉；点底栏 Refresh → 当前 tab provider 重拉。
   把观察记进 spec evidence + Verification log。
 
-- [ ] **Step 3: 回填 spec/version** — `2026-05-12-settings-provider-list.md`：`spec_criteria[].done` 全 true + 填 evidence、Verification log 全勾、`status: accepted → implemented`、`updated` 同步、append G5 verdict（Task 7 后）。`docs/versions/v0.2.10-settings-provider-list.md`：`status: planned → in-progress`、填 `release_notes_zh`（改进：Settings 改 provider 列表（拖动+开关+菜单栏单选）、去 Account 区、Codex 用统一 polling interval、切 tab 不再触发刷新；内部：ProviderCoordinator 统管顺序/启用集/菜单栏 provider/非-Claude timer、菜单栏 provider-aware）、G6 checklist 勾。`docs/versions/README.md` + `docs/superpowers/specs/README.md` 同步状态。本 plan 勾掉步骤（除 Task 7 的 G5/PR）。Commit。
+- [x] **Step 3: 回填 spec/version** — `2026-05-12-settings-provider-list.md`：`spec_criteria[].done` 全 true + 填 evidence、Verification log 全勾、`status: accepted → implemented`、`updated` 同步、append G5 verdict（Task 7 后）。`docs/versions/v0.2.10-settings-provider-list.md`：`status: planned → in-progress`、填 `release_notes_zh`（改进：Settings 改 provider 列表（拖动+开关+菜单栏单选）、去 Account 区、Codex 用统一 polling interval、切 tab 不再触发刷新；内部：ProviderCoordinator 统管顺序/启用集/菜单栏 provider/非-Claude timer、菜单栏 provider-aware）、G6 checklist 勾。`docs/versions/README.md` + `docs/superpowers/specs/README.md` 同步状态。本 plan 勾掉步骤（除 Task 7 的 G5/PR）。Commit。
 
 - [ ] **Step 4: G5 + PR + merge** — 独立 reviewer（codex `codex-rescue` / `general-purpose` subagent）code-review + light security-review（敏感面小：纯 Settings/coordinator/UI，不读新文件、不动凭证；唯一注意点：`enabledProviderIDs` 持久化的是 provider 名字符串，无敏感信息）。verdict approved/approved-with-nits 后 `gh pr create`（中文，含 spec id + version 链接），等 CI（"build" job）绿 → `git checkout main && git merge --ff-only feat/v0.2.10-settings-provider-list && git push origin main` + 删分支。G5 verdict append 进 spec `reviews:`。`make install` 装最终 main。
 
