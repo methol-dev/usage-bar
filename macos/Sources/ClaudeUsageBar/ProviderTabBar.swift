@@ -5,7 +5,7 @@ import SwiftUI
 // 由调用方传进 `ProviderTabBar(availableIDs:)`。
 
 /// popover 顶部的多 provider 药丸 tab。不可用的 provider 仍可点选，
-/// 由调用方在 selection 不可用时展示 `ProviderComingSoonView`。
+/// （`PopoverView` 的 `.onChange` 会把失效的 selection 弹回 Claude；`ProviderComingSoonView` 仅作防御性 fallback。）
 struct ProviderTabBar: View {
     @Binding var selection: ProviderID
     let availableIDs: [ProviderID]

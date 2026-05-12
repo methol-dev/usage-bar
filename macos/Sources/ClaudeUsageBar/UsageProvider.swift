@@ -4,17 +4,16 @@ import Foundation
 ///
 /// 协议**只管「拉一次用量并把结果写进自己的 `runtime`」**；凭证管理 / 登录流程是各 provider 的
 /// 内部细节（Claude 有 OAuth+refresh+多账号那一大套，Codex 只读 `~/.codex/auth.json`），不进协议。
-/// 持有后台 refresh timer 的 provider 在装配处自行 `startPolling()`（`ProviderCoordinator` 本身不跑 timer）——
-/// 是否同时是「菜单栏 primary 候选」由 `supportsBackgroundPolling` 决定（见下）。
+/// v0.2.10：非-Claude provider 的后台轮询 timer 由 `ProviderCoordinator` 统管（`startBackgroundPolling()` / `onBackgroundTick()`，
+/// 用同一个 `pollingMinutes` 间隔）；Claude 的后台 timer + 429 backoff 仍归 `UsageService` 自己（`claude.startPolling()`）。
 @MainActor
 protocol UsageProvider: AnyObject {
     var id: ProviderID { get }
     /// 该 provider 当前能否取数（Claude = 已登录；Codex = `~/.codex/auth.json` 存在且可解析）。
     var isConfigured: Bool { get }
-    /// 该 provider 是否作为**菜单栏 primary 候选**（见 `ProviderCoordinator.primaryEligibleIDs`）——
-    /// 要求：既有稳定后台数据源、又有 provider-aware 的菜单栏渲染（图标 / 前缀文案）。Claude = true。
-    /// 注意：provider 可以为「popover 内历史采样」自持一个轻量 refresh timer（装配处显式 `startPolling()`）
-    /// 而**不**必置此 flag —— Codex v0.2.8 即如此（有 5 分钟采样 timer，但菜单栏渲染尚未 provider-aware，故仍 false）。
+    /// TODO(后续): 这个 flag 自 v0.2.10 起没有消费者了 —— 原先用作「菜单栏 primary 候选资格」，但 v0.2.10 退役了 `primaryEligibleIDs`
+    /// （菜单栏已 provider-aware，任何 enabled+registered 的 provider 都能上菜单栏）。要么彻底从协议退役、要么改用途。
+    /// 暂留（Claude = true、Codex = false）以免协议改动波及面太大。
     var supportsBackgroundPolling: Bool { get }
     /// 该 provider 的 UI 状态容器；实现负责在 `refreshNow()` 等处写它。
     var runtime: ProviderRuntime { get }
