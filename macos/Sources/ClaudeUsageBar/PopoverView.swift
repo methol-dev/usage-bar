@@ -7,6 +7,7 @@ struct PopoverView: View {
     @ObservedObject var appUpdater: AppUpdater
     @EnvironmentObject var usageStats: UsageStatsService
     @AppStorage("setupComplete") private var setupComplete = false
+    @State private var selectedProvider: ProviderTab = .claude
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -29,17 +30,24 @@ struct PopoverView: View {
                 }
             } else {
                 AccountSwitcherView(service: service)  // accounts.count <= 1 时自隐藏
-                Text("Claude Usage")
-                    .font(.headline)
+                ProviderTabBar(selection: $selectedProvider)
                 if !service.isAuthenticated {
                     signInView
-                } else {
+                } else if selectedProvider == .claude {
                     usageView
+                } else {
+                    ProviderComingSoonView(provider: selectedProvider,
+                                           onBackToClaude: { selectedProvider = .claude })
                 }
             }
         }
         .padding()
         .frame(width: 360)
+        .background(
+            LinearGradient(colors: [Color.accentColor.opacity(0.06), .clear],
+                           startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
+        )
     }
 
     @ViewBuilder
@@ -102,62 +110,73 @@ struct PopoverView: View {
             windowDuration: 604_800   // 7 天
         )
 
-        UsageHeroCard(
-            label: "5-Hour",
-            bucket: service.usage?.fiveHour,
-            trend: trend5h,
-            pace: pace5h,
-            icon: "clock"
-        )
+        UsageCard {
+            UsageHeroCard(
+                label: "5-Hour",
+                bucket: service.usage?.fiveHour,
+                trend: trend5h,
+                pace: pace5h,
+                icon: "clock"
+            )
+        }
 
-        UsageHeroCard(
-            label: "7-Day",
-            bucket: service.usage?.sevenDay,
-            trend: trend7d,
-            pace: pace7d,
-            icon: "calendar"
-        )
+        UsageCard {
+            UsageHeroCard(
+                label: "7-Day",
+                bucket: service.usage?.sevenDay,
+                trend: trend7d,
+                pace: pace7d,
+                icon: "calendar"
+            )
+        }
 
         if let opus = service.usage?.sevenDayOpus,
            opus.utilization != nil {
-            Divider()
-            Text("Per-Model (7 day)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            UsageBucketRow(label: "Opus", bucket: opus)
-            if let sonnet = service.usage?.sevenDaySonnet {
-                UsageBucketRow(label: "Sonnet", bucket: sonnet)
+            UsageCard {
+                Text("Per-Model (7 day)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                UsageBucketRow(label: "Opus", bucket: opus)
+                if let sonnet = service.usage?.sevenDaySonnet {
+                    UsageBucketRow(label: "Sonnet", bucket: sonnet)
+                }
             }
         }
 
         if let extra = service.usage?.extraUsage, extra.isEnabled {
-            Divider()
-            ExtraUsageRow(extra: extra)
+            UsageCard { ExtraUsageRow(extra: extra) }
         }
 
-        Divider()
-        UsageChartSectionView(historyService: historyService, recentEvents: usageStats.recentEvents)
+        UsageCard {
+            UsageChartSectionView(
+                historyService: historyService,
+                recentEvents: usageStats.recentEvents,
+                fiveHourResetDate: service.usage?.fiveHour?.resetsAtDate,
+                sevenDayResetDate: service.usage?.sevenDay?.resetsAtDate
+            )
+        }
 
         if !usageStats.dailySpend.isEmpty && !usageStats.dailySpend.allSatisfy({ $0.usd == 0 }) {
-            Divider()
-            UsageHeatmapView(daySpends: usageStats.dailySpend, isInitializing: usageStats.isInitializing)
+            UsageCard {
+                UsageHeatmapView(daySpends: usageStats.dailySpend, isInitializing: usageStats.isInitializing)
+            }
         }
 
         if let error = service.lastError {
-            Divider()
-            Label(error, systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.red)
-                .font(.caption)
+            UsageCard {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+            }
         }
 
         if let updaterError = appUpdater.lastError {
-            Divider()
-            Label(updaterError, systemImage: "arrow.triangle.2.circlepath.circle")
-                .foregroundStyle(.red)
-                .font(.caption)
+            UsageCard {
+                Label(updaterError, systemImage: "arrow.triangle.2.circlepath.circle")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+            }
         }
-
-        Divider()
 
         HStack(spacing: 12) {
             if let updated = service.lastUpdated {
