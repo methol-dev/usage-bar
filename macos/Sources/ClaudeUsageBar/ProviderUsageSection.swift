@@ -25,26 +25,32 @@ struct ProviderUsageSection: View {
             }
         }
 
-        UsageCard {
-            UsageHeroCard(
-                label: snap?.primaryWindow?.label ?? "Session",
-                window: snap?.primaryWindow,
-                trend: trendPrimary,
-                pacePct: expectedPacePct(resetDate: snap?.primaryWindow?.resetsAt,
-                                         windowDuration: snap?.primaryWindow?.windowDuration ?? 5 * 60 * 60),
-                icon: "clock"
-            )
+        // 卡片在「还没拉到数据」（snap == nil → 骨架）或「这个窗口确实存在」时才渲染；
+        // 已有 snapshot 但某个窗口为 nil（如 Codex Free 计划只返回 weekly、没有 session 窗口）→ 不渲染那张空卡。
+        if snap == nil || snap?.primaryWindow != nil {
+            UsageCard {
+                UsageHeroCard(
+                    label: snap?.primaryWindow?.label ?? "Session",
+                    window: snap?.primaryWindow,
+                    trend: trendPrimary,
+                    pacePct: expectedPacePct(resetDate: snap?.primaryWindow?.resetsAt,
+                                             windowDuration: snap?.primaryWindow?.windowDuration ?? 5 * 60 * 60),
+                    icon: "clock"
+                )
+            }
         }
 
-        UsageCard {
-            UsageHeroCard(
-                label: snap?.secondaryWindow?.label ?? "Weekly",
-                window: snap?.secondaryWindow,
-                trend: trendSecondary,
-                pacePct: expectedPacePct(resetDate: snap?.secondaryWindow?.resetsAt,
-                                         windowDuration: snap?.secondaryWindow?.windowDuration ?? 7 * 24 * 60 * 60),
-                icon: "calendar"
-            )
+        if snap == nil || snap?.secondaryWindow != nil {
+            UsageCard {
+                UsageHeroCard(
+                    label: snap?.secondaryWindow?.label ?? "Weekly",
+                    window: snap?.secondaryWindow,
+                    trend: trendSecondary,
+                    pacePct: expectedPacePct(resetDate: snap?.secondaryWindow?.resetsAt,
+                                             windowDuration: snap?.secondaryWindow?.windowDuration ?? 7 * 24 * 60 * 60),
+                    icon: "calendar"
+                )
+            }
         }
 
         if let extras = snap?.extraWindows, !extras.isEmpty {
