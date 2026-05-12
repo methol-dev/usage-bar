@@ -164,6 +164,7 @@ final class ProviderAbstractionTests: XCTestCase {
     @MainActor
     func testCoordinatorPrimarySwitchTracksRuntime() throws {
         UserDefaults.standard.removeObject(forKey: ProviderCoordinator.primaryProviderKey)
+        defer { UserDefaults.standard.removeObject(forKey: ProviderCoordinator.primaryProviderKey) }
         let claude = try makeBareService()
         // v0.2.6：只有 supportsBackgroundPolling 的 provider 能当 primary —— 把 stub 标成支持才进得了
         // primaryEligibleIDs（真实 CodexProvider 不支持，见 testCoordinatorPrimaryEligibleExcludesNonPollingProvider）。

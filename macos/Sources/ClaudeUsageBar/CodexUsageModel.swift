@@ -100,15 +100,18 @@ struct CodexUsageResponse: Decodable {
 // MARK: - 归一 + 映射到统一 snapshot
 
 extension CodexUsageResponse {
-    /// 按 windowSeconds 把 (primary, secondary) 摆正成 (session=5h, weekly=7d)；都不匹配时按出现顺序兜底。
+    /// 把 (primary, secondary) 摆正成 (session=短窗口, weekly=长窗口)：
+    /// 先按确切的 5h(18000s) / 7d(604800s) 标识；都不匹配时按 windowSeconds 升序取「短=session，长=weekly」。
     func normalizedWindows() -> (session: CodexRateWindow?, weekly: CodexRateWindow?) {
         let all = [primaryWindow, secondaryWindow].compactMap { $0 }
-        let session = all.first(where: { $0.isSessionWindow })
-        let weekly  = all.first(where: { $0.isWeeklyWindow })
-        if session != nil || weekly != nil {
-            return (session, weekly)
+        let exactSession = all.first(where: { $0.isSessionWindow })
+        let exactWeekly  = all.first(where: { $0.isWeeklyWindow })
+        if exactSession != nil || exactWeekly != nil {
+            return (exactSession, exactWeekly)
         }
-        return (all.first, all.dropFirst().first)   // 兜底：原顺序
+        // 兜底：按窗口长度升序，短的当 session、长的当 weekly（顺序颠倒也能纠正）。
+        let sorted = all.sorted { $0.windowSeconds < $1.windowSeconds }
+        return (sorted.first, sorted.dropFirst().first)
     }
 
     func asProviderSnapshot() -> ProviderUsageSnapshot {

@@ -102,6 +102,14 @@ struct PopoverView: View {
                 bottomBar()
             } else {
                 ProviderUnconfiguredView(provider: providerID, onBackToClaude: onBackToClaude)
+                // 无凭证时 lastError == nil（CodexProvider 走 clear()）；只有 auth.json 损坏类失败才有，
+                // 那种情况也要显示，否则用户只看到「未检测到凭证」、看不到「文件无效」。
+                if let error = runtime.lastError {
+                    UsageCard {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.red).font(.caption)
+                    }
+                }
                 bottomBar()
             }
         }

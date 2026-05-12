@@ -142,6 +142,20 @@ final class CodexProviderTests: XCTestCase {
         XCTAssertEqual(snap.secondaryWindow?.utilizationPct, 50)
     }
 
+    func testNormalizeNonStandardSwappedWindowsFallback() throws {
+        // 都不是确切的 18000/604800 + 顺序颠倒 → 兜底按 windowSeconds 升序：短的当 Session、长的当 Weekly。
+        let json = """
+        { "rate_limit": {
+            "primary_window":   { "used_percent": 60, "reset_at": 1, "limit_window_seconds": 86400 },
+            "secondary_window": { "used_percent": 15, "reset_at": 2, "limit_window_seconds": 3600 } } }
+        """
+        let snap = try decodeCodex(json).asProviderSnapshot()
+        XCTAssertEqual(snap.primaryWindow?.windowDuration, 3600)   // 短窗口 → Session
+        XCTAssertEqual(snap.primaryWindow?.utilizationPct, 15)
+        XCTAssertEqual(snap.secondaryWindow?.windowDuration, 86400) // 长窗口 → Weekly
+        XCTAssertEqual(snap.secondaryWindow?.utilizationPct, 60)
+    }
+
     func testDecodeSingleWindow() throws {
         let json = #"{ "rate_limit": { "primary_window": { "used_percent": 5, "reset_at": 9, "limit_window_seconds": 18000 } } }"#
         let snap = try decodeCodex(json).asProviderSnapshot()
