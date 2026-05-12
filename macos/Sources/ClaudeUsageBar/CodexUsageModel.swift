@@ -116,10 +116,10 @@ extension CodexUsageResponse {
 
     func asProviderSnapshot() -> ProviderUsageSnapshot {
         let (session, weekly) = normalizedWindows()
-        func win(_ w: CodexRateWindow?, _ label: String) -> UsageWindow? {
+        func win(_ w: CodexRateWindow?, _ label: String, _ short: String) -> UsageWindow? {
             guard let w else { return nil }
             return UsageWindow(label: label, utilizationPct: w.usedPercent,
-                               resetsAt: w.resetAt, windowDuration: TimeInterval(w.windowSeconds))
+                               resetsAt: w.resetAt, windowDuration: TimeInterval(w.windowSeconds), shortLabel: short)
         }
         var credit: CreditLine?
         if let c = credits {
@@ -131,8 +131,8 @@ extension CodexUsageResponse {
                                 currencyCode: "USD")
         }
         return ProviderUsageSnapshot(
-            primaryWindow: win(session, "Session"),
-            secondaryWindow: win(weekly, "Weekly"),
+            primaryWindow: win(session, "Session", "5h"),
+            secondaryWindow: win(weekly, "Weekly", "7d"),
             extraWindows: [],
             creditLine: credit,
             planLabel: planLabel

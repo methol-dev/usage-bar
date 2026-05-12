@@ -26,9 +26,10 @@ struct ClaudeUsageBarApp: App {
             .environmentObject(usageStats)
         } label: {
             MenuBarLabel(
-                runtime: coordinator.primaryRuntime,
+                runtime: coordinator.menuBarRuntime,
                 historyService: historyService,
-                showTrend: coordinator.primaryProviderID == .claude
+                showTrend: coordinator.menuBarProviderID == .claude,
+                providerID: coordinator.menuBarProviderID
             )
                 .task {
                     // 退役 v0.1.2 的 cost-usage cache（已被 ~/.config/claude-usage-bar/data/ 取代）
@@ -49,13 +50,9 @@ struct ClaudeUsageBarApp: App {
                     await usageStats.refresh()
                     await codexStats.refresh()
                     coordinator.claude.startPolling()
-                    // Codex provider 的 5 分钟轻量采样（给 popover 的趋势箭头 / 折线图供数）；
-                    // 它 supportsBackgroundPolling 仍 false（不上菜单栏），但有自己的 refresh timer。
-                    // onPollTick 让 Codex 本机 session 扫描（codexStats）走同一节奏。
-                    if let codex = coordinator.provider(.codex) as? CodexProvider {
-                        codex.onPollTick = { Task.detached { await codexStats.refresh() } }
-                        codex.startPolling()
-                    }
+                    // 非-Claude provider 的统一后台 timer（与 Claude 用同一个 `pollingMinutes`）：每 tick 各 refreshNow + onPollTick；
+                    // Codex 的 onPollTick 驱动 codexStats（本机 session 扫描）走同一节奏。Claude 的 timer/backoff 仍归 UsageService。
+                    coordinator.startBackgroundPolling(codexOnPollTick: { Task.detached { await codexStats.refresh() } })
                 }
         }
         .menuBarExtraStyle(.window)

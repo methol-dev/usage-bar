@@ -7,6 +7,8 @@ import Foundation
 struct UsageWindow: Equatable {
     /// 窗口标题（如 `"Session"` / `"Weekly"`）。nil = 调用方自己决定文案。
     var label: String?
+    /// 菜单栏用的短标签（≤3 字符，如 `"5h"` / `"7d"`）。默认取 `label` 前 2 字符。
+    var shortLabel: String
     /// 已用百分比，`0...100`（与 Claude `UsageBucket.utilization` 同语义）。nil = 无数据。
     var utilizationPct: Double?
     /// 窗口重置的绝对时刻。nil = 未知。
@@ -17,8 +19,10 @@ struct UsageWindow: Equatable {
     init(label: String? = nil,
          utilizationPct: Double? = nil,
          resetsAt: Date? = nil,
-         windowDuration: TimeInterval? = nil) {
+         windowDuration: TimeInterval? = nil,
+         shortLabel: String? = nil) {
         self.label = label
+        self.shortLabel = shortLabel ?? (label.map { String($0.prefix(2)) } ?? "")
         self.utilizationPct = utilizationPct
         self.resetsAt = resetsAt
         self.windowDuration = windowDuration

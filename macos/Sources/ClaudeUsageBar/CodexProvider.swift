@@ -1,18 +1,16 @@
 import Foundation
-import Combine
 
 /// Codex provider —— 复用本机 `codex` CLI 已登录的 ChatGPT 凭证（`~/.codex/auth.json`，**只读**）
 /// 拉 `chatgpt.com/backend-api/wham/usage`。无通知 / 多账号（范围收敛，见 spec）。
 /// 不主动刷新 / 不写回 auth.json：401/403 → 提示用户跑 `codex`。
-/// v0.2.8：自持一个 `UsageHistoryService`（`history-codex.json`）+ 一个 5 分钟轻量 refresh timer
-/// （`startPolling()`），每次成功拉取记一个 `(session%, weekly%)` 历史点 —— 给 popover 的趋势箭头/折线图供数。
+/// v0.2.8：自持一个 `UsageHistoryService`（`history-codex.json`），每次成功拉取记一个 `(session%, weekly%)` 历史点。
+/// v0.2.10：后台轮询不再自持 timer —— 由 `ProviderCoordinator` 统管（用同一个 `pollingMinutes` 间隔，见 `pollIntervalSeconds`）。
 @MainActor
 final class CodexProvider: UsageProvider {
     let id: ProviderID = .codex
     let runtime = ProviderRuntime()
-    /// 仍 `false` —— 见 spec §2 / SC3：该 flag = 「菜单栏 primary 候选资格」（需稳定后台数据源 **且** provider-aware
-    /// 的菜单栏渲染）；本版本菜单栏渲染尚未 provider-aware，Codex 暂不进 Settings primary 下拉。
-    /// Codex 自己**有** refresh timer（`startPolling()`，下方），只是不靠它上菜单栏。
+    /// TODO(后续): 这个 flag 现在没消费者了（v0.2.10 退役了 `primaryEligibleIDs` 的「menu-bar 候选资格」用途，菜单栏已 provider-aware）——
+    /// 要么彻底从 `UsageProvider` 协议退役、要么改用途。暂留 `false` 以免协议改动波及面太大。
     let supportsBackgroundPolling = false
 
     /// 本 provider 的历史样本（与 Claude 的 `history.json` 同结构，不同文件 `history-codex.json`）。
@@ -22,26 +20,30 @@ final class CodexProvider: UsageProvider {
 
     private let environment: [String: String]
     private let session: URLSession
+    private let defaults: UserDefaults
 
-    /// 后台采样 timer（仿 `UsageHistoryService` 的 `Timer.publish().autoconnect().sink`）。
-    /// `CodexProvider` 生命周期 = app 生命周期，与 `UsageHistoryService` 一样不在 deinit 显式 cancel。
-    private var pollCancellable: AnyCancellable?
-    static let pollIntervalSeconds: TimeInterval = 300
-    /// 单测可见：`startPolling()` 是否已起 timer。
-    var isPolling: Bool { pollCancellable != nil }
+    /// 后台轮询间隔 —— 跟随 `UsageService` 那个 `pollingMinutes` key（非法值 → `defaultPollingMinutes`，即 30min）。
+    /// 注：实际的后台 timer 由 `ProviderCoordinator` 持（它用同一 key、同一算法 → 两者天然一致）；这里暴露这个属性供单测断言。
+    var pollIntervalSeconds: TimeInterval {
+        let stored = defaults.integer(forKey: "pollingMinutes")
+        let mins = UsageService.pollingOptions.contains(stored) ? stored : UsageService.defaultPollingMinutes
+        return TimeInterval(mins * 60)
+    }
 
-    /// 重入闸门：`refreshNow()` 同一时刻只跑一份（timer / Refresh 按钮 / 切 tab 可能撞上）。
+    /// 重入闸门：`refreshNow()` 同一时刻只跑一份（后台 timer / Refresh 按钮 / popover 打开可能撞上）。
     /// `@MainActor` 序列化读写 —— 第二个调用在第一个的网络 `await` 期间进来会命中此 guard 直接 return。
     private var isRefreshing = false
 
-    /// 后台采样 tick 时额外回调（装配处用它驱动 `codexStats.refresh()` —— 即 Codex 本机 session 扫描走同一节奏）。
+    /// 后台 tick 时额外回调（`ProviderCoordinator` 用它驱动 `codexStats.refresh()` —— 即 Codex 本机 session 扫描走同一节奏）。
     var onPollTick: (@MainActor () -> Void)? = nil
 
     init(environment: [String: String] = ProcessInfo.processInfo.environment,
          session: URLSession = .shared,
-         history: UsageHistoryService? = nil) {
+         history: UsageHistoryService? = nil,
+         defaults: UserDefaults = .standard) {
         self.environment = environment
         self.session = session
+        self.defaults = defaults
         // 默认值不能写在参数上（`UsageHistoryService` 是 @MainActor，默认参数会在 nonisolated 上下文求值）——
         // 在 @MainActor 的 init 里现造。
         let history = history ?? UsageHistoryService(filename: "history-codex.json")
@@ -51,19 +53,6 @@ final class CodexProvider: UsageProvider {
         let present = ((try? CodexCredentialStore.load(environment: environment)) ?? nil) != nil
         runtime.setConfigured(present)
         history.loadHistory()
-    }
-
-    /// 起 5 分钟的轻量后台采样（幂等）；调用即先拉一次。装配处（`ClaudeUsageBarApp`）显式调用。
-    func startPolling() {
-        guard pollCancellable == nil else { return }
-        Task { [weak self] in await self?.refreshNow() }
-        onPollTick?()
-        pollCancellable = Timer.publish(every: Self.pollIntervalSeconds, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                Task { await self?.refreshNow() }
-                self?.onPollTick?()
-            }
     }
 
     func refreshNow() async {

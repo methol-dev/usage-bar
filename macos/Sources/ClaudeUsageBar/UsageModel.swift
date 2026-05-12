@@ -205,12 +205,13 @@ struct ExtraUsage: Codable {
 
 extension UsageBucket {
     /// 映射成 provider 无关的 `UsageWindow`。`utilization`（0...100）与 `resetsAtDate` 直接搬。
-    func asUsageWindow(label: String?, windowDuration: TimeInterval?) -> UsageWindow {
+    func asUsageWindow(label: String?, windowDuration: TimeInterval?, shortLabel: String? = nil) -> UsageWindow {
         UsageWindow(
             label: label,
             utilizationPct: utilization,
             resetsAt: resetsAtDate,
-            windowDuration: windowDuration
+            windowDuration: windowDuration,
+            shortLabel: shortLabel
         )
     }
 }
@@ -253,8 +254,8 @@ extension UsageResponse {
         }
 
         return ProviderUsageSnapshot(
-            primaryWindow: fiveHour?.asUsageWindow(label: "Session", windowDuration: 5 * 60 * 60),
-            secondaryWindow: sevenDay?.asUsageWindow(label: "Weekly", windowDuration: sevenDayInterval),
+            primaryWindow: fiveHour?.asUsageWindow(label: "Session", windowDuration: 5 * 60 * 60, shortLabel: "5h"),
+            secondaryWindow: sevenDay?.asUsageWindow(label: "Weekly", windowDuration: sevenDayInterval, shortLabel: "7d"),
             extraWindows: extras,
             creditLine: credit,
             planLabel: nil

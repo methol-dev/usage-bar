@@ -152,43 +152,37 @@ final class ProviderAbstractionTests: XCTestCase {
 
     @MainActor
     func testCoordinatorDefaultsToClaude() throws {
-        UserDefaults.standard.removeObject(forKey: ProviderCoordinator.primaryProviderKey)
+        let d = UserDefaults(suiteName: "abs-coord-\(UUID().uuidString)")!
         let claude = try makeBareService()
-        let coord = ProviderCoordinator(claude: claude)
-        XCTAssertEqual(coord.primaryProviderID, .claude)
-        XCTAssertTrue(coord.primaryRuntime === claude.runtime)
+        let coord = ProviderCoordinator(claude: claude, defaults: d)
+        XCTAssertEqual(coord.menuBarProviderID, .claude)
+        XCTAssertTrue(coord.menuBarRuntime === claude.runtime)
         XCTAssertEqual(coord.availableIDs, [.claude])
         XCTAssertTrue(coord.claude === claude)
     }
 
     @MainActor
-    func testCoordinatorPrimarySwitchTracksRuntime() throws {
-        UserDefaults.standard.removeObject(forKey: ProviderCoordinator.primaryProviderKey)
-        defer { UserDefaults.standard.removeObject(forKey: ProviderCoordinator.primaryProviderKey) }
+    func testCoordinatorMenuBarSwitchTracksRuntime() throws {
+        let name = "abs-coord-\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: name)!; d.removePersistentDomain(forName: name)
         let claude = try makeBareService()
-        // v0.2.6：只有 supportsBackgroundPolling 的 provider 能当 primary —— 把 stub 标成支持才进得了
-        // primaryEligibleIDs（真实 CodexProvider 不支持，见 testCoordinatorPrimaryEligibleExcludesNonPollingProvider）。
+        // v0.2.10：任何「已注册 + 已启用」的 provider 都能当菜单栏 provider（不再限 supportsBackgroundPolling）。
         let stub = StubProvider(id: .codex)
-        stub.supportsBackgroundPolling = true
-        let coord = ProviderCoordinator(claude: claude, additionalProviders: [stub])
+        let coord = ProviderCoordinator(claude: claude, additionalProviders: [stub], defaults: d)
         XCTAssertEqual(Set(coord.availableIDs), Set([.claude, .codex]))
-        XCTAssertEqual(Set(coord.primaryEligibleIDs), Set([.claude, .codex]))
-        XCTAssertTrue(coord.primaryRuntime === claude.runtime)
+        XCTAssertTrue(coord.menuBarRuntime === claude.runtime)
 
-        coord.primaryProviderID = .codex
-        XCTAssertTrue(coord.primaryRuntime === stub.runtime)
-        XCTAssertEqual(UserDefaults.standard.string(forKey: ProviderCoordinator.primaryProviderKey), "codex")
+        coord.menuBarProviderID = .codex
+        XCTAssertTrue(coord.menuBarRuntime === stub.runtime)
+        XCTAssertEqual(d.string(forKey: ProviderCoordinator.menuBarProviderKey), "codex")
 
-        // 新建 coordinator 应从 UserDefaults 恢复（codex 仍 eligible → 保留）
-        let stub2 = StubProvider(id: .codex); stub2.supportsBackgroundPolling = true
-        let coord2 = ProviderCoordinator(claude: try makeBareService(), additionalProviders: [stub2])
-        XCTAssertEqual(coord2.primaryProviderID, .codex)
+        // 新建 coordinator 应从 UserDefaults 恢复（codex 仍注册+启用 → 保留）
+        let coord2 = ProviderCoordinator(claude: try makeBareService(), additionalProviders: [StubProvider(id: .codex)], defaults: d)
+        XCTAssertEqual(coord2.menuBarProviderID, .codex)
 
         // codex 不再注册 → 回退 .claude
-        let coord3 = ProviderCoordinator(claude: try makeBareService())
-        XCTAssertEqual(coord3.primaryProviderID, .claude)
-
-        UserDefaults.standard.removeObject(forKey: ProviderCoordinator.primaryProviderKey)
+        let coord3 = ProviderCoordinator(claude: try makeBareService(), defaults: d)
+        XCTAssertEqual(coord3.menuBarProviderID, .claude)
     }
 
     // MARK: - SC5-c：一次成功 fetch 后 recordDataPoint / checkAndNotify 仍被调用

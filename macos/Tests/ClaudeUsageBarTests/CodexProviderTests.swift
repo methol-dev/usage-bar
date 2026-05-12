@@ -306,23 +306,9 @@ final class CodexProviderTests: XCTestCase {
         XCTAssertEqual(p.runtime.snapshot?.primaryWindow?.utilizationPct, 9)
     }
 
-    // MARK: - ProviderCoordinator: primaryEligibleIDs
-
-    @MainActor
-    func testCoordinatorPrimaryEligibleExcludesNonPollingProvider() throws {
-        UserDefaults.standard.removeObject(forKey: ProviderCoordinator.primaryProviderKey)
-        defer { UserDefaults.standard.removeObject(forKey: ProviderCoordinator.primaryProviderKey) }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let claude = UsageService(credentialsStore: StoredCredentialsStore(directoryURL: dir))
-        let codex = CodexProvider(environment: ["CODEX_HOME": dir.path], session: .shared)   // no auth.json → unconfigured
-        let coord = ProviderCoordinator(claude: claude, additionalProviders: [codex])
-        XCTAssertEqual(coord.availableIDs, [.claude, .codex])
-        XCTAssertEqual(coord.primaryEligibleIDs, [.claude])
-        coord.primaryProviderID = .codex
-        XCTAssertEqual(coord.primaryProviderID, .claude, "非 eligible 的 primaryProviderID 应被拒绝/回退")
-        XCTAssertNotEqual(UserDefaults.standard.string(forKey: ProviderCoordinator.primaryProviderKey), ProviderID.codex.rawValue)
-    }
+    // 注：v0.2.6 的 `testCoordinatorPrimaryEligibleExcludesNonPollingProvider` 已退役
+    // —— v0.2.10 退役了 `primaryEligibleIDs`（菜单栏 provider 不再限「supportsBackgroundPolling」）；
+    // 等价覆盖搬到 `ProviderCoordinatorTests.testMenuBarProviderIDRejectsUnregistered/Disabled`。
 
     // MARK: - v0.2.8 history sampling
 
@@ -424,14 +410,19 @@ final class CodexProviderTests: XCTestCase {
         XCTAssertEqual(h.history.dataPoints.count, 1, "refreshNow 应不可重入")
     }
 
+    // 注：v0.2.8 的 `testStartPollingIsIdempotent` 已退役 —— v0.2.10 撤掉了 CodexProvider 的自持 timer
+    // （后台轮询统一由 ProviderCoordinator 持，见 ProviderCoordinatorTests.testBackgroundIntervalFollowsPollingMinutes / testOnBackgroundTickDoesNotTouchClaude）。
+
     @MainActor
-    func testStartPollingIsIdempotent() {
-        let p = CodexProvider(environment: ["CODEX_HOME": "/nonexistent-\(UUID().uuidString)"], session: .shared)
-        XCTAssertFalse(p.isPolling)
-        p.startPolling()
-        XCTAssertTrue(p.isPolling)
-        p.startPolling()   // 第二次：无副作用、不崩
-        XCTAssertTrue(p.isPolling)
+    func testPollIntervalFollowsPollingMinutes() {
+        let name = "codex-poll-\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        let p = CodexProvider(environment: ["CODEX_HOME": "/nonexistent-\(UUID().uuidString)"], defaults: d)
+        d.set(5, forKey: "pollingMinutes")
+        XCTAssertEqual(p.pollIntervalSeconds, TimeInterval(5 * 60))
+        d.set(7, forKey: "pollingMinutes")            // 非法值 → 30min
+        XCTAssertEqual(p.pollIntervalSeconds, TimeInterval(30 * 60))
     }
 }
 
