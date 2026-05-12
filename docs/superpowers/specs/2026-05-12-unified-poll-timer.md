@@ -61,6 +61,15 @@ reviews:
     verdict: approved-after-revisions
     notes: >
       无 must-fix。6 should-fix（已全部应用）：① SC3「最坏多等 ~pollingMinutes」措辞不准 —— 已改成精确描述（Retry-After ≤ P → 多等 ~P；> P → round 到 R 之后第一个 tick）；② `refreshAllEnabledOnOpen` 改成对 Claude 也调是隐性行为变化（每次开 popover 都拉 Claude）—— 已改回「Claude 仍只在 snapshot==nil 且不在 backoff 时兜一次」，保留 `shouldRefreshClaudeOnOpen`；③ 装配处 `coordinator.claude.refreshNow()` 与 `startBackgroundPolling()` 的立即 tick 重叠 —— 已去掉装配处那次、由立即 tick 承担（强调 onPollTick 必须先于 `startBackgroundPolling()` 设好）；④ Codex glyph 商标风险 —— SC6 改为优先 `</>`、明确不复刻 OpenAI 花结 logo；⑤ `SC_AUTO_NO_TIMER` grep 补 `currentInterval`；⑥ SC7 零回归含 `UsageProvider.swift` 注释更新。3 nit（已应用）：风险 #4 补「coordinator-map 方案为何拒绝」、SC2/SC5 边界说明、SC5(b) 的 `guard isAuthenticated` 去留留实施确认。核心设计（backoff 表达成 `nextEligibleRefresh` hint + coordinator 单 timer 跳过窗口内 provider；`backoffInterval()` 纯函数不动；`UsageService` 彻底无 timer）—— 获认可；timer 散点列举（SC2+SC5）经核对基本完整（唯一补点：`addAccount` 路径里 `await fetchProfile()` 已先调，`refreshNow` 里的 `if accountEmail == nil` 不会重复）。
+  - gate: G5
+    date: 2026-05-12
+    reviewer: independent code-reviewer subagent（codex-rescue → general-purpose fallback，独立判断）
+    scope: code-review + light security-review（重点核 UsageService timer 退役 + backoff 改写 + 账号切换 race）
+    verdict: approved-with-nits
+    notes: >
+      无 must-fix。逐项确认通过：① UsageService timer 真清零（`grep -nE 'private var timer\b|scheduleTimer|func startPolling|private var currentInterval'` 零命中）；② backoff 语义正确（429 → prev/backoffInterval/backoffUntil 指数链递增到 cap；首次 429 文案仍 "Rate limited — backing off to 3600s"；成功/signOut/expireSession 清；backoffInterval 纯函数未动；nextEligibleRefresh { backoffUntil }）；③ **账号切换 race 安全**（coordinator 的 `Task { await p.refreshNow() }` 对 Claude 不持有/不可 cancel，但 fetchUsage 入口捕获 epoch + 收响应后/performRefresh 写 credentials 前都有 accountSwitchEpoch guard → 切换时在飞响应被丢弃）；④ switchAccount/addAccount/signOut/expireSession 散点改对（末尾从 startPolling() → 各自持有 currentFetchTask = Task{fetchUsage + profile-if-nil}）；⑤ updatePollingInterval → coordinator 经 UserDefaults.didChangeNotification 感知重起；⑥ UsageProvider 协议体有 nextEligibleRefresh { get }（必须）+ onPollTick { get set }，各 conformer 满足；⑦ coordinator onBackgroundTick 遍历全部 provider（含 Claude）+ 跳过 backoff 窗口 + 无向下转型；refreshAllEnabledOnOpen 保留 Claude 特判；startBackgroundPolling() 无参 + 装配顺序对；⑧ Task 并发/observer 生命周期与既有策略一致；⑨ </> glyph flipped 坐标正确正立、12pt 清晰、注释「非品牌 logo」、renderIcon 签名未动、.claude 走 PNG；⑩ 零回归（fetchUsage 各分支/pollingMinutes key/菜单栏 Claude/usageStats.refresh 节奏/Settings/PopoverView 全不动）；⑪ 测试覆盖 OK；⑫ 安全（无新文件读/网络/落盘；backoff 文案只含整数秒）。swift build 绿、swift test 251 全绿。
+      1 should-fix（已应用）：testBackoffWindowSkipsProvider 的 sleep 40→100ms（防 CI flaky）。
+      1 nit（已应用）：switchAccount doc comment 去掉残留「+ timer」字样。
 ---
 
 # ProviderCoordinator 统一后台 timer（收编 Claude 的 backoff）+ Codex 菜单栏专属 glyph
