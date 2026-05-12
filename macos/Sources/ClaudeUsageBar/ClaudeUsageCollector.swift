@@ -7,7 +7,7 @@ struct CollectResult {
     let touchedDayKeys: Set<String>
 }
 
-actor ClaudeUsageCollector {
+actor ClaudeUsageCollector: UsageCollecting {
     private let store: UsageEventStore
     private let cursor: ScanCursorStore
     private let scanRootsOverride: [URL]?

@@ -64,4 +64,26 @@ final class UsageStatsServiceTests: XCTestCase {
         _ = await (a, b)
         XCTAssertFalse(s.isInitializing)
     }
+
+    func testCodexStatsEndToEnd() async throws {
+        // Codex 端到端：摆一个 rollout JSONL → UsageStatsService(collector: CodexUsageCollector, pricing: OpenAI) → refresh → 估算费用 > 0。
+        let codexRoot = tmpRoot.deletingLastPathComponent().appendingPathComponent("codex/sessions", isDirectory: true)
+        let codexSessions = codexRoot.appendingPathComponent("2026/05/12", isDirectory: true)
+        try FileManager.default.createDirectory(at: codexSessions, withIntermediateDirectories: true)
+        let rollout = codexSessions.appendingPathComponent("rollout-2026-05-12T07-00-00-019e1bee-0948-75c3-ae1a-bab380a1ffa9.jsonl")
+        let nowStr = ISO8601DateFormatter().string(from: Date())
+        let lines = [
+            #"{"timestamp":"\#(nowStr)","type":"turn_context","payload":{"model":"gpt-5.5"}}"#,
+            #"{"timestamp":"\#(nowStr)","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100000,"cached_input_tokens":0,"output_tokens":20000,"reasoning_output_tokens":0,"total_tokens":120000},"total_token_usage":{"input_tokens":100000,"cached_input_tokens":0,"output_tokens":20000,"reasoning_output_tokens":0,"total_tokens":120000}}}}"#,
+        ]
+        try (lines.joined(separator: "\n") + "\n").data(using: .utf8)!.write(to: rollout)
+        let store = UsageEventStore(dataDirOverride: tmpData, provider: .codex)
+        let collector = CodexUsageCollector(store: store, cursor: ScanCursorStore(dataDirOverride: tmpData, provider: .codex),
+                                            scanRootsOverride: [codexRoot])
+        let svc = UsageStatsService(store: store, collector: collector, pricing: OpenAIModelPriceTable.shared)
+        await svc.refresh()
+        XCTAssertFalse(svc.dailySpend.isEmpty)
+        XCTAssertGreaterThan(svc.rolling30d?.totalUSD ?? 0, 0)   // 100k input × $1.25/Mtok + 20k output × $10/Mtok
+        XCTAssertFalse(svc.recentEvents.isEmpty)
+    }
 }

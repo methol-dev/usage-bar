@@ -6,7 +6,7 @@ import Foundation
 /// - 游标只用来判「文件变没变」（`nextReadOffset` 返回 nil 即跳过），变了就**整文件 re-parse**，靠
 ///   `(msgId,reqId) = sessionId:lineIndex` 在 `UsageEventStore.mergeEvents` 里去重保证幂等；
 /// - **绝不** print / NSLog / os_log（连「第几行解析失败」都不打）。见 spec SC9。
-actor CodexUsageCollector {
+actor CodexUsageCollector: UsageCollecting {
     private let store: UsageEventStore
     private let cursor: ScanCursorStore
     private let scanRootsOverride: [URL]?
