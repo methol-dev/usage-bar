@@ -16,8 +16,13 @@ class UsageService: ObservableObject {
     private var accountSwitchEpoch: Int = 0
     private var currentFetchTask: Task<Void, Never>?
 
-    var historyService: UsageHistoryService?
-    var notificationService: NotificationService?
+    // v0.2.5: 窄化成协议，便于单测注入 spy（实参仍是 UsageHistoryService / NotificationService）
+    var historyService: HistoryRecording?
+    var notificationService: UsageNotifying?
+
+    /// v0.2.5 多供应商抽象：Claude provider 的 UI 状态容器（每次 fetch 后镜像写入）。
+    let runtime: ProviderRuntime
+    private var runtimeAuthSync: AnyCancellable?
 
     private let usageStats: UsageStatsService
     private var timer: Timer?
@@ -38,6 +43,8 @@ class UsageService: ObservableObject {
 
     static let defaultPollingMinutes = 30
     static let pollingOptions = [5, 15, 30, 60]
+    /// `refreshNow()`（切 tab / Refresh 按钮触发）的节流窗口：距上次成功 < 此值则不重拉。
+    nonisolated static let refreshThrottleSeconds: TimeInterval = 30
     nonisolated static let maxBackoffInterval: TimeInterval = 60 * 60
     nonisolated static let defaultOAuthScopes = ["user:profile", "user:inference"]
     nonisolated private static let authorizeEndpoint = URL(string: "https://claude.ai/oauth/authorize")!
@@ -113,6 +120,11 @@ class UsageService: ObservableObject {
             self.activeAccountId = nil
             self.isAuthenticated = false
         }
+        self.runtime = ProviderRuntime()
+        // 保持 runtime.isConfigured 与 isAuthenticated 同步（@Published 订阅时会立刻发当前值）
+        self.runtimeAuthSync = self.$isAuthenticated.sink { [runtime] authed in
+            runtime.setConfigured(authed)
+        }
     }
 
     // MARK: - Bootstrap from Claude CLI Keychain (v0.1.1)
@@ -185,6 +197,7 @@ class UsageService: ObservableObject {
         // 清前账号瞬态状态（SC8）
         self.usage = nil
         self.lastError = nil
+        self.runtime.clear()
         // 本机 JSONL 统计是跨账号的，不随账号清/重算（spec 2026-05-12 §5 风险12）
         self.accountEmail = nil
 
@@ -353,6 +366,7 @@ class UsageService: ObservableObject {
             // 清前账号瞬态
             self.usage = nil
             self.lastError = nil
+            self.runtime.clear()
             // 本机 JSONL 统计是跨账号的，不随账号清/重算（spec 2026-05-12 §5 风险12）
             self.accountEmail = nil
         }
@@ -403,6 +417,7 @@ class UsageService: ObservableObject {
         refreshTask?.cancel()
         refreshTask = nil
         lastError = nil
+        runtime.clear()
         // G5 R1: 清 OAuth 中间态（避免 sign out 期间正在 add account 的状态残留）
         isAwaitingCode = false
         codeVerifier = nil
@@ -430,11 +445,15 @@ class UsageService: ObservableObject {
         guard loadCredentials() != nil else {
             lastError = "Not signed in"
             isAuthenticated = false
+            runtime.setError("Not signed in", clearSnapshot: true)
             return
         }
 
         do {
             guard let result = try await sendAuthorizedRequest(to: usageEndpoint) else {
+                // sendAuthorizedRequest 返回 nil 时已设好 self.lastError（"Not signed in" /
+                // refresh 失败 / session 过期）—— 把它镜像到 runtime（凭证类失败由 expireSession 自己清 snapshot）
+                if let err = lastError { runtime.setError(err, clearSnapshot: false) }
                 return
             }
             // race guard：账号切换导致此响应已陈旧 → 丢弃
@@ -448,18 +467,22 @@ class UsageService: ObservableObject {
                     currentInterval: currentInterval
                 )
                 lastError = "Rate limited — backing off to \(Int(currentInterval))s"
+                runtime.setError(lastError ?? "Rate limited", clearSnapshot: false)
                 scheduleTimer()
                 return
             }
             guard http.statusCode == 200 else {
                 lastError = "HTTP \(http.statusCode)"
+                runtime.setError("HTTP \(http.statusCode)", clearSnapshot: false)
                 return
             }
             let decoded = try JSONDecoder().decode(UsageResponse.self, from: data)
             let reconciled = decoded.reconciled(with: usage)
             usage = reconciled
             lastError = nil
-            lastUpdated = Date()
+            let now = Date()
+            lastUpdated = now
+            runtime.setSuccess(snapshot: reconciled.asProviderSnapshot(), at: now)
             historyService?.recordDataPoint(pct5h: pct5h, pct7d: pct7d)
             notificationService?.checkAndNotify(pct5h: pct5h, pct7d: pct7d, pctExtra: pctExtra)
             if currentInterval != baseInterval {
@@ -470,6 +493,7 @@ class UsageService: ObservableObject {
             // race guard：账号已切换则不写 lastError
             guard accountSwitchEpoch == epochAtStart else { return }
             lastError = error.localizedDescription
+            runtime.setError(error.localizedDescription, clearSnapshot: false)
         }
     }
 
@@ -793,6 +817,27 @@ class UsageService: ObservableObject {
         refreshTask?.cancel()
         refreshTask = nil
         lastError = "Session expired — please sign in again"
+        runtime.setError("Session expired — please sign in again", clearSnapshot: true)
+    }
+}
+
+// MARK: - UsageProvider conformance (v0.2.5 multi-provider refactor)
+//
+// `UsageService` 就是 Claude 的 `UsageProvider` 实现（沿用全部 OAuth/refresh/多账号/backoff/polling
+// 内部逻辑）。`runtime` 是类体里的存储属性；`fetchUsage()` 在成功/失败时已镜像写它。
+
+extension UsageService: UsageProvider {
+    var id: ProviderID { .claude }
+    var isConfigured: Bool { isAuthenticated }
+    var supportsBackgroundPolling: Bool { true }
+
+    /// 切 tab / popover Refresh 按钮触发的「按需拉取」：距上次成功 < `refreshThrottleSeconds` 则跳过。
+    /// （后台 polling timer 不受此节流影响 —— 它直接调 `fetchUsage()`。）
+    func refreshNow() async {
+        if let last = lastUpdated, Date().timeIntervalSince(last) < Self.refreshThrottleSeconds {
+            return
+        }
+        await fetchUsage()
     }
 }
 

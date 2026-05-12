@@ -168,3 +168,8 @@ class NotificationService: ObservableObject {
         return max(0, min(100, value))
     }
 }
+
+// MARK: - v0.2.5 multi-provider refactor
+
+/// `UsageService`（Claude provider）通过 `UsageNotifying` 协议持有它，便于单测注入 spy。
+extension NotificationService: UsageNotifying {}
