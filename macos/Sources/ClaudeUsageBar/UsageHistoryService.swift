@@ -13,14 +13,30 @@ class UsageHistoryService: ObservableObject {
     private static let retentionInterval: TimeInterval = 30 * 86400 // 30 days
     private static let flushInterval: TimeInterval = 300 // 5 minutes
 
-    private static var historyFileURL: URL {
+    /// 写到哪个文件（默认 `~/.config/claude-usage-bar/history.json` —— Claude 历史；
+    /// Codex 用 `history-codex.json`）。`internal` 而非 `private`：单测要断言默认路径未变。
+    let fileURL: URL
+    /// 解析失败时把坏文件挪走的备份名（`<base>.bak.json`），由 `fileURL` 派生。
+    let backupURL: URL
+
+    private static var defaultDirectory: URL {
         let dir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/claude-usage-bar", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("history.json")
+        return dir
     }
 
-    init() {
+    init(filename: String = "history.json", directory: URL? = nil) {
+        let dir: URL
+        if let directory {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            dir = directory
+        } else {
+            dir = Self.defaultDirectory
+        }
+        self.fileURL = dir.appendingPathComponent(filename)
+        self.backupURL = self.fileURL.deletingPathExtension().appendingPathExtension("bak.json")
+
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
@@ -41,19 +57,17 @@ class UsageHistoryService: ObservableObject {
     // MARK: - Load
 
     func loadHistory() {
-        let url = Self.historyFileURL
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
 
         do {
-            let data = try Data(contentsOf: url)
+            let data = try Data(contentsOf: fileURL)
             var loaded = try JSONDecoder.historyDecoder.decode(UsageHistory.self, from: data)
             loaded.dataPoints = pruned(loaded.dataPoints)
             history = loaded
         } catch {
             // Corrupt file — rename to .bak and start fresh
-            let backup = url.deletingPathExtension().appendingPathExtension("bak.json")
-            try? FileManager.default.removeItem(at: backup)
-            try? FileManager.default.moveItem(at: url, to: backup)
+            try? FileManager.default.removeItem(at: backupURL)
+            try? FileManager.default.moveItem(at: fileURL, to: backupURL)
             history = UsageHistory()
         }
     }
@@ -74,7 +88,7 @@ class UsageHistoryService: ObservableObject {
         history.dataPoints = pruned(history.dataPoints)
 
         guard let data = try? JSONEncoder.historyEncoder.encode(history) else { return }
-        try? data.write(to: Self.historyFileURL, options: .atomic)
+        try? data.write(to: fileURL, options: .atomic)
 
         isDirty = false
         flushTimer?.cancel()
