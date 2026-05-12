@@ -47,6 +47,7 @@ placeholder ─首个 spec 落地─► planned ─开发开始─► in-progres
 | [v0.2.9](./v0.2.9-codex-cost-heatmap.md) | codex-cost-heatmap | in-progress | 2026-05-14 | 🔌 Codex 本地 session JSONL 扫描 → 估算成本/token → 消费热力图 + 去 Plan 卡（Codex tab 全面对齐 Claude） |
 | [v0.2.10](./v0.2.10-settings-provider-list.md) | settings-provider-list | in-progress | 2026-05-16 | ⚙️ Settings 改 provider 列表（拖动排序 + 启用开关 + 菜单栏单选子开关）+ 去 Account 区 + Codex 统一 polling interval + 刷新纪律（切 tab 不刷新；刷新只 2 入口）|
 | [v0.2.11](./v0.2.11-unified-poll-timer.md) | unified-poll-timer | in-progress | 2026-05-18 | 🏗️ ProviderCoordinator 统一后台 timer（收编 Claude backoff）+ Codex 菜单栏专属 glyph |
+| [v0.2.12](./v0.2.12-app-icon-refresh.md) | app-icon-refresh | in-progress | 2026-05-12 | 🎨 更换 App 图标（深紫圆角 + 蓝紫渐变进度条意象；菜单栏 glyph 不变；无代码改动） |
 
 > **目标（用户 2026-05-12 定）**：把 Codex tab 做到和 Claude tab 界面/功能一致 —— v0.2.6 已上额度窗口卡 + pace；v0.2.8 补趋势 + 折线图；v0.2.9 补成本 + 消费热力图。v0.2.7 是穿插的独立小修（Claude 凭证回退）。新版本立项时按 §7.1 命名规范 append 即可。
 >
