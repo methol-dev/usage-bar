@@ -7,7 +7,7 @@ struct PopoverView: View {
     @ObservedObject var appUpdater: AppUpdater
     @EnvironmentObject var usageStats: UsageStatsService
     @AppStorage("setupComplete") private var setupComplete = false
-    @State private var selectedProvider: ProviderTab = .claude
+    @State private var selectedProvider: ProviderID = .claude
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

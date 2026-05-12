@@ -1,24 +1,22 @@
 import SwiftUI
 
-/// popover 顶部多 provider 切换 tab 的 UI 维度。
-/// 注意：与存储层的 `UsageProvider`（`UsageStoreTypes.swift`，Codable、用作 data/<provider>/ 目录名）
-/// 是两个东西 —— 本枚举纯 UI，只有 Claude 拉通了数据层（见 ADR 0005，其余 provider 是占位）。
-enum ProviderTab: String, CaseIterable, Identifiable {
-    case claude, codex, cursor, copilot, gemini
-
-    var id: String { rawValue }
-    var displayName: String { rawValue.capitalized }   // "claude" → "Claude"
+// popover 顶部的 provider tab 现在直接用 `ProviderID`（见 ProviderID.swift）——
+// 不再有独立的 `ProviderTab` 枚举。
+//
+// 临时（A0 阶段）：`isAvailable` 仍硬编码 `== .claude`；v0.2.5 阶段 C 视图泛化时
+// 改由 `ProviderRegistry` 是否注册了对应 `UsageProvider` 决定，届时移除本扩展。
+extension ProviderID {
     var isAvailable: Bool { self == .claude }
 }
 
 /// popover 顶部的多 provider 药丸 tab。不可用的 provider 仍可点选，
 /// 由调用方在 selection 非 Claude 时展示 `ProviderComingSoonView`。
 struct ProviderTabBar: View {
-    @Binding var selection: ProviderTab
+    @Binding var selection: ProviderID
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(ProviderTab.allCases) { provider in
+            ForEach(ProviderID.allCases) { provider in
                 Button {
                     selection = provider
                 } label: {
@@ -44,7 +42,7 @@ struct ProviderTabBar: View {
         )
     }
 
-    private func pillForeground(for provider: ProviderTab) -> Color {
+    private func pillForeground(for provider: ProviderID) -> Color {
         if provider == selection { return .primary }
         return provider.isAvailable ? .secondary : .secondary.opacity(0.5)
     }
@@ -52,7 +50,7 @@ struct ProviderTabBar: View {
 
 /// 选中一个尚未拉通数据层的 provider 时显示。
 struct ProviderComingSoonView: View {
-    let provider: ProviderTab
+    let provider: ProviderID
     var onBackToClaude: () -> Void
 
     var body: some View {
@@ -75,7 +73,7 @@ struct ProviderComingSoonView: View {
 
 #Preview("ProviderTabBar") {
     struct Wrap: View {
-        @State var sel: ProviderTab = .claude
+        @State var sel: ProviderID = .claude
         var body: some View {
             VStack(spacing: 12) {
                 ProviderTabBar(selection: $sel)

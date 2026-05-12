@@ -2,10 +2,10 @@ import Foundation
 
 actor UsageEventStore {
     private let dataDir: URL
-    private let provider: UsageProvider
+    private let provider: ProviderID
     private let fm = FileManager.default
 
-    init(dataDirOverride: URL? = nil, provider: UsageProvider = .claude) {
+    init(dataDirOverride: URL? = nil, provider: ProviderID = .claude) {
         if let o = dataDirOverride {
             self.dataDir = o
         } else if let cfg = UsageEventStore.defaultConfigDir() {

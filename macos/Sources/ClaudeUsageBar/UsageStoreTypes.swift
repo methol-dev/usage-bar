@@ -1,8 +1,7 @@
 import Foundation
 
-enum UsageProvider: String, Codable, CaseIterable {
-    case claude
-}
+// 旧 `enum UsageProvider { case claude }` 已并入 `ProviderID`（见 ProviderID.swift），
+// 用作 `data/<provider>/` 目录名的语义不变（`ProviderID.claude.rawValue == "claude"`）。
 
 /// 单次 assistant 调用的事实记录。**故意不含 content/text/contentBlocks**（隐私 schema 守护）。
 struct StoredUsageEvent: Codable, Equatable {
