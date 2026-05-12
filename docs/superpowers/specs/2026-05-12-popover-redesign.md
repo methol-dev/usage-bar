@@ -19,7 +19,7 @@ spec_criteria:
     done: true
     evidence: "formatResetWithClock @ 662e78d（5 cases 绿）；UsageCard @ 2316efc；UsageHeroCard 三行布局 @ 3e912b0；PopoverView 卡片化 + 渐变背景 @ 75852df。视觉/dark mode 待 user 目测确认。"
   - id: SC3
-    criterion: "折线图在原 5h（蓝）/ 7d（橙）两条折线下方叠加 pace 面积：浅蓝 = 5h pace、浅黄 = 7d pace；pace = 当前窗口内 elapsed 比例 ×100（5h 跨多窗口时呈锯齿）；原两条折线、悬停 RuleMark/PointMark/tooltip 行为完全不变；图例仍只显示 5h / 7d 两项"
+    criterion: "折线图在原 5h（蓝）/ 7d（橙）两条折线下方叠加 pace 面积：极浅蓝 = 5h pace、极浅橙 = 7d pace（贴合各自折线色）；pace = 当前窗口内 elapsed 比例 ×100（5h 跨多窗口时呈锯齿）；原两条折线、悬停 RuleMark/PointMark/tooltip 行为完全不变；图例仍只显示 5h / 7d 两项"
     done: true
     evidence: "UsagePaceArea.series @ a28bbe0（5 cases 绿）；chartView 叠 AreaMark（pace 在最前=底层、用 foregroundStyle(Color) 不进图例）@ fac597f；PopoverView 透传 reset 日期 @ 75852df；悬停/tooltip 代码未改动。pace 面积浅度/锯齿/图例待 user 目测确认。"
   - id: SC4
@@ -43,6 +43,11 @@ reviews:
     reviewer: independent general-purpose subagent (codex fallback per AGENTS §5)
     verdict: approved-after-revisions
     notes: "G2 spec approved-after-revisions（敏感面无；ADR supersede 路径正确）；G3 plan approved-after-revisions。必改已落地：plan Task1 去掉 formatResetWithClock 的悬空 calendar 参数、Task3 把不稳断言改稳；spec 建议（SC2 点明 7d 文案、SC5 补 UsageProvider 测试）已采纳。7d pace 复用 PaceCalculator 的 elapsedFraction>=0.03 噪声阈值 → 开窗前 ~5h 无 Pace 标签（已知行为）。"
+  - gate: G5
+    date: 2026-05-12
+    reviewer: independent general-purpose subagent (code-review)
+    verdict: approved-with-nits
+    notes: "无必改。逐项核对无 bug：UsagePaceArea 窗口回推 / formatResetWithClock days 计算 / pace AreaMark 层序在 LineMark 之前且不进图例 / chartXScale 等价 / 死代码已删 / ProviderTab 改名无符号冲突 / 无 TODO 残留 / ProviderComingSoonView 无信息泄漏。nits：spec『浅黄』vs 代码 Color.orange.opacity(0.08)（已改 spec 措辞为『极浅橙·贴合折线色』）；未登录态 tab 仍可点（轻微 UX 怪异，非 bug）；dark mode 渐变需 user 目测（已在 manual_checks）。"
 ---
 
 # Popover 重做 — provider tab 外壳 + 卡片化视觉 + 折线图 pace 面积
