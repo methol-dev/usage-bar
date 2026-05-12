@@ -41,68 +41,70 @@ struct LocalCostCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // ── Header + rows in one Grid ──────────────────────────────────
-            HStack(alignment: .center, spacing: 4) {
-                Grid(alignment: .trailing, horizontalSpacing: 12, verticalSpacing: 3) {
-                    // Header row (always shown)
-                    GridRow {
-                        Text("本地 \(periodLabel)估算")
-                            .gridColumnAlignment(.leading)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 2) {
-                            Image(systemName: "number").imageScale(.small)
-                            Text(ExtraUsage.formatTokens(totalCalls))
-                        }
+            // ── Header + rows in one Grid (5 columns) ─────────────────────
+            // col1: name/title (expands), col2: calls, col3: tokens, col4: amount, col5: chevron
+            Grid(alignment: .trailing, horizontalSpacing: 12, verticalSpacing: 3) {
+                // Header row (always shown)
+                GridRow {
+                    Text("本地 \(periodLabel)估算")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .gridColumnAlignment(.leading)
                         .foregroundStyle(.secondary)
-                        HStack(spacing: 2) {
-                            Image(systemName: "cube.fill").imageScale(.small)
-                            Text(ExtraUsage.formatTokens(totalTokens))
-                        }
-                        .foregroundStyle(.secondary)
-                        HStack(spacing: 2) {
-                            Image(systemName: "dollarsign.circle.fill").imageScale(.small)
-                            Text(ExtraUsage.formatUSDCompact(summary.totalUSD))
-                                .fontWeight(.medium)
-                        }
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 2) {
+                        Image(systemName: "number").imageScale(.small)
+                        Text(ExtraUsage.formatTokens(totalCalls))
                     }
-                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    HStack(spacing: 2) {
+                        Image(systemName: "cube.fill").imageScale(.small)
+                        Text(ExtraUsage.formatTokens(totalTokens))
+                    }
+                    .foregroundStyle(.secondary)
+                    HStack(spacing: 2) {
+                        Image(systemName: "dollarsign.circle.fill").imageScale(.small)
+                        Text(ExtraUsage.formatUSDCompact(summary.totalUSD))
+                            .fontWeight(.medium)
+                    }
+                    .foregroundStyle(.secondary)
+                    // col5: chevron — always on header row, direction flips only
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .imageScale(.small)
+                        .foregroundStyle(.tertiary)
+                }
+                .font(.caption)
 
-                    // Divider spanning all 4 columns (only when expanded)
-                    if expanded {
+                // Divider spanning all 5 columns (only when expanded)
+                if expanded {
+                    GridRow {
+                        Divider()
+                            .gridCellColumns(5)
+                            .gridCellUnsizedAxes(.horizontal)
+                            .padding(.vertical, 1)
+                    }
+
+                    // Per-model rows
+                    ForEach(summary.perModel.sorted(by: { $0.usd > $1.usd }), id: \.normalizedModel) { row in
+                        let rowTokens = row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens
                         GridRow {
-                            Divider()
-                                .gridCellColumns(4)
-                                .gridCellUnsizedAxes(.horizontal)
-                                .padding(.vertical, 1)
+                            Text(row.normalizedModel)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .gridColumnAlignment(.leading)
+                                .foregroundStyle(row.isUnknownPricing ? Color.orange.opacity(0.8) : .secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text(ExtraUsage.formatTokens(row.calls))
+                                .foregroundStyle(.secondary)
+                            Text(ExtraUsage.formatTokens(rowTokens))
+                                .foregroundStyle(.tertiary)
+                            Text(row.isUnknownPricing ? "—" : ExtraUsage.formatUSDCompact(row.usd))
+                            // col5 placeholder to keep chevron column consistent
+                            Color.clear.frame(width: 1, height: 1)
                         }
-
-                        // Per-model rows
-                        ForEach(summary.perModel.sorted(by: { $0.usd > $1.usd }), id: \.normalizedModel) { row in
-                            let rowTokens = row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens
-                            GridRow {
-                                Text(row.normalizedModel)
-                                    .gridColumnAlignment(.leading)
-                                    .foregroundStyle(row.isUnknownPricing ? Color.orange.opacity(0.8) : .secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                Text(ExtraUsage.formatTokens(row.calls))
-                                    .foregroundStyle(.secondary)
-                                Text(ExtraUsage.formatTokens(rowTokens))
-                                    .foregroundStyle(.tertiary)
-                                Text(row.isUnknownPricing ? "—" : ExtraUsage.formatUSDCompact(row.usd))
-                            }
-                            .font(.caption2)
-                        }
+                        .font(.caption2)
                     }
                 }
-
-                // Chevron outside the Grid
-                Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .padding(.leading, 2)
             }
+            .frame(maxWidth: .infinity)
 
             // ── Footnotes (only when expanded) ───────────────────────────
             if expanded {
@@ -110,12 +112,15 @@ struct LocalCostCard: View {
                     Text("含 \(summary.unknownModelCount) 条未知模型调用（价格表过时？）")
                         .font(.caption2)
                         .foregroundStyle(Color.orange.opacity(0.8))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Text("ⓘ 仅读用量字段，不读对话内容")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(8)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
