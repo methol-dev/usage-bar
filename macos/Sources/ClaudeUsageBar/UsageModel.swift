@@ -197,3 +197,67 @@ struct ExtraUsage: Codable {
         }
     }
 }
+
+// MARK: - Mapping to the provider-neutral snapshot (v0.2.5 multi-provider refactor)
+//
+// `UsageResponse`/`UsageBucket`/`ExtraUsage` 是 Claude provider 的内部解码模型；UI 层不直接读它们，
+// 而是读这里映射出的 `ProviderUsageSnapshot`（与其它 provider 共用同一形状）。
+
+extension UsageBucket {
+    /// 映射成 provider 无关的 `UsageWindow`。`utilization`（0...100）与 `resetsAtDate` 直接搬。
+    func asUsageWindow(label: String?, windowDuration: TimeInterval?) -> UsageWindow {
+        UsageWindow(
+            label: label,
+            utilizationPct: utilization,
+            resetsAt: resetsAtDate,
+            windowDuration: windowDuration
+        )
+    }
+}
+
+extension UsageResponse {
+    /// Claude 用量 → 统一 `ProviderUsageSnapshot`。
+    ///
+    /// - `five_hour` → `primaryWindow`（label "Session"，窗口 5h）
+    /// - `seven_day` → `secondaryWindow`（label "Weekly"，窗口 7d）
+    /// - `seven_day_opus` / `seven_day_sonnet` → `extraWindows`（保留旧 popover 逻辑：
+    ///   Sonnet 行仅在 Opus 行存在——即 `seven_day_opus.utilization != nil`——时一并显示）
+    /// - `extra_usage` → `creditLine`（金额已由 `ExtraUsage.usedCreditsAmount`/`monthlyLimitAmount` 把分换算成元）
+    /// - Claude 暂无套餐字段 → `planLabel == nil`
+    func asProviderSnapshot() -> ProviderUsageSnapshot {
+        let sevenDayInterval: TimeInterval = 7 * 24 * 60 * 60
+
+        var extras: [NamedUsageWindow] = []
+        if let opus = sevenDayOpus, opus.utilization != nil {
+            extras.append(NamedUsageWindow(
+                id: "opus", title: "Opus",
+                window: opus.asUsageWindow(label: "Opus", windowDuration: sevenDayInterval)
+            ))
+            if let sonnet = sevenDaySonnet {
+                extras.append(NamedUsageWindow(
+                    id: "sonnet", title: "Sonnet",
+                    window: sonnet.asUsageWindow(label: "Sonnet", windowDuration: sevenDayInterval)
+                ))
+            }
+        }
+
+        var credit: CreditLine?
+        if let extra = extraUsage {
+            credit = CreditLine(
+                isEnabled: extra.isEnabled,
+                utilizationPct: extra.utilization,
+                usedAmount: extra.usedCreditsAmount,
+                limitAmount: extra.monthlyLimitAmount,
+                currencyCode: nil
+            )
+        }
+
+        return ProviderUsageSnapshot(
+            primaryWindow: fiveHour?.asUsageWindow(label: "Session", windowDuration: 5 * 60 * 60),
+            secondaryWindow: sevenDay?.asUsageWindow(label: "Weekly", windowDuration: sevenDayInterval),
+            extraWindows: extras,
+            creditLine: credit,
+            planLabel: nil
+        )
+    }
+}
