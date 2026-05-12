@@ -35,7 +35,7 @@ updated: 2026-05-12
 | `2026-05-12-codex-cost-heatmap` | Codex 本机 session JSONL 扫描 → 估算成本 + 消费热力图 + 去 Plan 卡：抽 `ModelPriceTable` 协议 + `OpenAIPricing` 估价表、`CodexRolloutCostParser`/`CodexUsageCollector`、`UsageStatsService`/`ScanCursorStore` per-provider、`ProviderCostContext` 接进 Codex tab（Claude 零回归） | implemented | v0.2.9 | [文件](./2026-05-12-codex-cost-heatmap.md) |
 | `2026-05-12-settings-provider-list` | Settings 改 provider 列表（拖动排序 + 启用/禁用开关 + 菜单栏单选子开关，取代 Primary 下拉）+ 去 Account 区；`ProviderCoordinator` 统管顺序/启用集/菜单栏 provider/非-Claude 后台 timer；菜单栏 provider-aware（图标 + 窗口短标签）；Codex 用统一 polling interval；刷新纪律（切 tab 不刷新，刷新只 2 入口） | implemented | v0.2.10 | [文件](./2026-05-12-settings-provider-list.md) |
 
-| `2026-05-12-unified-poll-timer` | ProviderCoordinator 统一后台 timer（收编 Claude 的 429 backoff —— UsageService 退役自持 Timer，backoff 改「截止时刻」hint）+ Codex 菜单栏专属 glyph（代码绘制，取代 SF Symbol） | accepted | v0.2.11 | [文件](./2026-05-12-unified-poll-timer.md) |
+| `2026-05-12-unified-poll-timer` | ProviderCoordinator 统一后台 timer（收编 Claude 的 429 backoff —— UsageService 退役自持 Timer，backoff 改「截止时刻」hint）+ Codex 菜单栏专属 glyph（代码绘制，取代 SF Symbol） | implemented | v0.2.11 | [文件](./2026-05-12-unified-poll-timer.md) |
 
 > 新增 spec 时在表格 append 一行；状态由 spec frontmatter 同步。
 

@@ -22,7 +22,7 @@
 
 **Files:** Modify `UsageProvider.swift`、`UsageService.swift`；`UsageServiceTests.swift`（追加失败测试）；`ProviderAbstractionTests.swift`（`StubProvider` 补 `onPollTick` 让编译过）。
 
-- [ ] **Step 1: 写失败测试（追加到 `UsageServiceTests.swift`）** —— 仿既有 `UsageServiceTests` 的 stub session 套路（看现有文件怎么 stub `URLSession`）：
+- [x] **Step 1: 写失败测试（追加到 `UsageServiceTests.swift`）** —— 仿既有 `UsageServiceTests` 的 stub session 套路（看现有文件怎么 stub `URLSession`）：
 
 ```swift
     @MainActor
@@ -48,14 +48,14 @@
 
 > 注：上面的 `makeServiceWith429` / `swapStubTo200` 是要在测试里写的 helper —— **实施时先看 `UsageServiceTests.swift` 现有怎么注入 stub `URLSession` 和 `credentialsStore`**（`UsageService.init` 收 `session:` / `credentialsStore:`），照搬。一段合法 `UsageResponse` JSON：现有测试里应有（`five_hour`/`seven_day` 那个 schema）。`testBackoffIntervalCapsAtSixtyMinutes` 不动。
 
-- [ ] **Step 2: 跑确认失败** — `cd /Users/methol/data/code-methol/usage-bar/macos && swift test --filter UsageServiceTests` → 编译失败（`svc.nextEligibleRefresh` 不存在）。
+- [x] **Step 2: 跑确认失败** — `cd /Users/methol/data/code-methol/usage-bar/macos && swift test --filter UsageServiceTests` → 编译失败（`svc.nextEligibleRefresh` 不存在）。
 
-- [ ] **Step 3: 改 `UsageProvider.swift`**
+- [x] **Step 3: 改 `UsageProvider.swift`**
   - 协议体加 `var onPollTick: (@MainActor () -> Void)? { get set }`（无默认实现）。
   - `extension UsageProvider` 加 `var nextEligibleRefresh: Date? { nil }`（默认实现）。
   - 更新文件顶部的 doc 注释（删「Claude 的后台 timer + 429 backoff 仍归 `UsageService` 自己（`claude.startPolling()`）」那段，改成「所有 provider 的后台轮询由 `ProviderCoordinator` 统管；provider 用 `nextEligibleRefresh` hint 表达 backoff、`onPollTick` 驱动本机统计刷新」）。`supportsBackgroundPolling` 的 TODO 注释不动。
 
-- [ ] **Step 4: 改 `UsageService.swift`**
+- [x] **Step 4: 改 `UsageService.swift`**
   - 删 `private var timer: Timer?`（约 :28）；删 `private func scheduleTimer() { ... }`（约 :228-241）；删 `func startPolling() { ... }`（约 :217-226）。
   - `private var currentInterval: TimeInterval`（:39 + init :114）→ 改成 `private var currentBackoffSeconds: TimeInterval = 0` + `private var backoffUntil: Date? = nil`；init 里 `self.currentInterval = ...` 那行删（`baseInterval` 仍是计算属性 `TimeInterval(pollingMinutes * 60)`，不动）。
   - 加 `var onPollTick: (@MainActor () -> Void)? = nil`。
@@ -97,20 +97,20 @@
     ```
   - 删 `init` 里的 `self.currentInterval = TimeInterval(minutes * 60)`（:114）。
 
-- [ ] **Step 5: 改 `UsageService.swift` 的 timer 散点（依赖 Step 4 已删 `timer`/`startPolling`）**
+- [x] **Step 5: 改 `UsageService.swift` 的 timer 散点（依赖 Step 4 已删 `timer`/`startPolling`）**
   - (b) `switchAccount(to:)`（约 :160-208）：删 `timer?.invalidate(); timer = nil`（:167-168）；末尾的 `startPolling()`（:207）→ `currentFetchTask = Task { [weak self] in await self?.fetchUsage(); if self?.accountEmail == nil { await self?.fetchProfile() } }`。
   - (c) `addAccount`/`completeSignIn` 路径（约 :355-402）：`if !isFirst { ... currentFetchTask?.cancel(); ...; timer?.invalidate(); timer = nil; accountSwitchEpoch += 1; ... }` → 删 `timer?.invalidate(); timer = nil` 那行（其余 cancel/epoch 不动）；末尾 `await fetchProfile(); startPolling()`（:400-401）→ `await fetchProfile(); currentFetchTask = Task { [weak self] in await self?.fetchUsage() }`（profile 已先调，不用再 `if accountEmail == nil`）。
   - (d) `signOut()`（约 :409-420）：删 `timer?.invalidate(); timer = nil`（:417-418）（其余 `currentFetchTask?.cancel()` / `refreshTask?.cancel()` 不动）。
   - (e) `expireSession`（约 :805-830）：CLI 凭证恢复成功路径里那段 `timer?.invalidate(); timer = nil`（:820-821）→ 删（恢复后下一轮 coordinator tick 自然用新 token）；走原硬过期路径时若有 `startPolling()` —— 改成 `currentFetchTask = Task { [weak self] in await self?.fetchUsage() }`（实施时读 `expireSession` 确认有没有这一支）。
   - **grep 验证**：`grep -n 'private var timer\|scheduleTimer\|func startPolling\|currentInterval' Sources/ClaudeUsageBar/UsageService.swift` → 无命中。`grep -n 'startPolling' Sources/` → 只剩……（`coordinator.claude.startPolling()` 那行在 `ClaudeUsageBarApp` 会在 Task 3 删；本 Task 暂时会编译失败 —— 见 Step 6 注）。
 
-- [ ] **Step 6: `ProviderAbstractionTests.swift` 的 `StubProvider` 加 `var onPollTick: (@MainActor () -> Void)? = nil`**（满足新协议成员，让测试编译过）+ 顺手加 `var refreshNowCallCount = 0`、`var nextEligibleRefreshOverride: Date? = nil` + `nextEligibleRefresh` 计算属性返回 override、`refreshNow()` 里 `refreshNowCallCount += 1`（给 Task 2 的测试用）。`ClaudeUsageBarApp.swift` 里 `coordinator.claude.startPolling()` 还在 —— **本 Task 不动它**（Task 3 改）；为让 `swift build` 在本 Task 结束时过，临时把 `ClaudeUsageBarApp.swift` 那行 `coordinator.claude.startPolling()` 改成 `coordinator.claude.refreshNow()` 包一个 `Task { await ... }`（或直接删掉 —— Task 3 会重写这段）；`ProviderCoordinator.startBackgroundPolling(codexOnPollTick:)` 调用点（`ClaudeUsageBarApp`）也还在、本 Task 不动（Task 3 改）—— 但 `startBackgroundPolling` 的 `onBackgroundTick` 里 `(p as? CodexProvider)?.onPollTick?()` 仍能编译（`CodexProvider.onPollTick` 还在）。⚠️ 实施时若本 Task 改完编译不过、就把 `ClaudeUsageBarApp` / `ProviderCoordinator` 的相关行临时桥一下让 build 过，Task 3 正式改。
+- [x] **Step 6: `ProviderAbstractionTests.swift` 的 `StubProvider` 加 `var onPollTick: (@MainActor () -> Void)? = nil`**（满足新协议成员，让测试编译过）+ 顺手加 `var refreshNowCallCount = 0`、`var nextEligibleRefreshOverride: Date? = nil` + `nextEligibleRefresh` 计算属性返回 override、`refreshNow()` 里 `refreshNowCallCount += 1`（给 Task 2 的测试用）。`ClaudeUsageBarApp.swift` 里 `coordinator.claude.startPolling()` 还在 —— **本 Task 不动它**（Task 3 改）；为让 `swift build` 在本 Task 结束时过，临时把 `ClaudeUsageBarApp.swift` 那行 `coordinator.claude.startPolling()` 改成 `coordinator.claude.refreshNow()` 包一个 `Task { await ... }`（或直接删掉 —— Task 3 会重写这段）；`ProviderCoordinator.startBackgroundPolling(codexOnPollTick:)` 调用点（`ClaudeUsageBarApp`）也还在、本 Task 不动（Task 3 改）—— 但 `startBackgroundPolling` 的 `onBackgroundTick` 里 `(p as? CodexProvider)?.onPollTick?()` 仍能编译（`CodexProvider.onPollTick` 还在）。⚠️ 实施时若本 Task 改完编译不过、就把 `ClaudeUsageBarApp` / `ProviderCoordinator` 的相关行临时桥一下让 build 过，Task 3 正式改。
 
-- [ ] **Step 7: 跑确认通过** — `swift test --filter UsageServiceTests` → all PASS。
+- [x] **Step 7: 跑确认通过** — `swift test --filter UsageServiceTests` → all PASS。
 
-- [ ] **Step 8: build + 全量 test** — `swift build -c release && swift test` → 全绿。
+- [x] **Step 8: build + 全量 test** — `swift build -c release && swift test` → 全绿。
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd /Users/methol/data/code-methol/usage-bar
@@ -126,15 +126,15 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:** Modify `ProviderCoordinator.swift`；`ProviderCoordinatorTests.swift`（改/追加）。
 
-- [ ] **Step 1: 改测试** —— `ProviderCoordinatorTests.swift`：
+- [x] **Step 1: 改测试** —— `ProviderCoordinatorTests.swift`：
   - 旧 `testOnBackgroundTickDoesNotTouchClaude` → 改名 `testOnBackgroundTickAlsoTicksClaude`，断言改成「`onBackgroundTick()` 后 `c.claude.runtime.lastError == "Not signed in"`」（真 `UsageService` 未登录 → `refreshNow`→`fetchUsage` 走未登录分支不发网络、设 `lastError`/`runtime.setError`）；先 `await Task.yield(); try? await Task.sleep(nanoseconds: 50_000_000)` 等异步 tick。
   - 加 `testBackoffWindowSkipsProvider`：构造 `ProviderCoordinator(claude: makeUnauthClaude(), additionalProviders: [stub], defaults: freshDefaults())` 其中 `stub = StubProvider(id: .cursor)`（cursor 默认 enabled）；`stub.nextEligibleRefreshOverride = Date().addingTimeInterval(3600)`；`c.onBackgroundTick()` → `await Task.yield(); try? await Task.sleep(nanoseconds: 30_000_000)` → `XCTAssertEqual(stub.refreshNowCallCount, 0)`；再 `stub.nextEligibleRefreshOverride = nil` → `c.onBackgroundTick()` → 等 → `XCTAssertEqual(stub.refreshNowCallCount, 1)`。（注：`makeUnauthClaude()` = `UsageService(credentialsStore: StoredCredentialsStore(directoryURL: tmpDir()))`，仿现有 helper。）
   - `testRefreshAllEnabledOnOpenTicksClaudeWhenSnapshotNil`：真未登录 `UsageService` → `await c.refreshAllEnabledOnOpen()` → `c.claude.runtime.lastError == "Not signed in"`（snapshot==nil、不在 backoff → 被拉一次）。
   - `testShouldRefreshClaudeOnOpenWhenSnapshotNil` 若还在 —— 保留（语义不变：未登录 UsageService 的 `runtime.snapshot == nil` → true）。
 
-- [ ] **Step 2: 跑确认失败** — `swift test --filter ProviderCoordinatorTests` → 编译失败 / 旧 `testOnBackgroundTickDoesNotTouchClaude` 找不到。
+- [x] **Step 2: 跑确认失败** — `swift test --filter ProviderCoordinatorTests` → 编译失败 / 旧 `testOnBackgroundTickDoesNotTouchClaude` 找不到。
 
-- [ ] **Step 3: 改 `ProviderCoordinator.swift`**
+- [x] **Step 3: 改 `ProviderCoordinator.swift`**
   - `onBackgroundTick()`：
     ```swift
     func onBackgroundTick() {
@@ -163,11 +163,11 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
     ```
   - `startBackgroundPolling(codexOnPollTick:)` → `startBackgroundPolling()`（去参数）：体里删「`(registry.provider(.codex) as? CodexProvider)?.onPollTick = codexOnPollTick`」那行（各 provider 的 onPollTick 由装配处设）；其余（`rescheduleBackgroundTimer()` + 立即 `onBackgroundTick()` + 注册 `UserDefaults.didChangeNotification` observer）不变。
 
-- [ ] **Step 4: 跑确认通过** — `swift test --filter ProviderCoordinatorTests` → all PASS（`onBackgroundTick` 那行 `p.onPollTick?()` —— 此时 `UsageService.onPollTick` 已在 Task 1 加、`CodexProvider.onPollTick` 已有、`StubProvider.onPollTick` Task 1 Step 6 加 → 协议成员调用 OK）。`ClaudeUsageBarApp` 里 `startBackgroundPolling(codexOnPollTick:)` 调用点现在编译失败 —— 临时改成 `startBackgroundPolling()` + 把 `codexOnPollTick` 那个闭包暂时丢一边（Task 3 正式改）；为 build 过。
+- [x] **Step 4: 跑确认通过** — `swift test --filter ProviderCoordinatorTests` → all PASS（`onBackgroundTick` 那行 `p.onPollTick?()` —— 此时 `UsageService.onPollTick` 已在 Task 1 加、`CodexProvider.onPollTick` 已有、`StubProvider.onPollTick` Task 1 Step 6 加 → 协议成员调用 OK）。`ClaudeUsageBarApp` 里 `startBackgroundPolling(codexOnPollTick:)` 调用点现在编译失败 —— 临时改成 `startBackgroundPolling()` + 把 `codexOnPollTick` 那个闭包暂时丢一边（Task 3 正式改）；为 build 过。
 
-- [ ] **Step 5: build + 全量 test** — `swift build -c release && swift test` → 全绿。
+- [x] **Step 5: build + 全量 test** — `swift build -c release && swift test` → 全绿。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add macos/Sources/ClaudeUsageBar/{ProviderCoordinator,ClaudeUsageBarApp}.swift macos/Tests/ClaudeUsageBarTests/ProviderCoordinatorTests.swift
@@ -182,7 +182,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 **Files:** Modify `ClaudeUsageBarApp.swift`、`MenuBarIconRenderer.swift`、`CodexProvider.swift`（删 `onPollTick` 上的「装配处用它驱动」注释微调 —— 可选）。无新单测（装配 + 纯渲染，靠 build + manual smoke）。
 
-- [ ] **Step 1: 改 `ClaudeUsageBarApp.swift`** —— `.task` 里那段（v0.2.10 是 `coordinator.startBackgroundPolling(codexOnPollTick: { Task.detached { await codexStats.refresh() } })`，加上 Task 1/2 临时桥的痕迹）改成：
+- [x] **Step 1: 改 `ClaudeUsageBarApp.swift`** —— `.task` 里那段（v0.2.10 是 `coordinator.startBackgroundPolling(codexOnPollTick: { Task.detached { await codexStats.refresh() } })`，加上 Task 1/2 临时桥的痕迹）改成：
 ```swift
 // 各 provider 的本机统计刷新随后台 tick 走 onPollTick（Claude 的逻辑原在 UsageService.scheduleTimer 里）
 coordinator.claude.onPollTick = { Task.detached { await usageStats.refresh() } }
@@ -192,7 +192,7 @@ coordinator.startBackgroundPolling()
 ```
 （删 `coordinator.claude.startPolling()`（已没这个方法）；`await usageStats.refresh()` / `await codexStats.refresh()` 启动期那两行保留 —— 它们在上面这段之前。`fetchProfile` 已并进 `UsageService.refreshNow()`，不用在这里管。）
 
-- [ ] **Step 2: 改 `MenuBarIconRenderer.swift`** —— `drawProviderGlyph(for:.codex,...)` 分支改成代码绘制 `</>`：
+- [x] **Step 2: 改 `MenuBarIconRenderer.swift`** —— `drawProviderGlyph(for:.codex,...)` 分支改成代码绘制 `</>`：
 ```swift
 private func drawProviderGlyph(for id: ProviderID, x: CGFloat, y: CGFloat, size: CGFloat) {
     if id == .claude, let logo = claudeLogoImage {
@@ -230,9 +230,9 @@ private func drawProviderGlyph(for id: ProviderID, x: CGFloat, y: CGFloat, size:
 ```
 （注：`y` 方向 —— renderer 的绘图上下文是 `NSImage(size:flipped: true)`，`top`/`bot` 用 `y + size*小` / `y + size*大`，flipped 下「小 y」在上，所以 `<`/`>` 的尖端在中间、`/` 从右上到左下 —— 视觉上是个标准 `</>`。`sfSymbolName(for:)` 的 `.codex` case 可保留（现在走不到了）也可删，无碍。）`drawProviderGlyph(for:.claude,...)` 字节不变；`renderIcon`/`renderUnauthenticatedIcon` 签名不变。
 
-- [ ] **Step 3: build + 全量 test** — `swift build -c release && swift test` → 全绿（无新测试，回归确认）。
+- [x] **Step 3: build + 全量 test** — `swift build -c release && swift test` → 全绿（无新测试，回归确认）。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add macos/Sources/ClaudeUsageBar/{ClaudeUsageBarApp,MenuBarIconRenderer}.swift
@@ -245,7 +245,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ## Task 4: 全量验收 + 回填文档（G6）
 
-- [ ] **Step 1: build + test + artifacts + verify + grep**
+- [x] **Step 1: build + test + artifacts + verify + grep**
 
 ```bash
 cd /Users/methol/data/code-methol/usage-bar/macos && swift build -c release && swift test
@@ -254,13 +254,13 @@ grep -n 'private var timer\|scheduleTimer\|func startPolling\|currentInterval' m
 ```
 Expected: build OK；全部 tests PASS；zip/dmg + verify「Release archive looks good」；grep 无命中。
 
-- [ ] **Step 2: `make install` + 手动 smoke** —
+- [x] **Step 2: `make install` + 手动 smoke** —
   - 重开 app：Claude tab 正常拉数（Updated 时间按 pollingMinutes 节奏更新）；改 Settings 的 Polling Interval（30→5min）→ Claude 与 Codex 的 Updated 时间在 ~5min 内更新；改回 30min 同样跟随。
   - 菜单栏 ✓ 切到 Codex → 显示新的 `</>` glyph（不是 SF terminal）；切回 Claude → PNG logo。
   - Settings 里没 Account section（v0.2.10 已去）；popover 底栏有 Sign Out（已登录时）。
   把观察记进 spec evidence + Verification log。
 
-- [ ] **Step 3: 回填 spec/version** — `2026-05-12-unified-poll-timer.md`：`spec_criteria[].done` 全 true + evidence、Verification log 全勾、`status: accepted → implemented`、`updated` 同步、append G5 verdict（Task 5 后）。`docs/versions/v0.2.11-unified-poll-timer.md`：`status: planned → in-progress`、填 `release_notes_zh`（改进：—— 内部为主，用户视角变化小；可写「内部：后台轮询统一由 ProviderCoordinator 管理（含 Claude 的 429 backoff）；Codex 菜单栏图标换成自绘的 </> 标记。注：429 限速时的重试时刻现在 round 到下一个轮询周期」）、G6 checklist 勾。`docs/versions/README.md` + `docs/superpowers/specs/README.md` 同步状态。本 plan 勾掉步骤（除 Task 5 的 G5/PR）。Commit。
+- [x] **Step 3: 回填 spec/version** — `2026-05-12-unified-poll-timer.md`：`spec_criteria[].done` 全 true + evidence、Verification log 全勾、`status: accepted → implemented`、`updated` 同步、append G5 verdict（Task 5 后）。`docs/versions/v0.2.11-unified-poll-timer.md`：`status: planned → in-progress`、填 `release_notes_zh`（改进：—— 内部为主，用户视角变化小；可写「内部：后台轮询统一由 ProviderCoordinator 管理（含 Claude 的 429 backoff）；Codex 菜单栏图标换成自绘的 </> 标记。注：429 限速时的重试时刻现在 round 到下一个轮询周期」）、G6 checklist 勾。`docs/versions/README.md` + `docs/superpowers/specs/README.md` 同步状态。本 plan 勾掉步骤（除 Task 5 的 G5/PR）。Commit。
 
 - [ ] **Step 4: G5 + PR + merge** — 独立 reviewer（codex `codex-rescue` / `general-purpose` subagent）code-review + light security-review（敏感面小，但**重点核 `UsageService` 的 timer 散点是否真清零 + backoff 语义正确 + race-fix(epoch) 没被破坏**）。verdict approved/approved-with-nits 后 `gh pr create`（中文，含 spec id + version 链接），等 CI（"build" job）绿 → `git checkout main && git merge --ff-only feat/v0.2.11-unified-poll-timer && git push origin main` + 删分支。G5 verdict append 进 spec `reviews:`。`make install` 装最终 main。
 
