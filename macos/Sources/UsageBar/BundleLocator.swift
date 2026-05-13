@@ -1,10 +1,10 @@
 import Foundation
 
-private final class AppResourceBundleFinder {}
+private final class BundleLocator {}
 
 func usageBarResourceBundle(
     mainBundle: Bundle = .main,
-    finderBundle: Bundle = Bundle(for: AppResourceBundleFinder.self)
+    finderBundle: Bundle = Bundle(for: BundleLocator.self)
 ) -> Bundle? {
     let bundleName = "UsageBar_UsageBar.bundle"
     let candidates: [URL?] = [
