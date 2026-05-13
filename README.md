@@ -9,7 +9,9 @@ Have you ever found yourself refreshing the Claude usage page, wondering how clo
 Now it's just a glimpse away — always sitting at the top of your screen.
 
 <p align="center">
-  <img src="macos/Resources/demo.png" width="400" alt="UsageBar demo">
+  <img src="https://github.com/user-attachments/assets/9224ea74-702d-4e50-bd47-444e9bf11dd0" width="400" alt="UsageBar Claude usage view">
+  &nbsp;&nbsp;
+  <img src="https://github.com/user-attachments/assets/d3827410-35bc-46f1-a8b4-07ed62970e3b" width="400" alt="UsageBar Codex usage view">
 </p>
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
@@ -18,16 +20,17 @@ Now it's just a glimpse away — always sitting at the top of your screen.
 
 ## What it does
 
-A tiny macOS menu bar app that shows your Claude API usage at a glance. Click it for the full picture:
+A tiny macOS menu bar app that shows your Claude API and Codex usage at a glance. Click it for the full picture:
 
 - Menu bar icon with a mini dual-bar showing 5-hour and 7-day utilization
 - Detailed popover with per-window usage, per-model breakdown, and reset timers
-- Extra usage tracking with USD currency display
+- **Multi-provider support** — switch between Claude and Codex tabs in the popover
+- Extra usage tracking with USD currency display (pricing via LiteLLM snapshot)
 - Usage history chart — see how your usage evolves over time (1h / 6h / 1d / 7d / 30d)
 - Hover over the chart to see exact values at any point
 - Configurable polling interval (5m / 15m / 30m / 1h)
 - Built-in update checks via Sparkle
-- Just sign in — OAuth via browser, no API keys to manage
+- Just sign in — Claude: OAuth via browser, no API keys to manage; Codex: reads existing CLI credentials
 - Minimal dependencies — SwiftUI, Swift Charts, Foundation, and Sparkle for updates
 
 ## Install
@@ -53,6 +56,8 @@ make install        # copy to /Applications
 
 ## Usage
 
+### Claude
+
 1. Launch the app — a menu bar icon appears
 2. Click the icon → **Sign in with Claude** → authorize in your browser
 3. Paste the code back into the app
@@ -65,16 +70,25 @@ Click the icon anytime to see:
 - Extra usage credits and limits
 - Usage history chart with adjustable time range and hover details
 
+### Codex
+
+If you have the [Codex CLI](https://github.com/openai/codex) installed and logged in, UsageBar automatically detects your credentials and shows a **Codex** tab in the popover. No additional sign-in is required — the app reads your existing `~/.codex/auth.json` (written by the Codex CLI) and never modifies it.
+
+To enable Codex tracking: install and log in to the Codex CLI, then relaunch UsageBar.
+
 ## Data storage
 
-All data is stored locally in `~/.config/usage-bar/`:
+All data is stored locally:
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
-| `token` | OAuth access token (permissions: `0600`) |
-| `history.json` | Usage history for the chart (30-day retention) |
+| `~/.config/usage-bar/credentials.json` | Claude OAuth credentials (permissions: `0600`) |
+| `~/.config/usage-bar/history.json` | Usage history for the chart (30-day retention) |
+| `~/.codex/auth.json` | Codex credentials — **read-only** by UsageBar, managed by Codex CLI |
 
-History is buffered in memory and flushed to disk every 5 minutes and on app quit. No data is sent anywhere other than the Anthropic API.
+History is buffered in memory and flushed to disk every 5 minutes and on app quit. No data is sent anywhere other than the respective provider APIs.
+
+> Legacy note: older versions stored Claude credentials in `~/.config/usage-bar/token`. The app migrates this file automatically on first launch after upgrading.
 
 ## Development
 
@@ -91,7 +105,7 @@ make clean          # remove build artifacts
 
 ## Publishing updates
 
-This repo now uses a tag-driven release flow. Pushing a `v*` tag will:
+This repo uses a tag-driven release flow. Pushing a `v*` tag will:
 
 - build the `.app` bundle once
 - produce `UsageBar.zip` for Sparkle and `UsageBar.dmg` for manual installs
@@ -133,35 +147,15 @@ https://methol.github.io/usage-bar/appcast.xml
 ### Project structure
 
 ```
-macos/                           # macOS menu bar app (Swift/SwiftUI)
-├── Sources/UsageBar/
-│   ├── UsageBarApp.swift      # App entry point, menu bar setup
-│   ├── UsageService.swift           # OAuth, polling, API calls
-│   ├── UsageModel.swift             # API response types
-│   ├── UsageHistoryModel.swift      # History data types, time ranges
-│   ├── UsageHistoryService.swift    # Persistence, downsampling
-│   ├── UsageChartView.swift         # Swift Charts trajectory view
-│   ├── PopoverView.swift            # Main popover UI
-│   ├── SettingsView.swift           # Settings window
-│   ├── NotificationService.swift    # Usage threshold notifications
-│   ├── MenuBarIconRenderer.swift    # Menu bar icon drawing
-│   ├── PollingOptionFormatter.swift # Polling interval display labels
-│   ├── AppUpdater.swift             # Sparkle update integration
-│   └── Resources/
-│       ├── claude-logo.png          # Pre-rendered menu bar logo (512px)
-│       └── en.lproj/Localizable.strings
-├── Tests/UsageBarTests/
-├── Resources/                       # App bundle resources (not SwiftPM)
-│   ├── Info.plist
-│   ├── Assets.xcassets/             # App icon
-│   └── claude-logo.svg             # Source SVG for menu bar logo
-├── scripts/
-│   ├── build.sh                     # Build + bundle + codesign
-│   └── generate-logo-png.swift      # Regenerate logo PNG from SVG
+macos/                 # macOS menu bar app (Swift/SwiftUI)
+├── Sources/UsageBar/  # App source files
+├── Tests/             # Unit tests
+├── Resources/         # App bundle resources (Info.plist, Assets.xcassets)
+├── scripts/           # build.sh, verify-release.sh
 └── Package.swift
 
-scripts/                         # Shared tooling
-└── mock-server.py               # Local mock API for development
+docs/                  # Project documentation
+scripts/               # Shared tooling (mock-server, issue scripts)
 ```
 
 ## Fork relationship
