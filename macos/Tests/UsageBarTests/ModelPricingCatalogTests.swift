@@ -93,6 +93,17 @@ final class ModelPricingCatalogTests: XCTestCase {
         return dir
     }
 
+    /// 轮询等待 `condition` 为真（最多 `timeout` 秒）；用于等 `refreshIfStale` 的后台 detach task 落盘完成，
+    /// 比固定 `sleep`/`asyncAfter` 抗 CI 慢机器 flaky。
+    private func waitUntil(_ timeout: TimeInterval = 3.0, file: StaticString = #file, line: UInt = #line,
+                          _ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertTrue(condition(), "waitUntil timed out", file: file, line: line)
+    }
+
     func testRefreshSkippedWhenFresh() {
         let dir = dirURL()
         let cacheURL = dir.appendingPathComponent("p.json")
@@ -121,15 +132,11 @@ final class ModelPricingCatalogTests: XCTestCase {
                                       minBytesOverride: 0)
         cat.refreshIfStale(now: t)        // 无 meta → 视为从未抓取 → 触发
         wait(for: [exp], timeout: 2.0)
-        let done = expectation(description: "table & files updated")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            XCTAssertEqual(cat.unitPricing(rawModel: "gpt-5")?.inputUSDPerMTok ?? 0, 3.0, accuracy: 1e-9) // 新值
-            XCTAssertTrue(FileManager.default.fileExists(atPath: metaURL.path))
-            let meta = (try? JSONSerialization.jsonObject(with: Data(contentsOf: metaURL))) as? [String: Any]
-            XCTAssertEqual(meta?["fetched_at"] as? String, ISO8601DateFormatter().string(from: t))
-            done.fulfill()
-        }
-        wait(for: [done], timeout: 2.0)
+        waitUntil { !cat.isRefreshInFlightForTesting }      // 等后台 detach task 落盘 + 重建表完成
+        XCTAssertEqual(cat.unitPricing(rawModel: "gpt-5")?.inputUSDPerMTok ?? 0, 3.0, accuracy: 1e-9) // 新值
+        XCTAssertTrue(FileManager.default.fileExists(atPath: metaURL.path))
+        let meta = (try? JSONSerialization.jsonObject(with: Data(contentsOf: metaURL))) as? [String: Any]
+        XCTAssertEqual(meta?["fetched_at"] as? String, ISO8601DateFormatter().string(from: t))
     }
 
     func testRefreshWithBadDownloadKeepsOldCacheAndNoMeta() {
@@ -143,12 +150,8 @@ final class ModelPricingCatalogTests: XCTestCase {
                                       minBytesOverride: 0)
         cat.refreshIfStale(now: Date(timeIntervalSince1970: 1_800_000_000))
         wait(for: [exp], timeout: 2.0)
-        let done = expectation(description: "settled")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            XCTAssertEqual(cat.unitPricing(rawModel: "gpt-5")?.inputUSDPerMTok ?? 0, 1.25, accuracy: 1e-9) // 旧值
-            XCTAssertFalse(FileManager.default.fileExists(atPath: metaURL.path))                            // 没写 meta
-            done.fulfill()
-        }
-        wait(for: [done], timeout: 2.0)
+        waitUntil { !cat.isRefreshInFlightForTesting }      // 等后台 detach task 跑完（坏数据 → 提前 return，但 defer 仍复位 flag）
+        XCTAssertEqual(cat.unitPricing(rawModel: "gpt-5")?.inputUSDPerMTok ?? 0, 1.25, accuracy: 1e-9) // 旧值不变
+        XCTAssertFalse(FileManager.default.fileExists(atPath: metaURL.path))                            // 没写 meta
     }
 }

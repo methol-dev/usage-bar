@@ -25,7 +25,8 @@ final class ModelPricingCatalog: @unchecked Sendable {
     static let foreignRoutePrefixes = ["azure/", "azure_ai/", "vertex_ai/", "bedrock/", "openrouter/", "databricks/", "watsonx/"]
 
     typealias Now = () -> Date
-    /// 异步下载器：成功回调 raw bytes，失败回调 nil。生产用 `URLSession` download task。
+    /// 异步下载器：成功回调 raw bytes，失败回调 nil。**契约**：必须最终调一次 completion（含失败路径），
+    /// 否则 `refreshInFlight` 会永久卡 true、再不刷新。生产用 `URLSession` download task（自带超时）。
     typealias Downloader = (@escaping (Data?) -> Void) -> Void
 
     private let cacheURL: URL?
@@ -77,6 +78,8 @@ final class ModelPricingCatalog: @unchecked Sendable {
 
     /// 测试用：强制按当前 cache/bundled 重读一次。
     func reloadTableForTesting() { reload() }
+    /// 测试用：后台刷新是否还在进行（用来轮询等 detach task 落盘完成，不用裸 sleep）。
+    var isRefreshInFlightForTesting: Bool { lock.lock(); defer { lock.unlock() }; return refreshInFlight }
 
     private func reload() {
         let parsed = Self.loadParsed(from: cacheURL, minBytes: effMinBytes)
