@@ -797,8 +797,9 @@ extension GeminiQuotaResponse {
         var extras: [GeminiPerModelQuota] = []
         for q in userQuota {
             let lower = q.model.lowercased()
-            if lower.contains("pro") && pro == nil { pro = q }
-            else if lower.contains("flash") && flash == nil { flash = q }
+            // Flash 优先匹配:避免 `gemini-pro-flash` 等假设性命名被 Pro 桶吞掉(G3 reviewer optional 提示)
+            if lower.contains("flash") && flash == nil { flash = q }
+            else if lower.contains("pro") && pro == nil { pro = q }
             else { extras.append(q) }
         }
         func window(from q: GeminiPerModelQuota?, label: String) -> UsageWindow? {
@@ -1742,7 +1743,7 @@ git push
 | SC4 401 → 文案 | 6 | testUnauthorizedRefreshFailsClearsSnapshot | Task 9 step 3 SC4 |
 | SC5 无 gemini-cli → 降级 | 2 + 6 | testNoOauth2JsReturnsNil + testNoOAuthClientGoesUnconfigured | fixture 已覆盖,真机不重复 |
 | SC6 后台 polling 走统一 timer | 7 | ProviderCoordinatorTests(回归) | n/a |
-| SC7 Settings 集成 | 7 | ProviderCoordinatorTests + SettingsViewTests(回归) | Task 9 step 3 SC7 |
+| SC7 Settings 集成 | 7 | ProviderCoordinatorTests(回归;SettingsView 实测在 Task 9 真机覆盖) | Task 9 step 3 SC7 |
 | SC8 历史样本写入 history-gemini.json | 6 | testHistorySampleRecorded | n/a |
 | SC9 build / test 全绿 + 五条数据通路覆盖 | 1-6 全部 | 5 个测试文件覆盖 | Task 9 step 1 |
 | SC10 第三方凭证披露段 | 8 | n/a(纯 docs) | manual review README |
