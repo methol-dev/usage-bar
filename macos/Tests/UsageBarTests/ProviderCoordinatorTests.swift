@@ -28,7 +28,7 @@ final class ProviderCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.orderedProviderIDs, ProviderID.allCases)
         XCTAssertTrue(c.enabledProviderIDs.isSuperset(of: [.claude, .codex]))
         XCTAssertEqual(c.availableIDs, [.claude, .codex])
-        XCTAssertEqual(c.menuBarProviderID, .claude)
+        XCTAssertTrue(Set(c.menuBarVisibleIDs).isSuperset(of: [.claude, .codex]))
     }
 
     func testReadStoredOrderFiltersAndAppends() {
@@ -39,26 +39,11 @@ final class ProviderCoordinatorTests: XCTestCase {
         XCTAssertEqual(Array(c.orderedProviderIDs.prefix(3)), [.codex, .claude, .gemini])
     }
 
-    func testSetEnabledClaudeIsNoOp() {
-        let c = makeCoordinator(freshDefaults())
-        c.setEnabled(.claude, false)
-        XCTAssertTrue(c.enabledProviderIDs.contains(.claude))
-        XCTAssertTrue(c.availableIDs.contains(.claude))
-    }
-
     func testDisablingCodexRemovesFromAvailable() {
         let c = makeCoordinator(freshDefaults())
         c.setEnabled(.codex, false)
         XCTAssertFalse(c.enabledProviderIDs.contains(.codex))
         XCTAssertFalse(c.availableIDs.contains(.codex))
-    }
-
-    func testDisablingMenuBarProviderMovesIt() {
-        let d = freshDefaults(); d.set("codex", forKey: "primaryProviderID")
-        let c = makeCoordinator(d)
-        XCTAssertEqual(c.menuBarProviderID, .codex)        // 注册 + enabled → 接受
-        c.setEnabled(.codex, false)
-        XCTAssertEqual(c.menuBarProviderID, .claude)       // 跳到首个 enabled+registered
     }
 
     func testMoveProviderPersists() {
@@ -69,25 +54,6 @@ final class ProviderCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.orderedProviderIDs[0], second)
         XCTAssertEqual(c.orderedProviderIDs[1], first)
         XCTAssertEqual(d.stringArray(forKey: "providerOrder"), c.orderedProviderIDs.map(\.rawValue))
-    }
-
-    func testMenuBarProviderIDRejectsUnregistered() {
-        let c = makeCoordinator(freshDefaults())
-        c.menuBarProviderID = .cursor                      // 未注册 → 拒绝、回退
-        XCTAssertEqual(c.menuBarProviderID, .claude)
-    }
-
-    func testMenuBarProviderIDRejectsDisabled() {
-        let c = makeCoordinator(freshDefaults())
-        c.setEnabled(.codex, false)
-        c.menuBarProviderID = .codex                       // 注册但 disabled → 拒绝、回退
-        XCTAssertEqual(c.menuBarProviderID, .claude)
-    }
-
-    func testInitFallbackOnIllegalStoredMenuBar() {
-        let d = freshDefaults(); d.set("gemini", forKey: "primaryProviderID")   // 未注册
-        let c = makeCoordinator(d)
-        XCTAssertEqual(c.menuBarProviderID, .claude)
     }
 
     // MARK: - Task 5：刷新纪律 + 后台 timer
@@ -157,13 +123,79 @@ final class ProviderCoordinatorTests: XCTestCase {
         c.onBackgroundTick()
         XCTAssertGreaterThanOrEqual(called, 2)
     }
+
+    // MARK: - Task 1（本 spec）：Claude 可禁用
+
+    func testClaudeCanBeDisabled() {
+        let c = makeCoordinator(freshDefaults())
+        c.setEnabled(.claude, false)
+        XCTAssertFalse(c.enabledProviderIDs.contains(.claude))
+        XCTAssertFalse(c.availableIDs.contains(.claude))
+    }
+
+    func testAllProvidersDisabledYieldsEmptyAvailableIDs() {
+        let c = makeCoordinator(freshDefaults(), withCodex: false)
+        c.setEnabled(.claude, false)
+        XCTAssertTrue(c.availableIDs.isEmpty)
+    }
+
+    // MARK: - Task 1：menuBarVisible
+
+    func testMenuBarVisibleDefaultsToAllCases() {
+        let c = makeCoordinator(freshDefaults())
+        XCTAssertEqual(c.menuBarVisibleProviderIDs, Set(ProviderID.allCases))
+    }
+
+    func testSetMenuBarVisibleFalseRemovesFromSet() {
+        let d = freshDefaults()
+        let c = makeCoordinator(d)
+        c.setMenuBarVisible(.codex, false)
+        XCTAssertFalse(c.menuBarVisibleProviderIDs.contains(.codex))
+        let stored = Set((d.stringArray(forKey: "menuBarVisibleProviders") ?? [])
+            .compactMap(ProviderID.init(rawValue:)))
+        XCTAssertFalse(stored.contains(.codex), "应持久化到 UserDefaults")
+    }
+
+    func testMenuBarVisibleIDsExcludesDisabledProvider() {
+        let c = makeCoordinator(freshDefaults())
+        c.setEnabled(.codex, false)
+        XCTAssertFalse(c.menuBarVisibleIDs.contains(.codex), "disabled → 不在 menuBarVisibleIDs")
+    }
+
+    func testMenuBarVisibleIDsExcludesUnregisteredProvider() {
+        let c = makeCoordinator(freshDefaults(), withCodex: false)
+        XCTAssertFalse(c.menuBarVisibleIDs.contains(.codex), "未注册 → 不在 menuBarVisibleIDs")
+    }
+
+    func testMenuBarVisibleIDsExcludesExplicitlyHiddenProvider() {
+        let c = makeCoordinator(freshDefaults())
+        c.setMenuBarVisible(.codex, false)
+        XCTAssertFalse(c.menuBarVisibleIDs.contains(.codex), "menuBarVisible=false → 不在 menuBarVisibleIDs")
+    }
+
+    func testDisablingClaudeRemovesFromMenuBarVisibleIDs() {
+        let c = makeCoordinator(freshDefaults())
+        XCTAssertTrue(c.menuBarVisibleIDs.contains(.claude))
+        c.setEnabled(.claude, false)
+        XCTAssertFalse(c.menuBarVisibleIDs.contains(.claude))
+    }
+
+    func testMenuBarVisibleIDsRespectOrderedProviderIDs() {
+        let d = freshDefaults()
+        d.set(["codex", "claude"], forKey: "providerOrder")
+        let c = makeCoordinator(d)
+        let ids = c.menuBarVisibleIDs
+        if ids.count >= 2 {
+            XCTAssertEqual(ids[0], .codex)
+            XCTAssertEqual(ids[1], .claude)
+        }
+    }
 }
 
 /// 给 `ProviderCoordinatorTests` 用的最小 provider（带 refreshNow 计数 + nextEligibleRefresh override）。
 private final class StubProviderForCoordTest: UsageProvider {
     let id: ProviderID
     var isConfigured = true
-    var supportsBackgroundPolling = false
     let runtime = ProviderRuntime(isConfigured: true)
     var onPollTick: (@MainActor () -> Void)? = nil
     var nextEligibleRefreshOverride: Date? = nil

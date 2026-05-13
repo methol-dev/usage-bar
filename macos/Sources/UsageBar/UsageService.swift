@@ -3,7 +3,7 @@ import Combine
 import CryptoKit
 import AppKit
 @MainActor
-class UsageService: ObservableObject {
+final class UsageService: ObservableObject {
     @Published var usage: UsageResponse?
     @Published var lastError: String?
     @Published var lastUpdated: Date?
@@ -39,7 +39,7 @@ class UsageService: ObservableObject {
     /// v0.2.11：取代原 `currentInterval`（自持 timer 退役后，「下次拉的间隔」由 `ProviderCoordinator` 的统一 timer 负责）。
     private var currentBackoffSeconds: TimeInterval = 0
     private var backoffUntil: Date?
-    /// 后台 tick 时额外回调（驱动 Claude 的本机用量统计刷新；装配处设成 `{ Task.detached { await usageStats.refresh() } }`）。
+    /// 后台 tick 时额外回调（驱动 Claude 的本机用量统计刷新；装配处设成 `{ Task { await usageStats.refresh() } }`，`UsageStatsService.refresh` 内部已自管 detached 后台优先级）。
     var onPollTick: (@MainActor () -> Void)?
     /// `UsageProvider.nextEligibleRefresh` —— coordinator 的统一 timer 在 backoff 窗口内会跳过本 provider。
     var nextEligibleRefresh: Date? { backoffUntil }
@@ -763,7 +763,7 @@ class UsageService: ObservableObject {
         do {
             try saveCredentials(updatedCredentials)
         } catch {
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try? await Task.sleep(for: .milliseconds(100))
             do {
                 try saveCredentials(updatedCredentials)
             } catch {
@@ -865,7 +865,6 @@ class UsageService: ObservableObject {
 extension UsageService: UsageProvider {
     var id: ProviderID { .claude }
     var isConfigured: Bool { isAuthenticated }
-    var supportsBackgroundPolling: Bool { true }
 
     /// 「拉一次」（popover Refresh 按钮 / coordinator 的后台 tick）。不做内部节流——Refresh 按钮就是要强制重拉。
     /// 顺带补一次 profile（账号 email）—— 原本在已退役的 `startPolling()` 里。

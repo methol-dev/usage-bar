@@ -37,6 +37,7 @@ updated: 2026-05-13
 
 | `2026-05-12-unified-poll-timer` | ProviderCoordinator 统一后台 timer（收编 Claude 的 429 backoff —— UsageService 退役自持 Timer，backoff 改「截止时刻」hint）+ Codex 菜单栏专属 glyph（代码绘制，取代 SF Symbol） | implemented | v0.2.11 | [文件](./2026-05-12-unified-poll-timer.md) |
 | `2026-05-13-litellm-pricing` | 模型价格表改走 LiteLLM 数据源：打包 `model_prices_and_context_window.json` 快照 + 运行期 3h 后台刷新（复用 ProviderCoordinator tick）+ 逐级回退 normalize（codex CLI 别名 → 有价模型）；删 `OpenAIPricing`/`ClaudePricing` 手写表 | implemented | v0.2.14 | [文件](./2026-05-13-litellm-pricing.md) |
+| `2026-05-13-provider-self-management` | Provider 自主管理：全供应商可禁用（含 Claude）+ 独立菜单栏开关 + 拖拽排序修复；只用 Codex 的用户不再被强制引导 Claude 登录 | draft | v0.3.0 | [文件](./2026-05-13-provider-self-management.md) |
 
 > 新增 spec 时在表格 append 一行；状态由 spec frontmatter 同步。
 

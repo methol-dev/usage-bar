@@ -82,8 +82,13 @@ struct UsageHeatmapView: View {
     let isInitializing: Bool
 
     @State private var hovered: UsageHeatmapModel.Cell?
+    @State private var model: UsageHeatmapModel
 
-    private var model: UsageHeatmapModel { UsageHeatmapModel(daySpends: daySpends) }
+    init(daySpends: [DaySpend], isInitializing: Bool) {
+        self.daySpends = daySpends
+        self.isInitializing = isInitializing
+        _model = State(initialValue: UsageHeatmapModel(daySpends: daySpends))
+    }
 
     private func color(for bucket: Int) -> Color {
         if bucket == 0 { return Color.secondary.opacity(0.15) }
@@ -144,5 +149,9 @@ struct UsageHeatmapView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .onChange(of: daySpends) { _, newValue in
+            model = UsageHeatmapModel(daySpends: newValue)
+            hovered = nil   // 避免悬空：旧 model 的 cell 不在新 model 里
+        }
     }
 }

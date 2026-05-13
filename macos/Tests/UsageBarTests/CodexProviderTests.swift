@@ -250,7 +250,6 @@ final class CodexProviderTests: XCTestCase {
         XCTAssertNil(p.runtime.lastError)
         XCTAssertFalse(p.isConfigured)
         XCTAssertEqual(p.id, .codex)
-        XCTAssertFalse(p.supportsBackgroundPolling)
     }
 
     @MainActor
@@ -307,8 +306,9 @@ final class CodexProviderTests: XCTestCase {
     }
 
     // 注：v0.2.6 的 `testCoordinatorPrimaryEligibleExcludesNonPollingProvider` 已退役
-    // —— v0.2.10 退役了 `primaryEligibleIDs`（菜单栏 provider 不再限「supportsBackgroundPolling」）；
+    // —— v0.2.10 退役了 `primaryEligibleIDs`（菜单栏 provider 不再限 `supportsBackgroundPolling`）；
     // 等价覆盖搬到 `ProviderCoordinatorTests.testMenuBarProviderIDRejectsUnregistered/Disabled`。
+    // v0.3.1：`supportsBackgroundPolling` 协议成员已彻底从 `UsageProvider` 退役。
 
     // MARK: - v0.2.8 history sampling
 
@@ -326,11 +326,6 @@ final class CodexProviderTests: XCTestCase {
             "primary_window":   { "used_percent": \(primaryPct), "reset_at": 1, "limit_window_seconds": 18000 },
             "secondary_window": { "used_percent": \(secondaryPct), "reset_at": 1, "limit_window_seconds": 604800 } } }
         """
-    }
-
-    @MainActor
-    func testSupportsBackgroundPollingIsFalse() {
-        XCTAssertFalse(CodexProvider().supportsBackgroundPolling)
     }
 
     @MainActor

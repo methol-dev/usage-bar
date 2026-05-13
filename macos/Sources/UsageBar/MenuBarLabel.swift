@@ -39,6 +39,8 @@ struct MenuBarLabel: View {
             ? renderIcon(providerID: providerID, primaryLabel: primaryShort, secondaryLabel: secondaryShort,
                          pct5h: primaryFraction, pct7d: secondaryFraction)
             : renderUnauthenticatedIcon(providerID: providerID, primaryLabel: primaryShort, secondaryLabel: secondaryShort))
+            .renderingMode(.template)   // 显式 SwiftUI template 模式，确保 ForEach 多 provider 时每个都正确渲染
+            .fixedSize()                // 禁止 HStack 压缩 icon 尺寸
     }
 
     private var primaryFraction: Double { (runtime.snapshot?.primaryWindow?.utilizationPct ?? 0) / 100.0 }

@@ -41,7 +41,10 @@ struct LocalCostCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
             // ── Header + rows in one Grid (5 columns) ─────────────────────
             // col1: name/title (expands), col2: calls, col3: tokens, col4: amount, col5: chevron
             Grid(alignment: .trailing, horizontalSpacing: 12, verticalSpacing: 3) {
@@ -125,13 +128,14 @@ struct LocalCostCard: View {
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(8)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity)
-        .padding(8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-        .contentShape(Rectangle())
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
-        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("本机消费明细")
+        .accessibilityHint(expanded ? "收起" : "展开")
     }
 }

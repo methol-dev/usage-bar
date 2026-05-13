@@ -127,8 +127,7 @@ extension CodexUsageResponse {
             let enabled = (c.hasCredits && c.balance != nil) || c.unlimited
             credit = CreditLine(isEnabled: enabled,
                                 remainingAmount: c.unlimited ? nil : c.balance,
-                                isUnlimited: c.unlimited,
-                                currencyCode: "USD")
+                                isUnlimited: c.unlimited)
         }
         return ProviderUsageSnapshot(
             primaryWindow: win(session, "Session", "5h"),

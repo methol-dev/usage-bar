@@ -79,6 +79,37 @@ func renderUnauthenticatedIcon(providerID: ProviderID, primaryLabel: String, sec
     return image
 }
 
+// MARK: - Composite (multi-provider)
+
+/// 将多张 provider icon（isTemplate NSImage）横向拼合为一张图，中间绘制竖向分隔线。
+/// 解决 SwiftUI MenuBarExtra label 中 ForEach 多张 template NSImage 只渲第一张的问题。
+func compositeIcons(_ icons: [NSImage]) -> NSImage {
+    guard icons.count > 1 else { return icons.first ?? NSImage() }
+    let divW: CGFloat = 1
+    let gap: CGFloat = 6
+    let spacing = gap + divW + gap
+    let totalWidth = icons.reduce(0) { $0 + $1.size.width } + CGFloat(icons.count - 1) * spacing
+    let height = icons.map(\.size.height).max() ?? iconHeight
+
+    let composed = NSImage(size: NSSize(width: totalWidth, height: height), flipped: true) { _ in
+        var x: CGFloat = 0
+        for (i, icon) in icons.enumerated() {
+            if i > 0 {
+                let divRect = NSRect(x: x, y: height * 0.15, width: divW, height: height * 0.7)
+                NSColor.black.withAlphaComponent(0.35).setFill()
+                NSBezierPath(rect: divRect).fill()
+                x += divW + gap
+            }
+            icon.draw(in: NSRect(x: x, y: 0, width: icon.size.width, height: height))
+            x += icon.size.width
+            if i < icons.count - 1 { x += gap }
+        }
+        return true
+    }
+    composed.isTemplate = true
+    return composed
+}
+
 // MARK: - Bar drawing
 
 private func drawBar(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, cornerRadius: CGFloat, pct: Double) {

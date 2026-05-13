@@ -12,10 +12,6 @@ protocol UsageProvider: AnyObject {
     var id: ProviderID { get }
     /// 该 provider 当前能否取数（Claude = 已登录；Codex = `~/.codex/auth.json` 存在且可解析）。
     var isConfigured: Bool { get }
-    /// TODO(后续): 这个 flag 自 v0.2.10 起没有消费者了 —— 原先用作「菜单栏 primary 候选资格」，但 v0.2.10 退役了 `primaryEligibleIDs`
-    /// （菜单栏已 provider-aware，任何 enabled+registered 的 provider 都能上菜单栏）。要么彻底从协议退役、要么改用途。
-    /// 暂留（Claude = true、Codex = false）以免协议改动波及面太大。
-    var supportsBackgroundPolling: Bool { get }
     /// 该 provider 的 UI 状态容器；实现负责在 `refreshNow()` 等处写它。
     var runtime: ProviderRuntime { get }
     /// 后台 tick 时额外回调（驱动该 provider 的本机统计刷新；nil = 不做）。`ProviderCoordinator.onBackgroundTick()` 在调 `refreshNow()` 后调它。

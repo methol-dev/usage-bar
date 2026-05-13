@@ -48,8 +48,8 @@ struct UsageBarApp: App {
                     await usageStats.refresh()
                     await codexStats.refresh()
                     // 各 provider 的本机统计刷新随后台 tick 走 onPollTick（Claude 的逻辑原在已退役的 UsageService timer 里）—— 必须在 startBackgroundPolling 之前设好。
-                    coordinator.claude.onPollTick = { Task.detached { await usageStats.refresh() } }
-                    coordinator.provider(.codex)?.onPollTick = { Task.detached { await codexStats.refresh() } }
+                    coordinator.claude.onPollTick = { Task { await usageStats.refresh() } }
+                    coordinator.provider(.codex)?.onPollTick = { Task { await codexStats.refresh() } }
                     // 起统一后台 timer（覆盖所有 enabled provider，含 Claude；监听 pollingMinutes 变化自动重起）+ 立即各拉一次（这一次就拉了 Claude）。
                     coordinator.startBackgroundPolling()
                 }
