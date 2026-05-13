@@ -3,7 +3,7 @@
 #   1. 等 PR checks 全绿
 #   2. gh pr merge --squash --delete-branch
 #   3. 切回默认分支,pull,删除本地分支
-#   4. 写 artifacts/issues/<num>/{done.json,handoff.md} 并再 push 一次
+#   4. 写 docs/artifacts/issues/<num>/{done.json,handoff.md} 并再 push 一次
 #   5. issue 标签切到 status:done
 #
 # 前置:ship 评审 VERDICT=PASS,无 status:needs-human
@@ -43,7 +43,7 @@ git branch -D "$BRANCH" 2>/dev/null || true
 
 TODAY="$(date +%F)"
 HEAD_SHA="$(git rev-parse --short HEAD)"
-ART_DIR="artifacts/issues/$ISSUE_NUM"
+ART_DIR="docs/artifacts/issues/$ISSUE_NUM"
 mkdir -p "$ART_DIR"
 
 cat > "$ART_DIR/done.json" <<EOF

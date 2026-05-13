@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 启动一个 issue 的开发流程:
 #   1. 从 main 切新分支 issue/<num>-<slug>
-#   2. 搭建 artifacts/issues/<num>/ 骨架文件(diagnosis / plan-review / verification)
+#   2. 搭建 docs/artifacts/issues/<num>/ 骨架文件(diagnosis / plan-review / verification)
 #   3. 把 issue 标签切到 status:in-progress(清掉 status:triaged / status:plan-review)
 #
 # 用法: scripts/issues/kickoff.sh <issue-number>
@@ -46,7 +46,7 @@ git checkout "$DEFAULT_BRANCH"
 git pull --ff-only
 git checkout -b "$BRANCH"
 
-ART_DIR="artifacts/issues/$ISSUE_NUM"
+ART_DIR="docs/artifacts/issues/$ISSUE_NUM"
 mkdir -p "$ART_DIR"
 
 cat > "$ART_DIR/diagnosis.md" <<EOF
@@ -128,6 +128,6 @@ gh issue edit "$ISSUE_NUM" --remove-label "status:plan-review"  2>/dev/null || t
 gh issue edit "$ISSUE_NUM" --add-label    "status:in-progress"  2>/dev/null || true
 
 echo "[kickoff] 完成。下一步:"
-echo "  1. AI 填充 artifacts/issues/$ISSUE_NUM/diagnosis.md(含守护线自检)"
+echo "  1. AI 填充 docs/artifacts/issues/$ISSUE_NUM/diagnosis.md(含守护线自检)"
 echo "  2. AI 调评审者做 plan 评审,写入 plan-review.md,打 status:plan-review"
 echo "  3. 评审 PASS 后继续实施;如 NEEDS_HUMAN 则打 status:needs-human 等人工"

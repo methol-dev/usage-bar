@@ -99,4 +99,4 @@ The big picture cannot be inferred from any single file. Key invariants:
 - PR 必须等绿的 check:`build`(`.github/workflows/build.yml`,跑 `swift build -c release` → `swift test` → `make release-artifacts`)。`merge.sh` 用 `gh pr checks --watch` 等全部 check 绿。
 
 ### artifacts 路径
-- `artifacts/issues/<num>/`(沿用 skill 默认)
+- `docs/artifacts/issues/<num>/` —— 本仓库把 skill 默认的 `artifacts/issues/<num>/` 挪到 `docs/` 下(统一收纳进文档树)。`scripts/issues/{kickoff,ship,merge}.sh` 已同步该路径;若日后从 skill 重新同步脚本,记得保留这个 override。

@@ -22,7 +22,7 @@ AI 分诊 ─── 纠正 type / 补 scope:* / 补 priority:*
    ▼
 scripts/issues/kickoff.sh <num>
    │  从 main 切分支 issue/<num>-<slug>
-   │  搭建 artifacts/issues/<num>/ 骨架(diagnosis / plan-review / verification)
+   │  搭建 docs/artifacts/issues/<num>/ 骨架(diagnosis / plan-review / verification)
    │  标签 → status:in-progress
    ▼
 AI 填 diagnosis.md(含项目 CLAUDE.md 配置段里的守护线自检)
@@ -100,7 +100,7 @@ merge.sh:等 CI 绿 → squash-merge --delete-branch → 写 done.json + handoff
 
 ## 7. 产物结构
 
-`artifacts/issues/<num>/`:
+`docs/artifacts/issues/<num>/`:
 - `diagnosis.md` — 复现 / 根因 / 修复方案 / 影响范围 / 守护线自检 / 是否需人介入
 - `plan-review.md` — 评审者对方案的评审结论 + 关键反馈 + 应对
 - `verification.md` — 验证命令 / 结果 / 截图 / 本地验证清单
@@ -115,7 +115,7 @@ merge.sh:等 CI 绿 → squash-merge --delete-branch → 写 done.json + handoff
   "merge_commit": "<short-sha>",
   "completed_at": "YYYY-MM-DD",
   "status": "passed",
-  "artifacts": ["artifacts/issues/42/diagnosis.md", "artifacts/issues/42/plan-review.md", "artifacts/issues/42/verification.md", "artifacts/issues/42/handoff.md"]
+  "artifacts": ["docs/artifacts/issues/42/diagnosis.md", "docs/artifacts/issues/42/plan-review.md", "docs/artifacts/issues/42/verification.md", "docs/artifacts/issues/42/handoff.md"]
 }
 ```
 `status` 取值:`passed` / `blocked` / `partial`(项目可在配置段里扩字段)。不记录工时 / 耗时,`completed_at` 只到日期。

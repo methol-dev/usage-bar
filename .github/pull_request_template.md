@@ -16,7 +16,7 @@ Closes #<issue-number>
 - [ ] 若动前端:已在浏览器手动回归金路径
 
 ## AI 评审
-- 诊断评审:`artifacts/issues/<n>/plan-review.md`
+- 诊断评审:`docs/artifacts/issues/<n>/plan-review.md`
 - Ship 评审:本 PR review comment
 
 ## 风险 / 已知限制

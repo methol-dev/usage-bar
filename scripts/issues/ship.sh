@@ -4,7 +4,7 @@
 # 用法: scripts/issues/ship.sh <issue-number>
 # 前置:
 #   - 当前在 issue/<num>-<slug> 分支
-#   - artifacts/issues/<num>/{diagnosis,plan-review,verification}.md 已填充
+#   - docs/artifacts/issues/<num>/{diagnosis,plan-review,verification}.md 已填充
 #   - 本地验证通过(按项目 CLAUDE.md 配置段的"本地验证命令")
 set -euo pipefail
 
@@ -24,7 +24,7 @@ if [[ ! "$BRANCH" =~ ^issue/${ISSUE_NUM}- ]]; then
   exit 2
 fi
 
-ART_DIR="artifacts/issues/$ISSUE_NUM"
+ART_DIR="docs/artifacts/issues/$ISSUE_NUM"
 for f in diagnosis.md plan-review.md verification.md; do
   [[ -f "$ART_DIR/$f" ]] || { echo "缺少 $ART_DIR/$f" >&2; exit 2; }
 done
@@ -43,7 +43,7 @@ cat > "$PR_BODY_FILE" <<EOF
 Closes #${ISSUE_NUM}
 
 ## 诊断 / 修复方案
-见 \`artifacts/issues/${ISSUE_NUM}/diagnosis.md\`
+见 \`docs/artifacts/issues/${ISSUE_NUM}/diagnosis.md\`
 
 ## 方案评审(Plan Review)
 $(sed -n '/^## 评审结论/,/^## 关键反馈/p' "$ART_DIR/plan-review.md" | sed '1d;$d')
