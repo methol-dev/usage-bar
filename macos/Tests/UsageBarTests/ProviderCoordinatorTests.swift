@@ -102,16 +102,22 @@ final class ProviderCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.backgroundIntervalSeconds, TimeInterval(30 * 60))
     }
 
-    func testShouldRefreshClaudeOnOpenWhenSnapshotNil() {
-        let c = makeCoordinator(freshDefaults())
-        XCTAssertTrue(c.shouldRefreshClaudeOnOpen)         // 全新 UsageService（未登录）→ runtime.snapshot == nil
-    }
-
     func testRefreshAllEnabledOnOpenTicksClaudeWhenSnapshotNil() async {
         let c = makeCoordinator(freshDefaults())
         await c.refreshAllEnabledOnOpen()                  // codex unconfigured → 不发网络；claude snapshot==nil → 被拉一次
         XCTAssertNil(c.claude.runtime.snapshot)
         XCTAssertEqual(c.claude.runtime.lastError, "Not signed in")   // Claude 被拉过（首屏空 → 兜一次）
+    }
+
+    // 修复 issue #10：有 snapshot 的 non-Claude provider 在 popover 打开时不再刷。
+    func testRefreshAllEnabledOnOpenSkipsNonClaudeWhenSnapshotPresent() async {
+        let d = freshDefaults()
+        let claude = UsageService(credentialsStore: StoredCredentialsStore(directoryURL: tmpDir()))
+        let stub = StubProviderForCoordTest(id: .cursor)
+        stub.runtime.setSuccess(snapshot: ProviderUsageSnapshot())  // 已有数据
+        let c = ProviderCoordinator(claude: claude, additionalProviders: [stub], defaults: d)
+        await c.refreshAllEnabledOnOpen()
+        XCTAssertEqual(stub.refreshNowCallCount, 0, "snapshot 非 nil 时不应再拉")
     }
 
     // v0.2.11：onBackgroundTick 现在也 tick Claude（不再特判跳过）—— 用「未登录 UsageService → refreshNow→fetchUsage 走未登录分支、设 lastError = "Not signed in"」间接验证它被 tick 到了。

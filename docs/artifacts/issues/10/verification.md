@@ -1,16 +1,18 @@
 # 验证记录
 
 ## 命令 / 步骤
-- (照搬项目 CLAUDE.md 配置段 "本地验证命令" 里与本次改动相关的项)
+- `cd macos && swift build -c release`
+- `cd macos && swift test`
 
 ## 结果 / 截图
--
+- `swift build -c release`：Build complete（仅既有 warnings，无新增 warning / error）
+- `swift test`：Test Suite 'All tests' passed
 
 ## 本地验证清单
-- 单测 / 集成测试:
-- 构建:
-- 接口契约(如适用):
-- 手动回归(如适用):
+- [x] 单测：新增 `testRefreshAllEnabledOnOpenSkipsNonClaudeWhenSnapshotPresent` 通过；删除对已删属性 `shouldRefreshClaudeOnOpen` 的旧测试
+- [x] 构建：`swift build -c release` 绿
+- [x] 接口契约：不涉及外部接口变更
+- [x] 手动回归：改动仅在 `refreshAllEnabledOnOpen`，不影响后台 polling 逻辑；Refresh 按钮路径不受影响
 
 ## CI
-- (PR 的 checks 状态由 ship/merge 阶段记录)
+- PR checks 状态由 ship/merge 阶段记录

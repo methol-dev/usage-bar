@@ -132,23 +132,14 @@ final class ProviderCoordinator: ObservableObject {
     func refreshNow(_ id: ProviderID) async { await registry.provider(id)?.refreshNow() }
 
     // MARK: - 刷新纪律
-    /// Claude 的首屏是否还空（= 还没成功拉过）—— popover 打开时才据此兜一次硬拉。
-    var shouldRefreshClaudeOnOpen: Bool {
-        guard claude.runtime.snapshot == nil else { return false }
-        if let due = claude.nextEligibleRefresh, due > Date() { return false }   // 还在 429 backoff 窗口里 → 别拉
-        return true
-    }
-    /// popover 打开（content 视图首次 appear）触发一次：对每个 enabled provider，跳过 `nextEligibleRefresh` 还在未来的；
-    /// 非-Claude provider 直接 `refreshNow`；Claude 仅在首屏还空时兜一次（避免「每次打开 popover 都硬拉 Claude」打乱其速率配额）。
+    /// popover 打开（content 视图 appear）触发一次：对每个 enabled provider，仅在尚无数据（snapshot == nil）时才拉，
+    /// 已有缓存 snapshot 的跳过——刷新由后台 timer 驱动，不因 popover 开关而触发。
     func refreshAllEnabledOnOpen() async {
         for id in availableIDs {
             guard let p = registry.provider(id) else { continue }
             if let due = p.nextEligibleRefresh, due > Date() { continue }
-            if id == .claude {
-                if shouldRefreshClaudeOnOpen { await p.refreshNow() }
-            } else {
-                await p.refreshNow()
-            }
+            guard p.runtime.snapshot == nil else { continue }
+            await p.refreshNow()
         }
     }
 
