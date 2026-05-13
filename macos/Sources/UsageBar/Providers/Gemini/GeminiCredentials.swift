@@ -160,6 +160,7 @@ extension GeminiCredentialStore {
     }
 
     /// 写回 oauth_creds.json：tmp + rename + 0600 权限。schema 与 gemini-cli 完全一致。
+    /// 失败路径(setAttributes / replace 抛错)best-effort 清理 tmp,避免残留。
     static func writeAtomically(credentials: GeminiCredentials,
                                 environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         let dst = credsFileURL(environment: environment)
@@ -176,20 +177,33 @@ extension GeminiCredentialStore {
         let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
         let tmp = dir.appendingPathComponent("oauth_creds.json.\(UUID().uuidString).tmp")
         try data.write(to: tmp, options: [.atomic])
+        // 一旦 tmp 落地,任何后续异常都尝试清理 tmp(避免 setAttributes / replace 失败留残)。
+        var consumed = false
+        defer { if !consumed { try? FileManager.default.removeItem(at: tmp) } }
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tmp.path)
-        // 替换：_ = result 防 ranking 警告；若 dst 不存在，replaceItem 会直接创建。
         if FileManager.default.fileExists(atPath: dst.path) {
             _ = try FileManager.default.replaceItemAt(dst, withItemAt: tmp)
         } else {
             try FileManager.default.moveItem(at: tmp, to: dst)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dst.path)
         }
+        consumed = true
+        // 两条路径都强制 0600(replaceItemAt 在 macOS 上可能保留 dst 旧权限位 → 长期 drift 防御)。
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dst.path)
     }
+
+    /// 严格的 form-encoded 字符集(unreserved per RFC 3986)。
+    /// `urlQueryAllowed` 太宽,会让 `+` `&` `=` `?` `/` 通过未转义 — Google OAuth 把 `+` 解释成空格,
+    /// 若日后 client_secret rotate 出现这些字符会导致 401 难排查。
+    private static let formEncodedSafe: CharacterSet = {
+        var s = CharacterSet()
+        s.insert(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return s
+    }()
 
     private static func formEncode(_ params: [String: String]) -> String {
         params.map { k, v in
-            let ek = k.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? k
-            let ev = v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? v
+            let ek = k.addingPercentEncoding(withAllowedCharacters: formEncodedSafe) ?? k
+            let ev = v.addingPercentEncoding(withAllowedCharacters: formEncodedSafe) ?? v
             return "\(ek)=\(ev)"
         }.joined(separator: "&")
     }

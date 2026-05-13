@@ -167,6 +167,35 @@ extension GeminiCredentialsTests {
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("oauth_creds.json.") }
         XCTAssertTrue(leftovers.isEmpty, "残留临时文件：\(leftovers)")
     }
+
+    /// 写回的 oauth_creds.json 必须是 0600(防权限位 drift,review feedback)。
+    func testRefreshWritesFileWith0600Permissions() async throws {
+        let env = try makeGeminiHome(credsJSON: #"{ "access_token": "OLD", "refresh_token": "R", "token_type": "Bearer" }"#)
+        let session = stubSession { req in
+            (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+             Data(#"{"access_token":"NEW","expires_in":3600,"token_type":"Bearer"}"#.utf8))
+        }
+        defer { GeminiOAuthStubURLProtocol.handler = nil }
+        let old = try XCTUnwrap(GeminiCredentialStore.load(environment: env))
+        _ = try await GeminiCredentialStore.refresh(credentials: old, clientId: "CID", clientSecret: "CSEC", session: session, environment: env)
+        let path = GeminiCredentialStore.credsFileURL(environment: env).path
+        let attrs = try FileManager.default.attributesOfItem(atPath: path)
+        let perms = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? -1
+        XCTAssertEqual(perms & 0o777, 0o600, "oauth_creds.json 权限应为 0600,实际 \(String(perms, radix: 8))")
+    }
+
+    /// 响应回了新 refresh_token 时确实覆盖(对称于"未回保留"的断言)。
+    func testRefreshAdoptsNewRefreshTokenWhenReturned() async throws {
+        let env = try makeGeminiHome(credsJSON: #"{ "access_token": "OLD", "refresh_token": "OLD_REFRESH", "token_type": "Bearer" }"#)
+        let session = stubSession { req in
+            (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+             Data(#"{"access_token":"NEW","expires_in":3600,"token_type":"Bearer","refresh_token":"NEW_REFRESH"}"#.utf8))
+        }
+        defer { GeminiOAuthStubURLProtocol.handler = nil }
+        let old = try XCTUnwrap(GeminiCredentialStore.load(environment: env))
+        let updated = try await GeminiCredentialStore.refresh(credentials: old, clientId: "CID", clientSecret: "CSEC", session: session, environment: env)
+        XCTAssertEqual(updated.refreshToken, "NEW_REFRESH")
+    }
 }
 
 // 复用一个 URLProtocol stub（避免与其它 test 类的 stub 冲突）
