@@ -124,10 +124,9 @@ struct UsageHeatmapView: View {
                             }
                         }
                     }
-                    .onAppear {
-                        DispatchQueue.main.async {
-                            withAnimation(.none) { proxy.scrollTo(lastIndex, anchor: .trailing) }
-                        }
+                    .task {
+                        await Task.yield()
+                        withAnimation(.none) { proxy.scrollTo(lastIndex, anchor: .trailing) }
                     }
                 }
                 // 信息行：默认显示今天，hover 时显示悬停那天（固定高度避免布局跳动）

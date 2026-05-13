@@ -136,7 +136,7 @@ private struct ProviderRow: View {
 
 @MainActor
 private func focusSettingsWindow() {
-    DispatchQueue.main.async {
+    Task { @MainActor in
         NSApp.activate(ignoringOtherApps: true)
         if let window = NSApp.windows.last(where: { $0.isVisible && $0.canBecomeKey }) {
             window.makeKeyAndOrderFront(nil)
