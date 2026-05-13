@@ -25,13 +25,13 @@ A tiny macOS menu bar app that shows your Claude API and Codex usage at a glance
 
 - Menu bar icon with a mini dual-bar showing 5-hour and 7-day utilization
 - Detailed popover with per-window usage, per-model breakdown, and reset timers
-- **Multi-provider support** — switch between Claude and Codex tabs in the popover
+- **Multi-provider support** — switch between Claude, Codex, and Gemini tabs in the popover
 - Extra usage tracking with USD currency display (pricing via LiteLLM snapshot)
 - Usage history chart — see how your usage evolves over time (1h / 6h / 1d / 7d / 30d)
 - Hover over the chart to see exact values at any point
 - Configurable polling interval (5m / 15m / 30m / 1h)
 - Built-in update checks via Sparkle
-- Just sign in — Claude: OAuth via browser, no API keys to manage; Codex: reads existing CLI credentials
+- Just sign in — Claude: OAuth via browser, no API keys to manage; Codex / Gemini: reads existing CLI credentials
 - Minimal dependencies — SwiftUI, Swift Charts, Foundation, and Sparkle for updates
 
 ## Install
@@ -90,11 +90,26 @@ All data is stored locally:
 |------|---------|
 | `~/.config/usage-bar/credentials.json` | Claude OAuth credentials (permissions: `0600`) |
 | `~/.config/usage-bar/history.json` | Usage history for the chart (30-day retention) |
+| `~/.config/usage-bar/history-codex.json` | Codex usage history |
+| `~/.config/usage-bar/history-gemini.json` | Gemini usage history |
 | `~/.codex/auth.json` | Codex credentials — **read-only** by UsageBar, managed by Codex CLI |
+| `~/.gemini/oauth_creds.json` | Gemini credentials — **read-only** by UsageBar, managed by gemini-cli; UsageBar may rewrite it (`0600`) when refreshing an expired access token |
 
 History is buffered in memory and flushed to disk every 5 minutes and on app quit. No data is sent anywhere other than the respective provider APIs.
 
 > Legacy note: older versions stored Claude credentials in `~/.config/usage-bar/token`. The app migrates this file automatically on first launch after upgrading.
+
+## Third-party credentials & APIs
+
+UsageBar reuses on-machine credentials from the official CLI tools — **it does not prompt you to log in again, and it does not bundle or distribute any third-party OAuth secrets**:
+
+- **Claude** — UsageBar manages its own OAuth flow (`~/.config/usage-bar/credentials.json`) and falls back to reading the Claude CLI Keychain entry (`Claude Code-credentials`) when needed.
+- **Codex** — **Read-only** access to `~/.codex/auth.json` (maintained by the `codex` CLI). UsageBar never writes to it.
+- **Gemini** — **Read** access to `~/.gemini/oauth_creds.json` (maintained by the `gemini` CLI). When the access token expires, UsageBar refreshes it against `oauth2.googleapis.com` and rewrites the file (`0600`). Google's `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` are **not hardcoded into UsageBar** — they are extracted at runtime from the locally installed `gemini-cli` package (the same install that already lives on your machine), and used only in-process.
+
+UsageBar talks to each provider's quota endpoints (Anthropic OAuth usage, ChatGPT `wham/usage`, Google Code Assist `cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota`). The Codex and Gemini endpoints are unofficial / private and have no published SLA — UsageBar treats failure modes (401, 5xx, schema drift) as transient and degrades gracefully.
+
+You can sever the link between UsageBar and any provider at any time by uninstalling the corresponding CLI or deleting the credential file listed in **Data storage** above.
 
 ## Development
 
