@@ -56,8 +56,8 @@ struct MenuBarLabel: View {
         guard runtime.isConfigured,
               let window = runtime.snapshot?.primaryWindow,
               let utilPct = window.utilizationPct,
-              let expected = expectedPacePct(resetDate: window.resetsAt,
-                                             windowDuration: window.windowDuration ?? 5 * 3600)
+              let duration = window.windowDuration,
+              let expected = expectedPacePct(resetDate: window.resetsAt, windowDuration: duration)
         else { return nil }
         let delta = Int((utilPct - expected).rounded())
         return abs(delta) >= 1 ? delta : nil
