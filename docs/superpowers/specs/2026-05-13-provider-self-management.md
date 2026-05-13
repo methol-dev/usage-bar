@@ -1,7 +1,7 @@
 ---
 id: 2026-05-13-provider-self-management
 title: Provider 自主管理：全供应商可禁用 + 独立菜单栏开关 + 拖拽排序修复
-status: draft
+status: implemented
 created: 2026-05-13
 updated: 2026-05-13
 owner: claude-code
@@ -12,28 +12,28 @@ related_research: []
 spec_criteria:
   - id: SC1
     criterion: Claude provider 可被用户在 Settings 中禁用；禁用后 PopoverView 不出现 Claude 登录门控
-    done: false
-    evidence: null
+    done: true
+    evidence: "PopoverView: claudeEnabled gate added; PopoverView.swift:20"
   - id: SC2
     criterion: 只启用 Codex 时，app 正常显示 Codex 数据（不崩溃、不强制要求 Claude 账号）
-    done: false
-    evidence: null
+    done: true
+    evidence: "PopoverView: noProvidersView when availableIDs empty; PopoverView.swift:22"
   - id: SC3
     criterion: Settings Providers 列表可通过拖拽调整顺序，顺序立即反映到 popover tab 与菜单栏
-    done: false
-    evidence: null
+    done: true
+    evidence: "SettingsView: List+onMove; SettingsView.swift:36-41"
   - id: SC4
     criterion: 每个 provider 有独立菜单栏开关；关闭后该 provider 不再出现在 MultiMenuBarLabel
-    done: false
-    evidence: null
+    done: true
+    evidence: "SettingsView+MultiMenuBarLabel: menuBarVisibleProviderIDs toggle + menuBarVisibleIDs data source"
   - id: SC5
     criterion: 所有 provider 都禁用时，PopoverView 显示引导空态而非崩溃
-    done: false
-    evidence: null
+    done: true
+    evidence: "PopoverView: noProvidersView shown when coordinator.availableIDs.isEmpty; PopoverView.swift:22"
   - id: SC6
     criterion: swift build -c release 与 swift test 均绿
-    done: false
-    evidence: null
+    done: true
+    evidence: "swift test: 273 passed 0 failed; make release-artifacts + verify-release.sh: all checks green"
 automated_checks:
   - "SC_AUTO_BUILD: cd macos && swift build -c release 2>&1 | tail -5"
   - "SC_AUTO_TEST: cd macos && swift test 2>&1 | tail -20"
