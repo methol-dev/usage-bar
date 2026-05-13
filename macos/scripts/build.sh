@@ -96,12 +96,13 @@ restore_litellm_snapshot() {
 build_app_bundle() {
     fetch_litellm_prices
 
-    echo "==> Building release binary..."
-    swift build -c release
+    echo "==> Building release binary (universal: arm64 + x86_64)..."
+    swift build -c release --arch arm64 --arch x86_64
 
-    local binary="$BUILD_DIR/release/$APP_NAME"
+    # SwiftPM creates the universal binary at apple/Products/Release/ automatically.
+    local binary="$BUILD_DIR/apple/Products/Release/$APP_NAME"
     if [[ ! -f "$binary" ]]; then
-        echo "Error: binary not found at $binary"
+        echo "Error: universal binary not found at $binary"
         exit 1
     fi
 
@@ -125,7 +126,9 @@ build_app_bundle() {
         "$PLUTIL" -remove SUFeedURL "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
     fi
 
-    local resource_bundle="$BUILD_DIR/release/${APP_NAME}_${APP_NAME}.bundle"
+    # arm64 path has the flat bundle layout expected by verify-release.sh;
+    # apple/Products/Release uses a nested Contents/ layout that is incompatible.
+    local resource_bundle="$BUILD_DIR/arm64-apple-macosx/release/${APP_NAME}_${APP_NAME}.bundle"
     if [[ ! -d "$resource_bundle" ]]; then
         resource_bundle="$(find "$BUILD_DIR" -path "*/release/${APP_NAME}_${APP_NAME}.bundle" -type d | head -n 1 || true)"
     fi
@@ -146,8 +149,10 @@ build_app_bundle() {
            --output-partial-info-plist /dev/null \
            "$PROJECT_DIR/Resources/Assets.xcassets" > /dev/null
 
-    local sparkle_framework
-    sparkle_framework="$(find "$BUILD_DIR" -path '*/Sparkle.framework' -type d | head -n 1 || true)"
+    local sparkle_framework="$BUILD_DIR/apple/Products/Release/Sparkle.framework"
+    if [[ ! -d "$sparkle_framework" ]]; then
+        sparkle_framework="$(find "$BUILD_DIR" -path '*/Sparkle.framework' -type d | head -n 1 || true)"
+    fi
     if [[ -n "$sparkle_framework" ]]; then
         echo "==> Bundling Sparkle.framework..."
         mkdir -p "$APP_BUNDLE/Contents/Frameworks"

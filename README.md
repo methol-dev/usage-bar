@@ -14,7 +14,8 @@ Now it's just a glimpse away — always sitting at the top of your screen.
   <img src="https://github.com/user-attachments/assets/d3827410-35bc-46f1-a8b4-07ed62970e3b" width="400" alt="UsageBar Codex usage view">
 </p>
 
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
+![macOS 14+ (Sonoma)](https://img.shields.io/badge/macOS-14%2B%20Sonoma-blue)
+![Universal Binary](https://img.shields.io/badge/chip-Apple%20Silicon%20%7C%20Intel-lightgrey)
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
 ![License](https://img.shields.io/badge/license-BSD--2--Clause-green)
 
@@ -34,6 +35,11 @@ A tiny macOS menu bar app that shows your Claude API and Codex usage at a glance
 - Minimal dependencies — SwiftUI, Swift Charts, Foundation, and Sparkle for updates
 
 ## Install
+
+### System requirements
+
+- **macOS 14.0 (Sonoma) or later**
+- **Apple Silicon or Intel** — the app is a Universal Binary that runs natively on both chips
 
 ### Download
 
