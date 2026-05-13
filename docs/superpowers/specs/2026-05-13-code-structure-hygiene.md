@@ -1,7 +1,7 @@
 ---
 id: 2026-05-13-code-structure-hygiene
 title: 代码结构治理 —— 目录分层 + 死资源清理 + UsageService 文件内章节化
-status: accepted
+status: implemented
 created: 2026-05-13
 updated: 2026-05-13
 owner: claude-code
