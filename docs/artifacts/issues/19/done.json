@@ -1,0 +1,13 @@
+{
+  "issue": 19,
+  "pr": 21,
+  "merge_commit": "fc870db",
+  "completed_at": "2026-05-13",
+  "status": "passed",
+  "artifacts": [
+    "docs/artifacts/issues/19/diagnosis.md",
+    "docs/artifacts/issues/19/plan-review.md",
+    "docs/artifacts/issues/19/verification.md",
+    "docs/artifacts/issues/19/handoff.md"
+  ]
+}
