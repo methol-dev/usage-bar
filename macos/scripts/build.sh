@@ -126,8 +126,10 @@ build_app_bundle() {
         "$PLUTIL" -remove SUFeedURL "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
     fi
 
-    # Primary: single-arch build; fallback: universal build via xcodebuild uses
-    # apple/Products/Release/ (capital R) which -path case-sensitively misses.
+    # Primary: single-arch build produces flat bundle (files at top level).
+    # Fallback: universal build via xcodebuild writes to apple/Products/Release/
+    # with a nested Contents/ layout. Flatten it before copying so verify-release.sh
+    # can find Info.plist at the bundle root (not at Contents/Info.plist).
     local resource_bundle="$BUILD_DIR/arm64-apple-macosx/release/${APP_NAME}_${APP_NAME}.bundle"
     if [[ ! -d "$resource_bundle" ]]; then
         resource_bundle="$(find "$BUILD_DIR" -name "${APP_NAME}_${APP_NAME}.bundle" -type d | head -n 1 || true)"
@@ -138,8 +140,18 @@ build_app_bundle() {
         exit 1
     fi
 
+    # Flatten nested Contents/ layout produced by xcodebuild.
+    if [[ -d "$resource_bundle/Contents" && ! -f "$resource_bundle/Info.plist" ]]; then
+        local flat_bundle
+        flat_bundle="$(mktemp -d "${TMPDIR:-/tmp}/${APP_NAME}_${APP_NAME}.bundle.XXXXXX")"
+        [[ -f "$resource_bundle/Contents/Info.plist" ]] && cp "$resource_bundle/Contents/Info.plist" "$flat_bundle/Info.plist"
+        [[ -d "$resource_bundle/Contents/Resources" ]] && ditto "$resource_bundle/Contents/Resources/" "$flat_bundle/"
+        resource_bundle="$flat_bundle"
+    fi
+
+    local bundle_dest="$APP_BUNDLE/Contents/Resources/${APP_NAME}_${APP_NAME}.bundle"
     echo "==> Bundling SwiftPM resources..."
-    ditto "$resource_bundle" "$APP_BUNDLE/Contents/Resources/$(basename "$resource_bundle")"
+    ditto "$resource_bundle" "$bundle_dest"
 
     echo "==> Compiling Asset Catalog..."
     actool --compile "$APP_BUNDLE/Contents/Resources" \
