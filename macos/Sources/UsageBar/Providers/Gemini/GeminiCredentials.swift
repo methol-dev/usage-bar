@@ -75,3 +75,122 @@ enum GeminiCredentialStore {
         )
     }
 }
+
+enum GeminiRefreshError: Error, CustomStringConvertible {
+    case missingRefreshToken
+    case unauthorized          // 400 / 401
+    case server(status: Int)
+    case network
+    case decode
+
+    var description: String {
+        switch self {
+        case .missingRefreshToken: return "missingRefreshToken"
+        case .unauthorized:        return "unauthorized"
+        case .server(let s):       return "server(\(s))"
+        case .network:             return "network"
+        case .decode:              return "decode"
+        }
+    }
+}
+
+extension GeminiCredentialStore {
+    static let tokenURL = URL(string: "https://oauth2.googleapis.com/token")!
+
+    /// 用 refresh_token 换新 access_token。成功后**原子**写回 `oauth_creds.json`（0600）；
+    /// 失败不动文件。
+    static func refresh(credentials creds: GeminiCredentials,
+                        clientId: String,
+                        clientSecret: String,
+                        session: URLSession = .shared,
+                        environment: [String: String] = ProcessInfo.processInfo.environment,
+                        now: Date = Date()) async throws -> GeminiCredentials {
+        guard let refreshToken = creds.refreshToken, !refreshToken.isEmpty else {
+            throw GeminiRefreshError.missingRefreshToken
+        }
+        var req = URLRequest(url: tokenURL)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let bodyParams = [
+            "client_id": clientId,
+            "client_secret": clientSecret,
+            "refresh_token": refreshToken,
+            "grant_type": "refresh_token",
+        ]
+        req.httpBody = Data(formEncode(bodyParams).utf8)
+
+        let data: Data; let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: req)
+        } catch {
+            throw GeminiRefreshError.network
+        }
+        guard let http = response as? HTTPURLResponse else { throw GeminiRefreshError.network }
+        switch http.statusCode {
+        case 200..<300: break
+        case 400, 401, 403: throw GeminiRefreshError.unauthorized
+        default: throw GeminiRefreshError.server(status: http.statusCode)
+        }
+
+        struct TokenResponse: Decodable {
+            let access_token: String
+            let expires_in: Int?
+            let token_type: String?
+            let id_token: String?
+            let scope: String?
+            let refresh_token: String?
+        }
+        let parsed: TokenResponse
+        do {
+            parsed = try JSONDecoder().decode(TokenResponse.self, from: data)
+        } catch {
+            throw GeminiRefreshError.decode
+        }
+
+        var updated = creds
+        updated.accessToken = parsed.access_token
+        if let exp = parsed.expires_in { updated.expiryDate = now.addingTimeInterval(TimeInterval(exp)) }
+        if let t = parsed.token_type { updated.tokenType = t }
+        if let id = parsed.id_token { updated.idToken = id }
+        if let s = parsed.scope { updated.scope = s }
+        if let r = parsed.refresh_token, !r.isEmpty { updated.refreshToken = r }   // Google 偶尔会回新 refresh_token
+
+        try writeAtomically(credentials: updated, environment: environment)
+        return updated
+    }
+
+    /// 写回 oauth_creds.json：tmp + rename + 0600 权限。schema 与 gemini-cli 完全一致。
+    static func writeAtomically(credentials: GeminiCredentials,
+                                environment: [String: String] = ProcessInfo.processInfo.environment) throws {
+        let dst = credsFileURL(environment: environment)
+        let dir = dst.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var json: [String: Any] = ["access_token": credentials.accessToken]
+        if let r = credentials.refreshToken { json["refresh_token"] = r }
+        if let t = credentials.tokenType { json["token_type"] = t }
+        if let exp = credentials.expiryDate {
+            json["expiry_date"] = Int(exp.timeIntervalSince1970 * 1000)
+        }
+        if let id = credentials.idToken { json["id_token"] = id }
+        if let s = credentials.scope { json["scope"] = s }
+        let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        let tmp = dir.appendingPathComponent("oauth_creds.json.\(UUID().uuidString).tmp")
+        try data.write(to: tmp, options: [.atomic])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tmp.path)
+        // 替换：_ = result 防 ranking 警告；若 dst 不存在，replaceItem 会直接创建。
+        if FileManager.default.fileExists(atPath: dst.path) {
+            _ = try FileManager.default.replaceItemAt(dst, withItemAt: tmp)
+        } else {
+            try FileManager.default.moveItem(at: tmp, to: dst)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dst.path)
+        }
+    }
+
+    private static func formEncode(_ params: [String: String]) -> String {
+        params.map { k, v in
+            let ek = k.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? k
+            let ev = v.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? v
+            return "\(ek)=\(ev)"
+        }.joined(separator: "&")
+    }
+}
