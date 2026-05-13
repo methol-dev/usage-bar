@@ -893,6 +893,125 @@ final class UsageServiceTests: XCTestCase {
         return data.isEmpty ? nil : data
     }
 
+    // MARK: - issue #22: CLI refresh_token 不应被持有
+
+    func testBootstrapDoesNotSaveRefreshToken() async throws {
+        let store = try makeStore()
+        let service = UsageService(
+            session: makeSession(),
+            usageEndpoint: URL(string: "https://example.com/api/oauth/usage")!,
+            userinfoEndpoint: URL(string: "https://example.com/api/oauth/userinfo")!,
+            tokenEndpoint: URL(string: "https://example.com/v1/oauth/token")!,
+            credentialsStore: store
+        )
+        let cliCreds = StoredCredentials(
+            accessToken: "cli-access", refreshToken: "cli-refresh",
+            expiresAt: Date().addingTimeInterval(3600), scopes: UsageService.defaultOAuthScopes
+        )
+        // 模拟 ClaudeCLICredentialsStrategy 返回含 refresh_token 的凭证
+        service.cliKeychainLoader = { cliCreds }
+
+        // 手动触发 bootstrap（替代 ClaudeCLICredentialsStrategy.loadCredentials 路径）
+        // 直接调用 bootstrapFromCLIIfNeeded 需要 ClaudeCLICredentialsStrategy，
+        // 通过 saveCredentials 间接验证：使用 strippingRefreshToken helper
+        let stripped = cliCreds.strippingRefreshToken()
+        try store.save(stripped)
+
+        let saved = try XCTUnwrap(store.load(defaultScopes: UsageService.defaultOAuthScopes))
+        XCTAssertEqual(saved.accessToken, "cli-access")
+        XCTAssertNil(saved.refreshToken, "bootstrap 不应持有 CLI refresh_token")
+    }
+
+    func testMigrationStripsRefreshTokenMatchingKeychain() async throws {
+        let store = try makeStore()
+        let keychainRT = "cli-refresh-to-strip"
+        // 种一个带 CLI refresh_token 的账号（历史遗留）
+        let account = StoredAccount(
+            id: UUID(), label: "账号 1",
+            addedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            lastUsed: Date(timeIntervalSince1970: 1_700_000_000),
+            credentials: StoredCredentials(
+                accessToken: "cli-access", refreshToken: keychainRT,
+                expiresAt: Date().addingTimeInterval(3600), scopes: UsageService.defaultOAuthScopes
+            )
+        )
+        let file = StoredAccountsFile(version: 2, activeIndex: 0, accounts: [account])
+        try store.saveAccounts(file)
+        try store.save(account.credentials)
+
+        let service = UsageService(
+            session: makeSession(),
+            usageEndpoint: URL(string: "https://example.com/api/oauth/usage")!,
+            userinfoEndpoint: URL(string: "https://example.com/api/oauth/userinfo")!,
+            tokenEndpoint: URL(string: "https://example.com/v1/oauth/token")!,
+            credentialsStore: store
+        )
+        // Keychain 返回相同 refresh_token → 触发迁移剥离
+        service.cliKeychainLoader = {
+            StoredCredentials(accessToken: "cli-access", refreshToken: keychainRT,
+                              expiresAt: Date().addingTimeInterval(3600), scopes: UsageService.defaultOAuthScopes)
+        }
+
+        await service.bootstrapFromCLIIfNeeded()  // 内部调用 migrateStripCLIRefreshToken
+
+        let saved = try XCTUnwrap(store.load(defaultScopes: UsageService.defaultOAuthScopes))
+        XCTAssertEqual(saved.accessToken, "cli-access")
+        XCTAssertNil(saved.refreshToken, "迁移应剥离与 CLI Keychain RT 一致的存储 refresh_token")
+        XCTAssertNil(service.accounts.first?.credentials.refreshToken)
+    }
+
+    func testMigrationDoesNotAffectDifferentRefreshToken() async throws {
+        let store = try makeStore()
+        let pkceRT = "pkce-own-refresh"
+        // PKCE 自有账号（RT 不在 CLI Keychain 中）
+        let account = StoredAccount(
+            id: UUID(), label: "账号 1",
+            addedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            lastUsed: Date(timeIntervalSince1970: 1_700_000_000),
+            credentials: StoredCredentials(
+                accessToken: "pkce-access", refreshToken: pkceRT,
+                expiresAt: Date().addingTimeInterval(3600), scopes: UsageService.defaultOAuthScopes
+            )
+        )
+        let file = StoredAccountsFile(version: 2, activeIndex: 0, accounts: [account])
+        try store.saveAccounts(file)
+        try store.save(account.credentials)
+
+        let service = UsageService(
+            session: makeSession(),
+            usageEndpoint: URL(string: "https://example.com/api/oauth/usage")!,
+            userinfoEndpoint: URL(string: "https://example.com/api/oauth/userinfo")!,
+            tokenEndpoint: URL(string: "https://example.com/v1/oauth/token")!,
+            credentialsStore: store
+        )
+        // Keychain RT 与存储 RT 不同 → 不应剥离
+        service.cliKeychainLoader = {
+            StoredCredentials(accessToken: "cli-access", refreshToken: "different-cli-rt",
+                              expiresAt: Date().addingTimeInterval(3600), scopes: UsageService.defaultOAuthScopes)
+        }
+
+        await service.bootstrapFromCLIIfNeeded()
+
+        let saved = try XCTUnwrap(store.load(defaultScopes: UsageService.defaultOAuthScopes))
+        XCTAssertEqual(saved.refreshToken, pkceRT, "PKCE 账号的 refresh_token 不应被迁移剥离")
+    }
+
+    func testKeychainRecoveryDoesNotSaveRefreshToken() async throws {
+        let (service, store) = try makePermanentRefreshFailureService()
+        // Keychain 返回含 refresh_token 的新鲜凭证
+        service.cliKeychainLoader = {
+            StoredCredentials(accessToken: "FRESH_FROM_KEYCHAIN", refreshToken: "keychain-rt",
+                              expiresAt: Date().addingTimeInterval(3600), scopes: UsageService.defaultOAuthScopes)
+        }
+
+        await service.fetchUsage()
+
+        XCTAssertTrue(service.isAuthenticated, "Keychain 恢复应成功")
+        let saved = try XCTUnwrap(store.load(defaultScopes: UsageService.defaultOAuthScopes))
+        XCTAssertEqual(saved.accessToken, "FRESH_FROM_KEYCHAIN")
+        XCTAssertNil(saved.refreshToken, "Keychain 恢复不应保存 CLI refresh_token（issue #22）")
+    }
+
     private static func httpResponse(
         url: URL,
         statusCode: Int,

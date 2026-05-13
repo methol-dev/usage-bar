@@ -141,16 +141,47 @@ class UsageService: ObservableObject {
     ///   绝不打印 raw credential 值。
     @MainActor
     func bootstrapFromCLIIfNeeded() async {
+        // 迁移：剥离已存账号中从 CLI Keychain 复制的 refresh_token（issue #22 修复）
+        await migrateStripCLIRefreshToken()
         if !accounts.isEmpty { return }  // 已有任意 account 则不覆盖
         let strategy = ClaudeCLICredentialsStrategy()
         do {
             guard let creds = try await strategy.loadCredentials() else { return }
-            // v0.1.3: 通过 completeSignIn 路径建第一个 account
-            try saveCredentials(creds)
+            // 只取 access_token；不持有 CLI 的 refresh_token，避免触发 OAuth Token Rotation
+            // 导致 Claude Code 被迫退出登录（issue #22）。
+            try saveCredentials(creds.strippingRefreshToken())
             isAuthenticated = true
         } catch {
             NSLog("[usage-bar] credentials bootstrap from CLI failed: \(error)")
         }
+    }
+
+    /// 启动期迁移：剥离历史版本从 CLI Keychain 复制来的 refresh_token（issue #22）。
+    /// 检测方式：读取当前 CLI Keychain refresh_token，若与存储账号 refresh_token 相同则判定为
+    /// CLI 来源并剥离。JWT 熵足够大，实践中与 PKCE 自有 RT 碰撞概率极低；
+    /// 若需语义精确区分，应为 StoredAccount 添加 source 字段（留待后续 issue）。
+    private func migrateStripCLIRefreshToken() async {
+        guard !accounts.isEmpty else { return }
+        guard let keychainCreds = await cliKeychainLoader(),
+              let keychainRT = keychainCreds.refreshToken, !keychainRT.isEmpty else { return }
+
+        var changed = false
+        var newAccounts = accounts
+        for i in newAccounts.indices where newAccounts[i].credentials.refreshToken == keychainRT {
+            newAccounts[i].credentials = newAccounts[i].credentials.strippingRefreshToken()
+            changed = true
+        }
+        guard changed else { return }
+
+        // 从磁盘读取 activeIndex，避免 in-memory activeAccountId 为 nil 时回退到 0 导致账号错位
+        guard let existingFile = credentialsStore.loadAccounts(defaultScopes: Self.defaultOAuthScopes) else { return }
+        let file = StoredAccountsFile(version: existingFile.version, activeIndex: existingFile.activeIndex, accounts: newAccounts)
+        try? credentialsStore.saveAccounts(file)
+        let activeIdx = existingFile.clampedActiveIndex ?? 0
+        if activeIdx < newAccounts.count {
+            try? credentialsStore.save(newAccounts[activeIdx].credentials)
+        }
+        accounts = newAccounts
     }
 
     // MARK: - Multi-account (v0.1.3)
@@ -811,7 +842,8 @@ class UsageService: ObservableObject {
         guard recovered.accessToken != current?.accessToken else { return false }
         guard !recovered.isExpired() else { return false }
         do {
-            try saveCredentials(recovered)
+            // 只取 access_token；不持有 CLI 的 refresh_token，避免触发 OAuth Token Rotation（issue #22）。
+            try saveCredentials(recovered.strippingRefreshToken())
             isAuthenticated = true
             lastError = nil
             runtime.clear()              // 抹掉上一轮 expireSession 残留的「Session expired」错误（那时 snapshot 已被 clearSnapshot 清空，clear() 安全）
