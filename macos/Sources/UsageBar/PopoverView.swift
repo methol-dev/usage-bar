@@ -4,7 +4,7 @@ struct PopoverView: View {
     @ObservedObject var coordinator: ProviderCoordinator
     /// Claude provider（登录 UX / polling 设置 / Sign Out 等 Claude 专属 UI 直接用它）。
     /// 单独 `@ObservedObject` —— 这样 `isAuthenticated`/`isAwaitingCode`/`accounts`/`lastError` 变化能驱动重渲染
-    /// （`coordinator` 的 `menuBarProviderID`/`orderedProviderIDs`/`enabledProviderIDs` 是 `@Published`，不覆盖 `coordinator.claude` 的变化）。
+    /// （`coordinator` 的 `menuBarVisibleProviderIDs`/`orderedProviderIDs`/`enabledProviderIDs` 是 `@Published`，不覆盖 `coordinator.claude` 的变化）。
     @ObservedObject var claude: UsageService
     @ObservedObject var historyService: UsageHistoryService
     @ObservedObject var notificationService: NotificationService
@@ -16,10 +16,13 @@ struct PopoverView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !claude.isAuthenticated {
+            let claudeEnabled = coordinator.enabledProviderIDs.contains(.claude)
+            if claudeEnabled && !claude.isAuthenticated {
                 notAuthenticatedView
+            } else if coordinator.availableIDs.isEmpty {
+                noProvidersView
             } else {
-                AccountSwitcherView(service: claude)  // accounts.count <= 1 时自隐藏
+                if claudeEnabled { AccountSwitcherView(service: claude) }
                 ProviderTabBar(selection: $selectedProvider, availableIDs: coordinator.availableIDs)
                 providerArea
             }
@@ -36,7 +39,14 @@ struct PopoverView: View {
         .task { await coordinator.refreshAllEnabledOnOpen() }
         // 用户在 Settings 里禁用了当前选中 tab 的 provider → 回退到 Claude。
         .onChange(of: coordinator.availableIDs) { _, ids in
-            if !ids.contains(selectedProvider) { selectedProvider = .claude }
+            if !ids.contains(selectedProvider) {
+                selectedProvider = ids.first ?? .claude
+            }
+        }
+        .onAppear {
+            if !coordinator.availableIDs.contains(selectedProvider) {
+                selectedProvider = coordinator.availableIDs.first ?? .claude
+            }
         }
     }
 
@@ -44,7 +54,7 @@ struct PopoverView: View {
 
     @ViewBuilder
     private var providerArea: some View {
-        if selectedProvider == .claude {
+        if selectedProvider == .claude && coordinator.availableIDs.contains(.claude) {
             claudeUsageArea
         } else if coordinator.availableIDs.contains(selectedProvider),
                   let runtime = coordinator.runtime(for: selectedProvider) {
@@ -247,6 +257,28 @@ struct PopoverView: View {
                 .buttonStyle(.borderless)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var noProvidersView: some View {
+        VStack(spacing: 12) {
+            Text("没有启用的供应商")
+                .font(.headline)
+            Text("请在设置中至少启用一个供应商。")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            SettingsLink { Text("打开设置") }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        Divider()
+        HStack {
+            settingsButton
+            Spacer()
+            Button("Quit") { NSApplication.shared.terminate(nil) }
+                .buttonStyle(.borderless)
         }
     }
 
