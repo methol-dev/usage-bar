@@ -51,6 +51,9 @@ placeholder ─首个 spec 落地─► planned ─开发开始─► in-progres
 | [v0.2.13](./v0.2.13-rename-usagebar.md) | rename-usagebar | in-progress | 2026-05-13 | 🔧 重命名 ClaudeUsageBar → UsageBar（app / 模块 / bundle id + 本地数据目录；无功能改动；ADR 0006） |
 | [v0.2.14](./v0.2.14-litellm-pricing.md) | litellm-pricing | in-progress | 2026-05-14 | 🔌 价格表改走 LiteLLM 快照（打包 + 3h 后台刷新）+ 逐级回退 normalize（修 Codex「未知模型」误报） |
 | [v0.3.0](./v0.3.0-provider-self-management.md) | provider-self-management | planned | 2026-05-15 | ⚙️ 全供应商可禁用（含 Claude）+ 独立菜单栏开关 + 拖拽排序修复 |
+| [v0.3.1](./v0.3.1-swiftui-hygiene.md) | swiftui-hygiene | planned | 2026-05-13 | 🧹 SwiftUI hygiene：3 处 high bug + low 清理 + 死代码下线 |
+| [v0.4.0](./v0.4.0-view-layer-modernization.md) | view-layer-modernization | placeholder | — | 🎨 view 层现代化：SettingsView Binding + PopoverView 抽 struct + GCD 嵌套清理 |
+| [v0.5.0](./v0.5.0-observable-migration.md) | observable-migration | placeholder | — | 🏗️ ObservableObject → @Observable 迁移 + UsageService 887 行拆分 |
 
 > **目标（用户 2026-05-12 定）**：把 Codex tab 做到和 Claude tab 界面/功能一致 —— v0.2.6 已上额度窗口卡 + pace；v0.2.8 补趋势 + 折线图；v0.2.9 补成本 + 消费热力图。v0.2.7 是穿插的独立小修（Claude 凭证回退）。新版本立项时按 §7.1 命名规范 append 即可。
 >
