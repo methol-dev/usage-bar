@@ -8,8 +8,10 @@
 
 | 目录 | 用途 | 何时写 |
 |---|---|---|
+| [`agents/`](./agents/) ★ | AI agent 操作工作台（quickstart / operations / conventions） | AI 进项目后第一份要看的操作手册 |
 | [`research/`](./research/) | 长期事实性调研（业界 / 竞品 / 外部 API 变化） | 主动调研、或调研跨多 spec 复用 |
 | [`superpowers/specs/`](./superpowers/specs/) | 单次设计 spec（brainstorming 产出） | 启动新功能 / 模块 / 流程 |
+| [`superpowers/plans/`](./superpowers/plans/) | 实施 plan（writing-plans 产出） | spec 通过 G2 后，进入实施前 |
 | [`adr/`](./adr/) | 架构决策记录（append-only） | 决策需让 6 个月后的 AI 也能看懂 |
 | [`versions/`](./versions/) | 版本路线 + 每版本验收 + release notes 草稿 | 计划下一个 vX.Y.Z 时；发版前后更新 |
 | [`runbooks/`](./runbooks/) | AI 可执行的标准操作流程 | 任何 AI 要按部就班跑的操作 |

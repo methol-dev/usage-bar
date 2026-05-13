@@ -10,13 +10,22 @@ AI 可执行的标准操作流程。每份 runbook 都是"命令式"的——按
 
 ## 当前清单
 
-| Runbook | 用途 | 状态 |
+### Active runbooks（可执行）
+
+| Runbook | 用途 |
+|---|---|
+| [`release.md`](./release.md) | 标准发版流程（含 AI 自动写 CHANGELOG） |
+| [`add-new-provider.md`](./add-new-provider.md) | 接入新用量数据源 provider 的实施清单 |
+
+### Placeholder runbooks（占位，未来落地）
+
+> 这些文件仅有骨架，**真正执行前必须先按 [`AGENTS.md`](../../AGENTS.md) §6 hard gate 升级人类**。
+
+| Runbook | 用途 | 触发时机 |
 |---|---|---|
-| [`release.md`](./release.md) | 标准发版流程（含 AI 自动写 CHANGELOG） | active |
-| [`add-new-provider.md`](./add-new-provider.md) | 接入新用量数据源 provider 的实施清单 | active |
-| [`notarization.md`](./notarization.md) | Apple Developer ID 公证 | placeholder（v0.2.1 落地时填） |
-| [`sparkle-keys.md`](./sparkle-keys.md) | Sparkle Ed25519 密钥操作 | placeholder |
-| [`incident-response.md`](./incident-response.md) | 应急响应 + 回滚 + 复盘 | placeholder |
+| [`notarization.md`](./notarization.md) | Apple Developer ID 公证 | v0.2.1 落地时填 |
+| [`sparkle-keys.md`](./sparkle-keys.md) | Sparkle Ed25519 密钥操作 | 凭证操作时填 |
+| [`incident-response.md`](./incident-response.md) | 应急响应 + 回滚 + 复盘 | 首次 incident 时填 |
 
 ## 编写新 runbook
 

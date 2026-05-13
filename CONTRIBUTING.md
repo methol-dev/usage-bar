@@ -2,6 +2,14 @@
 
 Thanks for your interest in contributing! This guide will help you get set up and make sure your changes land smoothly.
 
+> **Note: this project is AI-led** ([ADR 0003](docs/adr/0003-ai-led-development.md)).
+> Day-to-day implementation, testing, and CHANGELOG generation are handled by AI agents
+> under the governance contract in [`AGENTS.md`](AGENTS.md). Human contributors are welcome —
+> please prefer opening a [GitHub Issue](https://github.com/methol/usage-bar/issues/new) describing
+> the bug or feature first; AI agents will pick it up via the
+> [issue-driven workflow](docs/workflow/issue-driven.md) and produce a PR. Direct PRs are still
+> accepted but may be re-routed through that flow for consistency.
+
 ## Prerequisites
 
 - macOS 14 (Sonoma) or later
@@ -21,16 +29,25 @@ This builds the release binary via Swift Package Manager, bundles it as a `.app`
 ## Project structure
 
 ```
-Sources/UsageBar/
-├── UsageBarApp.swift      # App entry point, menu bar setup
-├── UsageService.swift           # OAuth, polling, API calls
-├── UsageModel.swift             # API response types
-├── UsageHistoryModel.swift      # History data types, time ranges
-├── UsageHistoryService.swift    # Persistence, downsampling
-├── UsageChartView.swift         # Swift Charts trajectory view
-├── PopoverView.swift            # Main popover UI
-└── MenuBarIconRenderer.swift    # Menu bar icon drawing
+macos/Sources/UsageBar/
+├── App/             # Entry point, app delegate, Sparkle updater wrapper
+├── Models/          # Data types: credentials, accounts, usage snapshots
+├── Services/        # UsageHistoryService, NotificationService, ProviderCoordinator
+├── Providers/
+│   ├── Core/        # UsageProvider protocol
+│   ├── Claude/      # Claude provider: OAuth, polling, backoff
+│   └── Codex/       # Codex provider: ~/.codex/auth.json + JSONL scan
+├── Pricing/         # LiteLLM snapshot loader + per-provider normalize
+├── LocalCost/       # JSONL parser, aggregator, scan cursor store
+├── MenuBar/         # Menu bar label + icon rendering
+├── Features/
+│   ├── Popover/     # Main popover UI (hero card, chart, heatmap)
+│   └── Settings/    # Settings window
+├── Utilities/       # Pace / Trend calculators, formatters
+└── Resources/       # Info.plist, Assets.xcassets, litellm_model_prices.json
 ```
+
+See [`docs/superpowers/specs/2026-05-13-code-structure-hygiene.md`](docs/superpowers/specs/2026-05-13-code-structure-hygiene.md) §3.3 for the authoritative file mapping.
 
 ## Build commands
 
