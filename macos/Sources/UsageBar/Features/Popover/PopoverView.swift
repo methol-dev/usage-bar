@@ -18,13 +18,23 @@ struct PopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             let claudeEnabled = coordinator.enabledProviderIDs.contains(.claude)
             if claudeEnabled && !claude.isAuthenticated {
-                notAuthenticatedView
+                NotAuthenticatedView(coordinator: coordinator, claude: claude)
             } else if coordinator.availableIDs.isEmpty {
-                noProvidersView
+                NoProvidersView()
             } else {
                 if claudeEnabled { AccountSwitcherView(service: claude) }
                 ProviderTabBar(selection: $selectedProvider, availableIDs: coordinator.availableIDs)
-                providerArea
+                ProviderAreaView(
+                    selectedProvider: $selectedProvider,
+                    coordinator: coordinator,
+                    historyService: historyService,
+                    codexStats: codexStats,
+                    appUpdater: appUpdater
+                ) {
+                    BottomBarView(selectedProvider: $selectedProvider,
+                                  coordinator: coordinator,
+                                  appUpdater: appUpdater)
+                }
             }
         }
         .padding()
@@ -52,33 +62,43 @@ struct PopoverView: View {
 
     // MARK: - Provider 内容区路由
 
-    @ViewBuilder
-    private var providerArea: some View {
-        if selectedProvider == .claude && coordinator.availableIDs.contains(.claude) {
-            claudeUsageArea
-        } else if coordinator.availableIDs.contains(selectedProvider),
-                  let runtime = coordinator.runtime(for: selectedProvider) {
-            // v0.2.6 起：泛化的 provider 用量区（Codex 等）。configured/unconfigured 由 ProviderUsageArea
-            // 内部读 runtime.isConfigured 决定 —— 这样 runtime 的 @Published 变化能驱动该子树重渲染
-            // （父视图 PopoverView 不必然在切 tab + 拉取后重渲染；v0.2.5 G5 nit ②）。
-            let history: (service: UsageHistoryService, primaryLabel: String, secondaryLabel: String)? =
-                (selectedProvider == .codex
-                    ? (coordinator.provider(.codex) as? CodexProvider).map { ($0.history, "Session", "Weekly") }
+    private struct ProviderAreaView<BottomBar: View>: View {
+        @Binding var selectedProvider: ProviderID
+        @ObservedObject var coordinator: ProviderCoordinator
+        @ObservedObject var historyService: UsageHistoryService
+        @ObservedObject var codexStats: UsageStatsService
+        @ObservedObject var appUpdater: AppUpdater
+        @ViewBuilder let bottomBar: () -> BottomBar
+
+        var body: some View {
+            if selectedProvider == .claude && coordinator.availableIDs.contains(.claude) {
+                ClaudeUsageAreaView(coordinator: coordinator,
+                                    historyService: historyService,
+                                    appUpdater: appUpdater,
+                                    bottomBar: bottomBar)
+            } else if coordinator.availableIDs.contains(selectedProvider),
+                      let runtime = coordinator.runtime(for: selectedProvider) {
+                // v0.2.6 起：泛化的 provider 用量区（Codex 等）。configured/unconfigured 由 ProviderUsageArea
+                // 内部读 runtime.isConfigured 决定 —— 这样 runtime 的 @Published 变化能驱动该子树重渲染。
+                let history: (service: UsageHistoryService, primaryLabel: String, secondaryLabel: String)? =
+                    (selectedProvider == .codex
+                        ? (coordinator.provider(.codex) as? CodexProvider).map { ($0.history, "Session", "Weekly") }
+                        : nil)
+                let costStats: UsageStatsService? = (selectedProvider == .codex ? codexStats : nil)
+                let costContext: ProviderCostContext? = (selectedProvider == .codex
+                    ? ProviderCostContext(pricing: OpenAIModelPriceTable.shared, displayName: { OpenAIPricing.displayName($0) })
                     : nil)
-            let costStats: UsageStatsService? = (selectedProvider == .codex ? codexStats : nil)
-            let costContext: ProviderCostContext? = (selectedProvider == .codex
-                ? ProviderCostContext(pricing: OpenAIModelPriceTable.shared, displayName: { OpenAIPricing.displayName($0) })
-                : nil)
-            ProviderUsageArea(runtime: runtime,
-                              providerID: selectedProvider,
-                              onBackToClaude: { selectedProvider = coordinator.availableIDs.first ?? .claude },
-                              history: history,
-                              costStats: costStats,
-                              costContext: costContext,
-                              bottomBar: { bottomBar })
-        } else {
-            ProviderComingSoonView(provider: selectedProvider,
-                                   onBackToClaude: { selectedProvider = coordinator.availableIDs.first ?? .claude })
+                ProviderUsageArea(runtime: runtime,
+                                  providerID: selectedProvider,
+                                  onBackToClaude: { selectedProvider = coordinator.availableIDs.first ?? .claude },
+                                  history: history,
+                                  costStats: costStats,
+                                  costContext: costContext,
+                                  bottomBar: bottomBar)
+            } else {
+                ProviderComingSoonView(provider: selectedProvider,
+                                       onBackToClaude: { selectedProvider = coordinator.availableIDs.first ?? .claude })
+            }
         }
     }
 
@@ -180,142 +200,157 @@ struct PopoverView: View {
         }
     }
 
-    // MARK: - Claude 已登录的用量区（与重构前 usageView 内容/顺序一致）
+    // MARK: - Claude 已登录的用量区（与重构前 claudeUsageArea 内容/顺序一致）
 
-    @ViewBuilder
-    private var claudeUsageArea: some View {
-        // TODO(perf): trend/pace 在 body 每次重渲染都 O(n) 重算（v0.0.9/v0.0.11 G5 R2 noted）。
-        // 30 天 ~千点 history 下影响可接受；polling↑/retention↑ 至 ~万点时迁 UsageService @Published 缓存。
-        let runtime = coordinator.claude.runtime
-        let points = historyService.history.dataPoints
-        let snap = runtime.snapshot
-        let trend5h = computeTrend(currentPct: snap?.primaryWindow?.utilizationPct, points: points, metric: \.pct5h)
-        let trend7d = computeTrend(currentPct: snap?.secondaryWindow?.utilizationPct, points: points, metric: \.pct7d)
+    private struct ClaudeUsageAreaView<BottomBar: View>: View {
+        @ObservedObject var coordinator: ProviderCoordinator
+        @ObservedObject var historyService: UsageHistoryService
+        /// 从环境读取 Claude 的本机费用统计（UsageBarApp 只注入 Claude 的 usageStats 入 env；
+        /// codexStats 走构造参数从不进 env，无同类型碰撞，见 UsageBarApp.swift:13-26）。
+        @EnvironmentObject var usageStats: UsageStatsService
+        @ObservedObject var appUpdater: AppUpdater
+        @ViewBuilder let bottomBar: () -> BottomBar
 
-        ProviderUsageSection(runtime: runtime, trendPrimary: trend5h, trendSecondary: trend7d)
+        var body: some View {
+            // TODO(perf): trend/pace 在 body 每次重渲染都 O(n) 重算（v0.0.9/v0.0.11 G5 R2 noted）。
+            // 30 天 ~千点 history 下影响可接受；polling↑/retention↑ 至 ~万点时迁 UsageService @Published 缓存。
+            let runtime = coordinator.claude.runtime
+            let points = historyService.history.dataPoints
+            let snap = runtime.snapshot
+            let trend5h = computeTrend(currentPct: snap?.primaryWindow?.utilizationPct, points: points, metric: \.pct5h)
+            let trend7d = computeTrend(currentPct: snap?.secondaryWindow?.utilizationPct, points: points, metric: \.pct7d)
 
-        UsageCard {
-            UsageChartSectionView(historyService: historyService, recentEvents: usageStats.recentEvents)
-        }
+            ProviderUsageSection(runtime: runtime, trendPrimary: trend5h, trendSecondary: trend7d)
 
-        if !usageStats.dailySpend.isEmpty && !usageStats.dailySpend.allSatisfy({ $0.usd == 0 }) {
             UsageCard {
-                UsageHeatmapView(daySpends: usageStats.dailySpend, isInitializing: usageStats.isInitializing)
+                UsageChartSectionView(historyService: historyService, recentEvents: usageStats.recentEvents)
             }
-        }
 
-        if let error = runtime.lastError {
-            UsageCard {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
-                    .font(.caption)
+            if !usageStats.dailySpend.isEmpty && !usageStats.dailySpend.allSatisfy({ $0.usd == 0 }) {
+                UsageCard {
+                    UsageHeatmapView(daySpends: usageStats.dailySpend, isInitializing: usageStats.isInitializing)
+                }
             }
-        }
 
-        if let updaterError = appUpdater.lastError {
-            UsageCard {
-                Label(updaterError, systemImage: "arrow.triangle.2.circlepath.circle")
-                    .foregroundStyle(.red)
-                    .font(.caption)
+            if let error = runtime.lastError {
+                UsageCard {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
             }
-        }
 
-        if let updated = runtime.lastUpdated {
-            HStack(spacing: 12) {
-                Text("Updated \(updated, style: .relative) ago")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
+            if let updaterError = appUpdater.lastError {
+                UsageCard {
+                    Label(updaterError, systemImage: "arrow.triangle.2.circlepath.circle")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
             }
-        }
 
-        bottomBar
+            if let updated = runtime.lastUpdated {
+                HStack(spacing: 12) {
+                    Text("Updated \(updated, style: .relative) ago")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            }
+
+            bottomBar()
+        }
     }
 
     // MARK: - 共用底部栏
 
-    @ViewBuilder
-    private var bottomBar: some View {
-        HStack(spacing: 12) {
-            settingsButton
-            Spacer()
-            Button("Refresh") {
-                let id = selectedProvider
-                Task { await coordinator.refreshNow(id) }
-            }
-            .buttonStyle(.borderless)
-            .font(.caption)
-            if appUpdater.isConfigured {
-                Button("Check for Updates…") {
-                    appUpdater.checkForUpdates()
+    private struct BottomBarView: View {
+        @Binding var selectedProvider: ProviderID
+        @ObservedObject var coordinator: ProviderCoordinator
+        @ObservedObject var appUpdater: AppUpdater
+
+        var body: some View {
+            HStack(spacing: 12) {
+                SettingsLink { Text("Settings…") }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                Spacer()
+                Button("Refresh") {
+                    let id = selectedProvider
+                    Task { await coordinator.refreshNow(id) }
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
-                .disabled(!appUpdater.canCheckForUpdates)
+                if appUpdater.isConfigured {
+                    Button("Check for Updates…") {
+                        appUpdater.checkForUpdates()
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .disabled(!appUpdater.canCheckForUpdates)
+                }
+                Button("Quit") { NSApplication.shared.terminate(nil) }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            Button("Quit") { NSApplication.shared.terminate(nil) }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
-    @ViewBuilder
-    private var noProvidersView: some View {
-        VStack(spacing: 12) {
-            Text("没有启用的供应商")
+    private struct NoProvidersView: View {
+        var body: some View {
+            VStack(spacing: 12) {
+                Text("没有启用的供应商")
+                    .font(.headline)
+                Text("请在设置中至少启用一个供应商。")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                SettingsLink { Text("打开设置") }
+                    .buttonStyle(.borderedProminent)
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+            Divider()
+            HStack {
+                Spacer()
+                Button("Quit") { NSApplication.shared.terminate(nil) }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private struct NotAuthenticatedView: View {
+        @ObservedObject var coordinator: ProviderCoordinator
+        @ObservedObject var claude: UsageService
+
+        var body: some View {
+            Text("未检测到有效的授权凭证")
                 .font(.headline)
-            Text("请在设置中至少启用一个供应商。")
+            Text("请在终端完成 Claude 授权后，点击「重新检测」或重启本应用。")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            SettingsLink { Text("打开设置") }
-                .buttonStyle(.borderedProminent)
+                .multilineTextAlignment(.leading)
+            Button("重新检测") {
+                Task { await coordinator.claude.bootstrapFromCLIIfNeeded() }
+            }
+            .buttonStyle(.borderedProminent)
+            .frame(maxWidth: .infinity)
+            if let error = claude.lastError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+            }
+            Divider()
+            HStack {
+                SettingsLink { Text("Settings…") }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                Spacer()
+                Button("Quit") { NSApplication.shared.terminate(nil) }
+                    .buttonStyle(.borderless)
+            }
         }
-        .padding()
-        .frame(maxWidth: .infinity)
-        Divider()
-        HStack {
-            Spacer()
-            Button("Quit") { NSApplication.shared.terminate(nil) }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder
-    private var notAuthenticatedView: some View {
-        Text("未检测到有效的授权凭证")
-            .font(.headline)
-        Text("请在终端完成 Claude 授权后，点击「重新检测」或重启本应用。")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.leading)
-        Button("重新检测") {
-            Task { await coordinator.claude.bootstrapFromCLIIfNeeded() }
-        }
-        .buttonStyle(.borderedProminent)
-        .frame(maxWidth: .infinity)
-        if let error = claude.lastError {
-            Label(error, systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.red)
-                .font(.caption)
-        }
-        Divider()
-        HStack {
-            settingsButton
-            Spacer()
-            Button("Quit") { NSApplication.shared.terminate(nil) }
-                .buttonStyle(.borderless)
-        }
-    }
-
-    private var settingsButton: some View {
-        SettingsLink {
-            Text("Settings…")
-        }
-        .buttonStyle(.borderless)
-        .font(.caption)
     }
 }
 
