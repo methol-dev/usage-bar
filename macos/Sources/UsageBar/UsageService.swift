@@ -865,7 +865,6 @@ final class UsageService: ObservableObject {
 extension UsageService: UsageProvider {
     var id: ProviderID { .claude }
     var isConfigured: Bool { isAuthenticated }
-    var supportsBackgroundPolling: Bool { true }
 
     /// 「拉一次」（popover Refresh 按钮 / coordinator 的后台 tick）。不做内部节流——Refresh 按钮就是要强制重拉。
     /// 顺带补一次 profile（账号 email）—— 原本在已退役的 `startPolling()` 里。

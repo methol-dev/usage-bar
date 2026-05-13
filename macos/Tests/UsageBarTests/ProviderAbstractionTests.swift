@@ -234,7 +234,6 @@ final class ProviderAbstractionTests: XCTestCase {
 private final class StubProvider: UsageProvider {
     let id: ProviderID
     var isConfigured: Bool = true
-    var supportsBackgroundPolling: Bool = false
     let runtime = ProviderRuntime(isConfigured: true)
     var onPollTick: (@MainActor () -> Void)? = nil
     /// 测试可设：让 coordinator 的 tick 跳过本 stub（模拟 backoff 窗口）。

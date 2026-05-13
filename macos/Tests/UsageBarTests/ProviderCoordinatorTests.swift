@@ -196,7 +196,6 @@ final class ProviderCoordinatorTests: XCTestCase {
 private final class StubProviderForCoordTest: UsageProvider {
     let id: ProviderID
     var isConfigured = true
-    var supportsBackgroundPolling = false
     let runtime = ProviderRuntime(isConfigured: true)
     var onPollTick: (@MainActor () -> Void)? = nil
     var nextEligibleRefreshOverride: Date? = nil

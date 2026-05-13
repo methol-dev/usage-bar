@@ -51,23 +51,19 @@ struct CreditLine: Equatable {
     var remainingAmount: Double?
     /// 无限额度 —— Codex `credits.unlimited`。
     var isUnlimited: Bool
-    /// 货币代码（如 `"USD"`）。nil = 按默认（`$`）渲染。
-    var currencyCode: String?
 
     init(isEnabled: Bool,
          utilizationPct: Double? = nil,
          usedAmount: Double? = nil,
          limitAmount: Double? = nil,
          remainingAmount: Double? = nil,
-         isUnlimited: Bool = false,
-         currencyCode: String? = nil) {
+         isUnlimited: Bool = false) {
         self.isEnabled = isEnabled
         self.utilizationPct = utilizationPct
         self.usedAmount = usedAmount
         self.limitAmount = limitAmount
         self.remainingAmount = remainingAmount
         self.isUnlimited = isUnlimited
-        self.currencyCode = currencyCode
     }
 }
 

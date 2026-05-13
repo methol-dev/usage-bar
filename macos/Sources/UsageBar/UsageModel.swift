@@ -248,8 +248,7 @@ extension UsageResponse {
                 isEnabled: extra.isEnabled,
                 utilizationPct: extra.utilization,
                 usedAmount: extra.usedCreditsAmount,
-                limitAmount: extra.monthlyLimitAmount,
-                currencyCode: nil
+                limitAmount: extra.monthlyLimitAmount
             )
         }
 

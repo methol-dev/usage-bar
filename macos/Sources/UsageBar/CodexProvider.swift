@@ -9,9 +9,6 @@ import Foundation
 final class CodexProvider: UsageProvider {
     let id: ProviderID = .codex
     let runtime = ProviderRuntime()
-    /// TODO(后续): 这个 flag 现在没消费者了（v0.2.10 退役了 `primaryEligibleIDs` 的「menu-bar 候选资格」用途，菜单栏已 provider-aware）——
-    /// 要么彻底从 `UsageProvider` 协议退役、要么改用途。暂留 `false` 以免协议改动波及面太大。
-    let supportsBackgroundPolling = false
 
     /// 本 provider 的历史样本（与 Claude 的 `history.json` 同结构，不同文件 `history-codex.json`）。
     let history: UsageHistoryService
