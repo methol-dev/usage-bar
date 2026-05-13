@@ -11,7 +11,10 @@ struct MultiMenuBarLabel: View {
                 Image(systemName: "chart.bar")
                     .font(.system(size: 14, weight: .medium))
             } else {
-                ForEach(coordinator.menuBarVisibleIDs, id: \.self) { id in
+                ForEach(Array(coordinator.menuBarVisibleIDs.enumerated()), id: \.element) { index, id in
+                    if index > 0 {
+                        Divider().frame(height: 12)
+                    }
                     if let runtime = coordinator.runtime(for: id) {
                         MenuBarLabel(runtime: runtime, providerID: id)
                     }

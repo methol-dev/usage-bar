@@ -103,11 +103,10 @@ private struct ProviderRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(id.displayName)
                     .foregroundStyle(registered ? .primary : .secondary)
-                if !registered {
-                    Text("coming soon")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+                // 始终保留 caption2 高度，已注册行与 coming soon 行等高
+                Text(registered ? "" : "coming soon")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
             Spacer()
             Toggle(isOn: Binding(
@@ -120,8 +119,9 @@ private struct ProviderRow: View {
             .controlSize(.small)
             .disabled(!enabled || !registered)
             .help("显示在菜单栏")
+            // 未注册 provider 在 UI 上显示为 OFF（enabledProviderIDs 里的值保留，等接入时自动恢复）
             Toggle("", isOn: Binding(
-                get: { enabled },
+                get: { enabled && registered },
                 set: { coordinator.setEnabled(id, $0) }
             ))
             .labelsHidden()
