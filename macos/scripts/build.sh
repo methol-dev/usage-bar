@@ -126,11 +126,11 @@ build_app_bundle() {
         "$PLUTIL" -remove SUFeedURL "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
     fi
 
-    # arm64 path has the flat bundle layout expected by verify-release.sh;
-    # apple/Products/Release uses a nested Contents/ layout that is incompatible.
+    # Primary: single-arch build; fallback: universal build via xcodebuild uses
+    # apple/Products/Release/ (capital R) which -path case-sensitively misses.
     local resource_bundle="$BUILD_DIR/arm64-apple-macosx/release/${APP_NAME}_${APP_NAME}.bundle"
     if [[ ! -d "$resource_bundle" ]]; then
-        resource_bundle="$(find "$BUILD_DIR" -path "*/release/${APP_NAME}_${APP_NAME}.bundle" -type d | head -n 1 || true)"
+        resource_bundle="$(find "$BUILD_DIR" -name "${APP_NAME}_${APP_NAME}.bundle" -type d | head -n 1 || true)"
     fi
 
     if [[ -z "$resource_bundle" || ! -d "$resource_bundle" ]]; then
