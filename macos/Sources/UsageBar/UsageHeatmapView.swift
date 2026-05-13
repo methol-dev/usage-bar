@@ -151,6 +151,7 @@ struct UsageHeatmapView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         .onChange(of: daySpends) { _, newValue in
             model = UsageHeatmapModel(daySpends: newValue)
+            hovered = nil   // 避免悬空：旧 model 的 cell 不在新 model 里
         }
     }
 }
