@@ -155,34 +155,31 @@ final class ProviderAbstractionTests: XCTestCase {
         let d = UserDefaults(suiteName: "abs-coord-\(UUID().uuidString)")!
         let claude = try makeBareService()
         let coord = ProviderCoordinator(claude: claude, defaults: d)
-        XCTAssertEqual(coord.menuBarProviderID, .claude)
-        XCTAssertTrue(coord.menuBarRuntime === claude.runtime)
+        XCTAssertTrue(coord.menuBarVisibleIDs.contains(.claude))
         XCTAssertEqual(coord.availableIDs, [.claude])
         XCTAssertTrue(coord.claude === claude)
     }
 
     @MainActor
-    func testCoordinatorMenuBarSwitchTracksRuntime() throws {
+    func testCoordinatorMenuBarVisibleIDsTracksEnabledAndVisible() throws {
         let name = "abs-coord-\(UUID().uuidString)"
         let d = UserDefaults(suiteName: name)!; d.removePersistentDomain(forName: name)
         let claude = try makeBareService()
-        // v0.2.10：任何「已注册 + 已启用」的 provider 都能当菜单栏 provider（不再限 supportsBackgroundPolling）。
+        // 任何「已注册 + 已启用 + 菜单栏可见」的 provider 都会出现在 menuBarVisibleIDs。
         let stub = StubProvider(id: .codex)
         let coord = ProviderCoordinator(claude: claude, additionalProviders: [stub], defaults: d)
         XCTAssertEqual(Set(coord.availableIDs), Set([.claude, .codex]))
-        XCTAssertTrue(coord.menuBarRuntime === claude.runtime)
+        XCTAssertTrue(Set(coord.menuBarVisibleIDs).isSuperset(of: [.claude, .codex]))
 
-        coord.menuBarProviderID = .codex
-        XCTAssertTrue(coord.menuBarRuntime === stub.runtime)
-        XCTAssertEqual(d.string(forKey: ProviderCoordinator.menuBarProviderKey), "codex")
+        // 隐藏 codex → 不再出现在 menuBarVisibleIDs
+        coord.setMenuBarVisible(.codex, false)
+        XCTAssertFalse(coord.menuBarVisibleIDs.contains(.codex))
+        XCTAssertTrue(coord.menuBarVisibleIDs.contains(.claude))
 
-        // 新建 coordinator 应从 UserDefaults 恢复（codex 仍注册+启用 → 保留）
+        // 新建 coordinator 应从 UserDefaults 恢复（codex 被隐藏的状态持久化）
         let coord2 = ProviderCoordinator(claude: try makeBareService(), additionalProviders: [StubProvider(id: .codex)], defaults: d)
-        XCTAssertEqual(coord2.menuBarProviderID, .codex)
-
-        // codex 不再注册 → 回退 .claude
-        let coord3 = ProviderCoordinator(claude: try makeBareService(), defaults: d)
-        XCTAssertEqual(coord3.menuBarProviderID, .claude)
+        XCTAssertFalse(coord2.menuBarVisibleIDs.contains(.codex))
+        XCTAssertTrue(coord2.menuBarVisibleIDs.contains(.claude))
     }
 
     // MARK: - SC5-c：一次成功 fetch 后 recordDataPoint / checkAndNotify 仍被调用

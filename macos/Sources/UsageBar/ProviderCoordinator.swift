@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// 多 provider 的「门面」—— 持有注册表 + provider 顺序 / 启用集 / 菜单栏 provider + 非-Claude 的后台 timer + 按需 refresh。
+/// 多 provider 的「门面」—— 持有注册表 + provider 顺序 / 启用集 / 菜单栏可见集 + 非-Claude 的后台 timer + 按需 refresh。
 ///
 /// v0.2.11：coordinator 持一个统一的后台 timer，覆盖**所有** enabled provider（含 Claude）—— 间隔 = `pollingMinutes`，监听 UserDefaults 变化重起。
 /// Claude 的 429 backoff 由它自己的 `UsageService.fetchUsage` 记进 `backoffUntil`（暴露为 `nextEligibleRefresh`），coordinator 的 tick 在 backoff 窗口内会跳过本 provider。
@@ -13,48 +13,24 @@ final class ProviderCoordinator: ObservableObject {
     private let defaults: UserDefaults
 
     // MARK: - 持久化 key
-    /// 菜单栏 provider —— 沿用旧 key（v0.2.6~v0.2.9 叫 `primaryProviderID`，老用户偏好不丢）。
-    static let menuBarProviderKey = "primaryProviderID"
     static let providerOrderKey = "providerOrder"
     static let enabledProvidersKey = "enabledProviders"
+    static let menuBarVisibleProvidersKey = "menuBarVisibleProviders"
 
     // MARK: - provider 顺序（含未注册的占位 provider；Settings 列表与 popover tab 顺序的来源）
     @Published var orderedProviderIDs: [ProviderID] {
         didSet { defaults.set(orderedProviderIDs.map(\.rawValue), forKey: Self.providerOrderKey) }
     }
 
-    // MARK: - 启用集（Claude 恒在 —— 它承载登录 UX）
+    // MARK: - 启用集
     @Published private(set) var enabledProviderIDs: Set<ProviderID> {
-        didSet {
-            var s = enabledProviderIDs
-            s.insert(.claude)
-            if s != enabledProviderIDs {
-                enabledProviderIDs = s            // 补上 .claude 后 re-enter 一次；那次 s == enabledProviderIDs → 落到下面
-                return
-            }
-            defaults.set(enabledProviderIDs.map(\.rawValue), forKey: Self.enabledProvidersKey)
-            // 启用集变了 → 菜单栏 provider 可能失效（如它刚被禁用）
-            if !(enabledProviderIDs.contains(menuBarProviderID) && registry.isAvailable(menuBarProviderID)) {
-                menuBarProviderID = firstMenuBarEligible()
-            }
-        }
+        didSet { defaults.set(enabledProviderIDs.map(\.rawValue), forKey: Self.enabledProvidersKey) }
     }
 
-    // MARK: - 菜单栏 provider（取代 v0.2.6 的 `primaryProviderID`；约束 ∈ enabled ∩ registered）
-    @Published var menuBarProviderID: ProviderID {
-        didSet {
-            guard !isRevertingMenuBar else { return }
-            guard menuBarProviderID != oldValue else { return }
-            guard enabledProviderIDs.contains(menuBarProviderID), registry.isAvailable(menuBarProviderID) else {
-                isRevertingMenuBar = true
-                menuBarProviderID = oldValue      // 拒绝非法值：恢复旧值（不写 UserDefaults）
-                isRevertingMenuBar = false
-                return
-            }
-            defaults.set(menuBarProviderID.rawValue, forKey: Self.menuBarProviderKey)
-        }
+    // MARK: - 菜单栏可见集（独立于启用集；用户可逐个控制是否在菜单栏显示）
+    @Published private(set) var menuBarVisibleProviderIDs: Set<ProviderID> {
+        didSet { defaults.set(menuBarVisibleProviderIDs.map(\.rawValue), forKey: Self.menuBarVisibleProvidersKey) }
     }
-    private var isRevertingMenuBar = false
 
     // MARK: - 后台 timer（非-Claude provider）
     private var backgroundTimer: AnyCancellable?
@@ -81,38 +57,33 @@ final class ProviderCoordinator: ObservableObject {
         for id in registry.orderedIDs where !seen.contains(id) { order.append(id); seen.insert(id) }
         if order.isEmpty { order = registry.orderedIDs }
 
-        // 启用集：读盘 → ∩ allCases → 强制含 .claude；从没存过 → 默认全 allCases
+        // 启用集：读盘 → ∩ allCases；从没存过 → 默认全 allCases
         var enabled: Set<ProviderID>
         if let storedEnabled = defaults.stringArray(forKey: Self.enabledProvidersKey) {
             enabled = Set(storedEnabled.compactMap(ProviderID.init(rawValue:)).filter { ProviderID.allCases.contains($0) })
-            enabled.insert(.claude)
         } else {
             enabled = Set(ProviderID.allCases)
         }
 
-        // 菜单栏 provider：读盘 → 校验 ∈ enabled ∩ registered，否则首个合格的（最坏 .claude）
-        let registeredIDs = registry.availableIDs
-        let storedMenuBar = defaults.string(forKey: Self.menuBarProviderKey).flatMap(ProviderID.init(rawValue:))
-        let menuBar: ProviderID
-        if let m = storedMenuBar, enabled.contains(m), registeredIDs.contains(m) {
-            menuBar = m
+        // 菜单栏可见集：读盘 → ∩ allCases；从没存过 → 默认全 allCases（首次升级保留全显行为）
+        let menuBarVisible: Set<ProviderID>
+        if let stored = defaults.stringArray(forKey: Self.menuBarVisibleProvidersKey) {
+            menuBarVisible = Set(stored.compactMap(ProviderID.init(rawValue:)).filter { ProviderID.allCases.contains($0) })
         } else {
-            menuBar = order.first(where: { enabled.contains($0) && registeredIDs.contains($0) }) ?? .claude
+            menuBarVisible = Set(ProviderID.allCases)
         }
 
         self.orderedProviderIDs = order
         self.enabledProviderIDs = enabled
-        self.menuBarProviderID = menuBar
-    }
-
-    private func firstMenuBarEligible() -> ProviderID {
-        orderedProviderIDs.first(where: { enabledProviderIDs.contains($0) && registry.isAvailable($0) }) ?? .claude
+        self.menuBarVisibleProviderIDs = menuBarVisible
     }
 
     // MARK: - mutators（Settings 用）
     func setEnabled(_ id: ProviderID, _ on: Bool) {
-        if id == .claude { return }                        // Claude 恒在，忽略关闭请求
         if on { enabledProviderIDs.insert(id) } else { enabledProviderIDs.remove(id) }
+    }
+    func setMenuBarVisible(_ id: ProviderID, _ on: Bool) {
+        if on { menuBarVisibleProviderIDs.insert(id) } else { menuBarVisibleProviderIDs.remove(id) }
     }
     func moveProvider(from source: IndexSet, to dest: Int) {
         orderedProviderIDs.move(fromOffsets: source, toOffset: dest)
@@ -125,8 +96,14 @@ final class ProviderCoordinator: ObservableObject {
     func isAvailable(_ id: ProviderID) -> Bool { registry.isAvailable(id) }
     /// popover tab 用：已注册 + 已启用，按用户排序。
     var availableIDs: [ProviderID] { orderedProviderIDs.filter { registry.isAvailable($0) && enabledProviderIDs.contains($0) } }
-    /// 菜单栏 provider 的 runtime（一定非 nil —— `menuBarProviderID` 已约束为可用 provider）。
-    var menuBarRuntime: ProviderRuntime { registry.provider(menuBarProviderID)?.runtime ?? claude.runtime }
+    /// 实际在菜单栏显示的 IDs：menuBarVisible ∩ availableIDs（enabled + registered），按用户排序。
+    var menuBarVisibleIDs: [ProviderID] {
+        orderedProviderIDs.filter {
+            menuBarVisibleProviderIDs.contains($0) &&
+            registry.isAvailable($0) &&
+            enabledProviderIDs.contains($0)
+        }
+    }
 
     /// 拉一次某 provider 的用量（popover Refresh 按钮用）。
     func refreshNow(_ id: ProviderID) async { await registry.provider(id)?.refreshNow() }
