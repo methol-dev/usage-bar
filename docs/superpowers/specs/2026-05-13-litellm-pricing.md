@@ -68,6 +68,18 @@ reviews:
       (M4) 排除 `sample_spec` 等非模型键、前缀匹配跳过 azure/vertex/bedrock、JSON 全 optional-cast 单 key 失败即 skip、下载与读取都加 size 上下限防 OOM、原子写用 `Data.write(.atomic)`；
       (轻 must-fix) URL 为编译期常量无运行时覆盖、无完整性校验是有意权衡（影响面仅 UI 估算 + 免责声明）、LiteLLM MIT 归属义务通过打包 THIRD_PARTY_LICENSES.txt + README 致谢履行。
       should-fix（S1~S5）已并入 §3.4/§3.2/§5。verdict 升为 accepted 由本次修订满足。
+  - gate: G3
+    reviewer: general-purpose subagent (independent, agentId a569ca0b7493d1c8d)
+    verdict: ready-with-revisions
+    date: 2026-05-13
+    notes: |
+      plan-review（针对 docs/superpowers/plans/2026-05-13-litellm-pricing.md）。SC1~SC8 + G2 五条 must-fix 全覆盖；
+      2 条 must-fix 已改进 plan：(1) Package.swift test target 无 resources 块、新增须 `.process("Fixtures")` 而非
+      `.process("Tests/UsageBarTests/Fixtures")`；(2) Task6 测试 helper 调用改 `makeCoordinator(freshDefaults())`。
+      4 条 should-fix 已改进：catalog 构造器全 plan 补 `minBytesOverride` 自洽（删「⚠️ 修正」补丁段）；Task3 骨架
+      去占位 `minBytes_orOverride` 用真表达式 + 补 downloader「必须最终调一次 completion」契约注；Task8 `restore_litellm_snapshot`
+      明确放 `build_app_bundle()` 函数体末尾；Task6 补「首次 ModelPricingCatalog.shared 在 MainActor 同步 reload ~2MB」注。
+      verdict 升为 ready 由本次修订满足。
 ---
 
 # 模型价格表改走 LiteLLM 数据源
