@@ -1,0 +1,13 @@
+{
+  "issue": 20,
+  "pr": 23,
+  "merge_commit": "805b8d3",
+  "completed_at": "2026-05-13",
+  "status": "passed",
+  "artifacts": [
+    "docs/artifacts/issues/20/diagnosis.md",
+    "docs/artifacts/issues/20/plan-review.md",
+    "docs/artifacts/issues/20/verification.md",
+    "docs/artifacts/issues/20/handoff.md"
+  ]
+}
