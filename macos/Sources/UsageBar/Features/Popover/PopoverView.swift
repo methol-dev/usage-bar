@@ -3,7 +3,7 @@ import SwiftUI
 struct PopoverView: View {
     @ObservedObject var coordinator: ProviderCoordinator
     /// Claude provider（登录 UX / polling 设置 / Sign Out 等 Claude 专属 UI 直接用它）。
-    /// 单独 `@ObservedObject` —— 这样 `isAuthenticated`/`isAwaitingCode`/`accounts`/`lastError` 变化能驱动重渲染
+    /// 单独 `@ObservedObject` —— 这样 `isAuthenticated`/`lastError`/`runtime` 变化能驱动重渲染
     /// （`coordinator` 的 `menuBarVisibleProviderIDs`/`orderedProviderIDs`/`enabledProviderIDs` 是 `@Published`，不覆盖 `coordinator.claude` 的变化）。
     @ObservedObject var claude: UsageService
     @ObservedObject var historyService: UsageHistoryService
@@ -22,7 +22,6 @@ struct PopoverView: View {
             } else if coordinator.availableIDs.isEmpty {
                 NoProvidersView()
             } else {
-                if claudeEnabled { AccountSwitcherView(service: claude) }
                 ProviderTabBar(selection: $selectedProvider, availableIDs: coordinator.availableIDs)
                 ProviderAreaView(
                     selectedProvider: $selectedProvider,
