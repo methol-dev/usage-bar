@@ -47,6 +47,40 @@ final class GeminiOAuthClientLocatorTests: XCTestCase {
         XCTAssertNil(locator.findClientIdSecret())
     }
 
+    func testBundledInstallFound() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let bundleDir = tmp.appendingPathComponent("lib/node_modules/@google/gemini-cli/bundle")
+        try FileManager.default.createDirectory(at: bundleDir, withIntermediateDirectories: true)
+        let content = #"const OAUTH_CLIENT_ID = "bundled-client-id.apps.googleusercontent.com"; const OAUTH_CLIENT_SECRET = "bundled-secret";"#
+        try Data(content.utf8).write(to: bundleDir.appendingPathComponent("chunk-ABCD1234.js"))
+        let locator = GeminiOAuthClientLocator(candidatePaths: [tmp])
+        let result = try XCTUnwrap(locator.findClientIdSecret())
+        XCTAssertEqual(result.clientId, "bundled-client-id.apps.googleusercontent.com")
+        XCTAssertEqual(result.clientSecret, "bundled-secret")
+    }
+
+    func testBundleDirMissingReturnsNil() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        // 创建 @google/gemini-cli 目录但不创建 bundle/ 子目录
+        let packageDir = tmp.appendingPathComponent("lib/node_modules/@google/gemini-cli")
+        try FileManager.default.createDirectory(at: packageDir, withIntermediateDirectories: true)
+        let locator = GeminiOAuthClientLocator(candidatePaths: [tmp])
+        XCTAssertNil(locator.findClientIdSecret())
+    }
+
+    func testCacheReturnsSameResult() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let bundleDir = tmp.appendingPathComponent("lib/node_modules/@google/gemini-cli/bundle")
+        try FileManager.default.createDirectory(at: bundleDir, withIntermediateDirectories: true)
+        let content = #"const OAUTH_CLIENT_ID = "cached-id.apps.googleusercontent.com"; const OAUTH_CLIENT_SECRET = "cached-secret";"#
+        try Data(content.utf8).write(to: bundleDir.appendingPathComponent("chunk-CACHE.js"))
+        let locator = GeminiOAuthClientLocator(candidatePaths: [tmp])
+        let first = locator.findClientIdSecret()
+        let second = locator.findClientIdSecret()
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(first?.clientId, "cached-id.apps.googleusercontent.com")
+    }
+
     func testFirstCandidateWins() throws {
         let first = try makeFakeInstall(at: "lib/node_modules/@google/gemini-cli-core/dist/src/code_assist")
         let second = try makeFakeInstall(at: "lib/node_modules/@google/gemini-cli-core/dist/src/code_assist")
