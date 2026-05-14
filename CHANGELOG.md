@@ -9,6 +9,16 @@
 
 ---
 
+## [v0.5.3] — 2026-05-14
+
+> spec: [`2026-05-14-observable-migration`](./docs/superpowers/specs/2026-05-14-observable-migration.md) · 版本: [`v0.5.3`](./docs/versions/v0.5.3-observable-migration-release.md)
+
+### 内部（Internal）
+
+- 全仓状态管理迁移至 Swift Observation framework（`@Observable`）：9 个模型/服务类从旧的 `ObservableObject` + `@Published` 体系切换到 macOS 14 原生追踪机制，手动 Combine 聚合层（`RuntimeAggregator`）随之删除。用户无感知功能变化，内存占用略有改善，属性变化响应更精准。（[#33](https://github.com/methol/usage-bar/pull/33)）
+
+---
+
 ## [v0.5.1] — 2026-05-14
 
 > spec: [`2026-05-14-claude-credentials-in-memory`](./docs/superpowers/specs/2026-05-14-claude-credentials-in-memory.md) · 版本: [`v0.5.1`](./docs/versions/v0.5.1-claude-credentials-in-memory.md)
