@@ -9,12 +9,13 @@ final class ProviderAbstractionTests: XCTestCase {
         try JSONDecoder().decode(UsageResponse.self, from: Data(json.utf8))
     }
 
-    /// 构造一个不碰真实 `~/.config/usage-bar/` 的 `UsageService`（空临时凭证目录）。
+    /// 构造一个不发网络/不读宿主机 Keychain 的 `UsageService`（cliKeychainLoader stub 返回 nil）。
+    /// v0.5.1：StoredCredentialsStore 已下线 —— 凭证只走 in-memory cache + Keychain loader。
     @MainActor
     private func makeBareService() throws -> UsageService {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return UsageService(credentialsStore: StoredCredentialsStore(directoryURL: dir))
+        let service = UsageService()
+        service.cliKeychainLoader = { _ in nil }
+        return service
     }
 
     // MARK: - UsageResponse → ProviderUsageSnapshot 映射（SC5-b：等价于重构前后字段快照对比）
@@ -186,15 +187,6 @@ final class ProviderAbstractionTests: XCTestCase {
 
     @MainActor
     func testSuccessfulFetchStillRecordsHistoryAndNotifies() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let store = StoredCredentialsStore(directoryURL: dir)
-        try store.save(StoredCredentials(
-            accessToken: "tok", refreshToken: "ref",
-            expiresAt: Date().addingTimeInterval(3600),  // 未过期 → 不触发 refresh
-            scopes: UsageService.defaultOAuthScopes
-        ))
-
         let usageURL = URL(string: "https://example.test/api/oauth/usage")!
         StubURLProtocol.handler = { _ in
             let resp = HTTPURLResponse(url: usageURL, statusCode: 200, httpVersion: nil, headerFields: [:])!
@@ -203,13 +195,19 @@ final class ProviderAbstractionTests: XCTestCase {
         }
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubURLProtocol.self]
+        // v0.5.1：凭证走 in-memory cache + Keychain loader stub；返回未过期 token → 直接进 200 主路径。
         let service = UsageService(
             session: URLSession(configuration: config),
-            usageEndpoint: usageURL,
-            userinfoEndpoint: URL(string: "https://example.test/api/oauth/userinfo")!,
-            tokenEndpoint: URL(string: "https://example.test/v1/oauth/token")!,
-            credentialsStore: store
+            usageEndpoint: usageURL
         )
+        service.cliKeychainLoader = { _ in
+            StoredCredentials(
+                accessToken: "tok",
+                refreshToken: nil,
+                expiresAt: Date().addingTimeInterval(3600),
+                scopes: ["user:profile"]
+            )
+        }
         let historySpy = HistorySpy()
         let notifySpy = NotifySpy()
         service.historyService = historySpy

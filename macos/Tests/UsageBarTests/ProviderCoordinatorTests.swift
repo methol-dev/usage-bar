@@ -9,15 +9,10 @@ final class ProviderCoordinatorTests: XCTestCase {
         d.removePersistentDomain(forName: name)
         return d
     }
-    private func tmpDir() -> URL {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }
-    /// claude = 真 UsageService（凭证目录指向临时空目录 → 未登录、不发网络）；codex = 真 CodexProvider（CODEX_HOME 指向不存在路径 → unconfigured）。
-    /// v0.5.1: 显式 stub cliKeychainLoader 返回 nil，避免新 fetchUsage 路径读宿主机真实 Claude Keychain。
+    /// claude = 真 UsageService（cliKeychainLoader stub → nil，等价未登录、不发网络）；codex = 真 CodexProvider（CODEX_HOME 指向不存在路径 → unconfigured）。
+    /// v0.5.1：StoredCredentialsStore 已下线 —— 凭证只走 in-memory cache + Keychain loader，loader stub 返回 nil 即 unconfigured。
     private func makeCoordinator(_ d: UserDefaults, withCodex: Bool = true) -> ProviderCoordinator {
-        let claude = UsageService(credentialsStore: StoredCredentialsStore(directoryURL: tmpDir()))
+        let claude = UsageService()
         claude.cliKeychainLoader = { _ in nil }
         let extras: [UsageProvider] = withCodex
             ? [CodexProvider(environment: ["CODEX_HOME": "/nonexistent-\(UUID().uuidString)"], defaults: d)]
@@ -80,7 +75,8 @@ final class ProviderCoordinatorTests: XCTestCase {
     // 修复 issue #10：有 snapshot 的 non-Claude provider 在 popover 打开时不再刷。
     func testRefreshAllEnabledOnOpenSkipsNonClaudeWhenSnapshotPresent() async {
         let d = freshDefaults()
-        let claude = UsageService(credentialsStore: StoredCredentialsStore(directoryURL: tmpDir()))
+        let claude = UsageService()
+        claude.cliKeychainLoader = { _ in nil }
         let stub = StubProviderForCoordTest(id: .cursor)
         stub.runtime.setSuccess(snapshot: ProviderUsageSnapshot())  // 已有数据
         let c = ProviderCoordinator(claude: claude, additionalProviders: [stub], defaults: d)
@@ -99,7 +95,8 @@ final class ProviderCoordinatorTests: XCTestCase {
     // backoff 窗口内的 provider 这一 tick 被跳过；窗口过后被 tick。
     func testBackoffWindowSkipsProvider() async {
         let d = freshDefaults()
-        let claude = UsageService(credentialsStore: StoredCredentialsStore(directoryURL: tmpDir()))
+        let claude = UsageService()
+        claude.cliKeychainLoader = { _ in nil }
         let stub = StubProviderForCoordTest(id: .cursor)   // cursor 默认 enabled、注册进去
         let c = ProviderCoordinator(claude: claude, additionalProviders: [stub], defaults: d)
         XCTAssertTrue(c.availableIDs.contains(.cursor))
