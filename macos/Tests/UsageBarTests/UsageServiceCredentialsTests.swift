@@ -87,6 +87,29 @@ final class UsageServiceCredentialsTests: XCTestCase {
         XCTAssertTrue(service.isAuthenticated)
     }
 
+    /// Retry 按钮 → 强制重读 Keychain (allowInteraction=true 传递确认)
+    func testRetrySignInForcesKeychainReload() async throws {
+        let service = UsageService(usageEndpoint: URL(string: "https://example.invalid/usage")!)
+        service._test_setInMemoryCredentials(StoredCredentials(
+            accessToken: "t-stale-but-not-expired",
+            refreshToken: nil,
+            expiresAt: Date().addingTimeInterval(3600),
+            scopes: []))
+        var receivedAllowInteraction: Bool? = nil
+        service.cliKeychainLoader = { allow in
+            receivedAllowInteraction = allow
+            return StoredCredentials(accessToken: "t-fresh", refreshToken: nil,
+                                     expiresAt: Date().addingTimeInterval(3600),
+                                     scopes: [])
+        }
+
+        await service.retrySignIn()
+        XCTAssertEqual(receivedAllowInteraction, true, "Retry 必须传 allowInteraction=true")
+        // cache 应被强制刷新即使原 cache 没过期
+        let after = await service.ensureFreshCredentials(allowInteraction: false)
+        XCTAssertEqual(after?.accessToken, "t-fresh")
+    }
+
     /// 401 → 清 cache → 重读 keychain 拿到同一个 token (CLI 没 refresh) → 不再重试 → setError 过期
     func testFetchUsage401SameTokenReportsExpired() async throws {
         let session = makeStubSession()

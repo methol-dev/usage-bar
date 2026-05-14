@@ -162,6 +162,13 @@ extension UsageService {
         isAuthenticated = (creds != nil)
         return creds
     }
+
+    /// v0.5.1 Retry 按钮 / 启动 task 用：清 cache + force allowInteraction=true 重读 Keychain。
+    /// 与 ensureFreshCredentials(allowInteraction: false) 的区别：① 必清 cache（绕过未过期判定）；② 允许首次 ACL prompt。
+    func retrySignIn() async {
+        inMemoryCredentials = nil
+        _ = await ensureFreshCredentials(allowInteraction: true)
+    }
 }
 
 // MARK: - OAuth & Credentials

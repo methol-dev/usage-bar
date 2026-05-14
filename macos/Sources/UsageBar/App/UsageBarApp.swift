@@ -46,7 +46,7 @@ struct UsageBarApp: App {
                     coordinator.claude.notificationService = notificationService
                     // v0.1.1: 启动期尝试复用 Claude CLI 凭证（Keychain 'Claude Code-credentials'）
                     // 内部已用 Task.detached 避免主线程阻塞
-                    await coordinator.claude.bootstrapFromCLIIfNeeded()
+                    await coordinator.claude.retrySignIn()
                     // 首次 refresh 本机 JSONL 统计（之后随后台 tick 的 onPollTick 继续更新）
                     await usageStats.refresh()
                     await codexStats.refresh()

@@ -332,7 +332,7 @@ struct PopoverView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
             Button("Retry") {
-                Task { await coordinator.claude.bootstrapFromCLIIfNeeded() }
+                Task { await coordinator.claude.retrySignIn() }
             }
             .buttonStyle(.borderedProminent)
             .frame(maxWidth: .infinity)
