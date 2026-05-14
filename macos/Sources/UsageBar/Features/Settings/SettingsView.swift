@@ -40,7 +40,9 @@ struct SettingsWindowContent: View {
                     .onMove { from, to in coordinator.moveProvider(from: from, to: to) }
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: false))
-                .frame(height: CGFloat(coordinator.orderedProviderIDs.count) * 44 + 8)
+                // 行实际高度 ~52pt（registered 单行 ~48 + List inset；unregistered 双行 ~56），
+                // 之前用 44 算最后一行（Gemini）会被截掉（issue: gemini 开关看不到）。
+                .frame(height: CGFloat(coordinator.orderedProviderIDs.count) * 60 + 16)
             }
 
             Section("Notifications") {
