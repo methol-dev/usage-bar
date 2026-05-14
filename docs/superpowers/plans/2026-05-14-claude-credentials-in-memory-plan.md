@@ -8,7 +8,23 @@ owner: claude-code
 model: claude-opus-4-7
 spec: 2026-05-14-claude-credentials-in-memory
 target_version: v0.5.1-claude-credentials-in-memory
-reviews: []
+reviews:
+  - round: 1
+    reviewer: general-purpose-subagent
+    verdict: approved-after-revisions
+    notes: |
+      6 条 required 已闭环:
+      (1) Task 5 Step 5.2 末尾补 refreshNow() 简化 (删 fetchProfile/accountEmail 调用);
+      (2) Task 6 Step 6.2 改 method-name 匹配, 删 line 号; 加 grep 兜底验证 keep-list;
+      (3) Task 8 新增 Step 8.7 SC4 evidence — grep refreshToken 限定在 struct/strategy 内, 验证无 OAuth refresh URL;
+      (4) Task 1/2 ensureFreshCredentials 显式 isAuthenticated = (creds != nil);
+      (5) Task 1 合并 Step 1.3/1.4 为单一最终版本 (cliKeychainLoader 签名升级 + 调用面同步 + 显式 isAuthenticated 写入);
+      (6) Task 2 新增 Step 2.4 给即将删的 17 + 多账号 case 加 XCTSkip, 满足 G4 每 commit 绿.
+      optional: makeStubSession 命名改为 "仿 GeminiAPIStubURLProtocol 模式".
+      coverage gap (SC4) 已闭环 (required #3).
+  - round: 2
+    reviewer: pending
+    verdict: pending
 ---
 
 # Claude 凭证改 in-memory only Implementation Plan
@@ -106,9 +122,9 @@ final class UsageServiceCredentialsTests: XCTestCase {
 Run: `cd macos && swift test --filter UsageServiceCredentialsTests 2>&1 | tail -20`
 Expected: compile fail，因为 `_test_setInMemoryCredentials`、`ensureFreshCredentials` 都不存在。
 
-- [ ] **Step 1.3: 在 UsageService 加 cache 字段 + ensureFreshCredentials**
+- [ ] **Step 1.3: 在 UsageService 加 cache 字段 + ensureFreshCredentials (含 cliKeychainLoader 签名升级)**
 
-在 `UsageService.swift` 类体顶部其它 `@Published` 字段附近加：
+(a) 在 `UsageService.swift` 类体顶部其它 `@Published` 字段附近加：
 
 ```swift
 /// v0.5.1: in-memory only —— Claude 凭证不存盘，启动/过期时从 Claude CLI Keychain 重读。
@@ -116,14 +132,33 @@ Expected: compile fail，因为 `_test_setInMemoryCredentials`、`ensureFreshCre
 private var inMemoryCredentials: StoredCredentials?
 
 #if DEBUG
-/// 测试种子（仅 @testable import 可见，因 access 是 internal）。
+/// 测试种子（@testable import 可见，因 access 是 internal）。
 func _test_setInMemoryCredentials(_ c: StoredCredentials?) { inMemoryCredentials = c }
 #endif
 ```
 
-注：`_test_setInMemoryCredentials` 必须 `internal`（默认）—— XCTest `@testable import UsageBar` 才能用。`#if DEBUG` 包住避免 release build 暴露。
+(b) 现有 `cliKeychainLoader` 字段（在 UsageService 类体内，line 35 附近）签名升级——增加 `allowInteraction: Bool` 参数：
 
-在 "MARK: - UsageProvider conformance" extension 之前的某处（同文件靠近 fetchUsage 那段）加：
+旧：
+```swift
+var cliKeychainLoader: () async -> StoredCredentials? = {
+    try? await ClaudeCLICredentialsStrategy().loadCredentials(allowInteraction: false)
+}
+```
+改成：
+```swift
+var cliKeychainLoader: (_ allowInteraction: Bool) async -> StoredCredentials? = { allowInteraction in
+    try? await ClaudeCLICredentialsStrategy().loadCredentials(allowInteraction: allowInteraction)
+}
+```
+
+(c) **同步现有调用面**（grep + 改）：
+```bash
+grep -n 'cliKeychainLoader(' macos/Sources/UsageBar/Providers/Claude/UsageService.swift
+```
+所有 `cliKeychainLoader()` 调用改成 `cliKeychainLoader(false)`（默认走非交互；attemptCLIKeychainRecovery / migrateStripCLIRefreshToken 都是后台 polling 路径）。
+
+(d) 在 "MARK: - UsageProvider conformance" extension 附近的同文件，新增：
 
 ```swift
 extension UsageService {
@@ -134,68 +169,20 @@ extension UsageService {
         if let c = inMemoryCredentials, !c.isExpired() {
             return c
         }
-        let creds = try? await ClaudeCLICredentialsStrategy().loadCredentials(allowInteraction: allowInteraction)
+        let creds = await cliKeychainLoader(allowInteraction)
         inMemoryCredentials = creds
-        runtime.setConfigured(creds != nil)
+        isAuthenticated = (creds != nil)        // 同步 @Published；runtimeAuthSync sink 自动把它 mirror 进 runtime.isConfigured
         return creds
     }
 }
 ```
 
-注：`ClaudeCLICredentialsStrategy.loadCredentials(allowInteraction:)` 已存在；这里直接 throws-as-optional（解析失败按 nil 处理 — 与旧 bootstrap 静默降级语义一致）。
+注：必须**显式** `isAuthenticated = (creds != nil)`（不能只 `runtime.setConfigured(...)`）。原因：现有 `runtimeAuthSync` sink 方向是 `isAuthenticated → runtime`（line 105），反向不通；UI 依赖 `claude.isAuthenticated` 触发 NotAuthenticatedView 分支。
 
-测试用例里的 `service.cliKeychainLoader = { ... }` 注入路径将在 Step 1.5 加上 — 先用最简内部实现走通。
+- [ ] **Step 1.4: 跑测试确认通过**
 
-- [ ] **Step 1.4: 改 ensureFreshCredentials 用注入点 + 跑测试通过**
-
-把 Step 1.3 那段 ensureFreshCredentials 改成可注入的实现：
-
-```swift
-extension UsageService {
-    func ensureFreshCredentials(allowInteraction: Bool) async -> StoredCredentials? {
-        if let c = inMemoryCredentials, !c.isExpired() {
-            return c
-        }
-        let creds = await cliKeychainLoader()
-        inMemoryCredentials = creds
-        runtime.setConfigured(creds != nil)
-        return creds
-    }
-}
-```
-
-注：`cliKeychainLoader: () async -> StoredCredentials?` 在 UsageService 类体里**已经存在**（用于 attemptCLIKeychainRecovery）—— line 35 附近：
-```swift
-var cliKeychainLoader: () async -> StoredCredentials? = {
-    try? await ClaudeCLICredentialsStrategy().loadCredentials(allowInteraction: false)
-}
-```
-
-但旧默认值用 `allowInteraction: false` 硬码。我们需要让它接收 `allowInteraction` 参数。改成：
-
-把现有 cliKeychainLoader 字段类型从 `() async -> StoredCredentials?` 改为 `(_ allowInteraction: Bool) async -> StoredCredentials?`，默认值改为：
-
-```swift
-var cliKeychainLoader: (_ allowInteraction: Bool) async -> StoredCredentials? = { allowInteraction in
-    try? await ClaudeCLICredentialsStrategy().loadCredentials(allowInteraction: allowInteraction)
-}
-```
-
-ensureFreshCredentials 内调用改成 `await cliKeychainLoader(allowInteraction)`。
-
-⚠️ 同步：所有现有调用面（`attemptCLIKeychainRecovery`、`migrateStripCLIRefreshToken` 等）目前调 `cliKeychainLoader()`（无参），需改成 `cliKeychainLoader(false)`。`grep -n 'cliKeychainLoader(' macos/Sources/UsageBar/Providers/Claude/UsageService.swift` 找到所有调用点逐个改。
-
-测试文件里 spy 也改成接收 `allowInteraction: Bool` 参数（哪怕测试中不验证它）：
-
-```swift
-service.cliKeychainLoader = { _ in
-    loadCount += 1
-    return StoredCredentials(...)
-}
-```
-
-Run: `cd macos && swift test --filter UsageServiceCredentialsTests 2>&1 | tail -20`
-Expected: 3 个测试全 PASS。
+Run: `cd macos && swift test --filter UsageServiceCredentialsTests 2>&1 | tail -10`
+Expected: 3 个新测试全 PASS。
 
 - [ ] **Step 1.5: 全量 swift test 不破**
 
@@ -290,7 +277,7 @@ func testFetchUsage401SameTokenReportsExpired() async throws {
 }
 ```
 
-`makeStubSession()` 是仓库现有 helper（在 `UsageServiceTests.swift` 已使用 URLProtocol stub 同样模式；如未公开，从该文件 copy 进 `UsageServiceCredentialsTests.swift` 内的 helper extension —— 同模式 `class StubProtocol: URLProtocol { static var responseProvider: ((URLRequest) -> (Data, HTTPURLResponse))? }`）。具体复用方式：
+`makeStubSession` helper 仿照仓库现有 `GeminiAPIStubURLProtocol` 模式（见 `macos/Tests/UsageBarTests/Fixtures/Gemini/`，URLProtocol 子类 + static responseProvider closure），直接写在 `UsageServiceCredentialsTests.swift` 文件内作为 private helper：
 
 ```swift
 private func makeStubSession() -> (URLSession, StubProtocol.Type) {
@@ -393,19 +380,43 @@ private func processUsageResponse(data: Data, http: HTTPURLResponse) throws {
 }
 ```
 
-⚠️ 旧 `sendAuthorizedRequest`（OAuth refresh 链路）暂留不删（task 3 会清理）；新 fetchUsage 不再调它，但保留以免依赖测试报 unresolved symbol。
+⚠️ 旧 `sendAuthorizedRequest`（OAuth refresh 链路）暂留不删（task 5 会清理）；新 fetchUsage 不再调它，但保留以免依赖测试报 unresolved symbol。
 
-- [ ] **Step 2.4: 跑测试确认通过**
+⚠️ `accountSwitchEpoch` race-guard 在本 step 仍保留（task 5 才删字段）；不影响行为。
 
-Run: `cd macos && swift test --filter UsageServiceCredentialsTests 2>&1 | tail -20`
-Expected: 5 个测试全 PASS（Task 1 的 3 个 + Task 2 的 2 个）。
+- [ ] **Step 2.4: 把 task 6 即将删的 17 个测试方法加 XCTSkip 守门**
 
-- [ ] **Step 2.5: 跑全量测试确认不破**
+为满足 G4 "每 commit swift test 全绿" 约束，本 step 把 task 6 即将删除的 17 个测试方法**在方法体首行**加 `throw XCTSkip("v0.5.1 retire — OAuth refresh / multi-account 路径已下线")`。
+
+打开 `macos/Tests/UsageBarTests/UsageServiceTests.swift`，对以下方法逐一在 `func testXXX() async throws {` 之后第一行插入 `throw XCTSkip("v0.5.1 retire")`（保持 `async throws` 签名）：
+
+- `testFetchUsageRefreshesOn401AndRetriesOnce`
+- `testFetchUsageDoesNotSignOutWhenRetriedRequestIsRateLimited`
+- `testFetchUsageSignsOutWhenRefreshFails`
+- `testFetchProfileDoesNotSignOutWhenUserinfoStillReturns401AfterRefresh`
+- `testServer500DuringRefreshStaysAuthenticated`
+- `testNetworkErrorDuringRefreshStaysAuthenticated`
+- `testExpiredTokenWithTransientRefreshFailureDoesNotMakeAPICall`
+- `testExpiredTokenWithPermanentRefreshFailureSignsOut`
+- `testRecoversFromKeychainOnPermanentRefreshFailure`
+- `testHardExpiresWhenKeychainEmpty`
+- `testNoRecoveryLoopWhenKeychainHasSameStaleToken`
+- `testHardExpiresWhenKeychainTokenAlreadyExpired`
+- `testNoRecoveryWhenMultipleAccounts`
+- `testNormalRefreshSuccessDoesNotTouchKeychain`
+- `testEndToEndRefreshRecoveryAcrossMultiplePolls`
+- `testEndToEnd401WithTransientFailureThenRecovery`
+- `testBootstrapDoesNotSaveRefreshToken`
+- `testMigrationStripsRefreshTokenMatchingKeychain`
+- `testMigrationDoesNotAffectDifferentRefreshToken`
+- `testKeychainRecoveryDoesNotSaveRefreshToken`
+
+同样处理 `UsageServiceMultiAccountTests.swift` 内所有 case 方法。
+
+- [ ] **Step 2.5: 跑测试确认全绿**
 
 Run: `cd macos && swift test 2>&1 | tail -10`
-Expected: ⚠️ 部分既有 UsageServiceTests case 会 fail，因为 fetchUsage 行为变了（不再走 OAuth refresh）。**预期 fail 的 case** 在 Task 5/6 删除——本 step 记录失败用例数后 commit。
-
-Run（统计失败数）: `cd macos && swift test 2>&1 | grep -c 'failed)' | head -3`
+Expected: 测试报告显示部分 skipped、0 failed。新的 5 个 UsageServiceCredentialsTests case 全 PASS。
 
 - [ ] **Step 2.6: Commit**
 
@@ -423,8 +434,8 @@ ensureFreshCredentials + 401 retry 路径。
   'Token expired; run \`claude\` to refresh.'
 - 抽出 processUsageResponse helper, 供主路径 + 401 retry 共用
 
-旧 sendAuthorizedRequest 暂留(下个 task 删); 既有 OAuth refresh 测试预期 fail
-(task 5 删除)。
+旧 sendAuthorizedRequest 暂留(task 5 删); 既有 OAuth refresh / 多账号 测试统一加
+XCTSkip 守门(task 6 物理删除文件 / 方法), 当前 commit swift test 全绿无 fail.
 
 新增 2 测试: 401 retry 拿新 token / 同 token 报过期。
 
@@ -663,6 +674,15 @@ init(
 - 整段 "MARK: - Refresh + Token rotation" extension（其中的 `performRefresh`/`credentials(from:)`/`expirationDate(from:)`）
 - "MARK: Profile" 段
 
+⚠️ **同步简化 `refreshNow()`**（UsageService.swift line 126-129 附近，UsageProvider conformance 内）：
+旧实现是 `await fetchUsage(); if accountEmail == nil { await fetchProfile() }`。
+fetchProfile/accountEmail 已删 → 简化为：
+```swift
+func refreshNow() async {
+    await fetchUsage()
+}
+```
+
 保留：
 - `@Published var usage`, `lastError`, `lastUpdated`, `isAuthenticated`
 - `@Published var pollingMinutes` + `updatePollingInterval`
@@ -790,34 +810,45 @@ git rm macos/Tests/UsageBarTests/UsageServiceMultiAccountTests.swift \
        macos/Tests/UsageBarTests/StoredCredentialsStoreMigrationTests.swift
 ```
 
-- [ ] **Step 6.2: UsageServiceTests 内删 17 个 case**
+- [ ] **Step 6.2: UsageServiceTests 内删 20 个 case（按方法名匹配，避免 line 漂移）**
 
-打开 `UsageServiceTests.swift`，删除以下测试方法（按 line 顺序，整段函数 body 一起删）：
-1. `testFetchUsageRefreshesOn401AndRetriesOnce`（line 25）
-2. `testFetchUsageDoesNotSignOutWhenRetriedRequestIsRateLimited`（line 105）
-3. `testFetchUsageSignsOutWhenRefreshFails`（line 198）
-4. `testFetchProfileDoesNotSignOutWhenUserinfoStillReturns401AfterRefresh`（line 246）
-5. `testServer500DuringRefreshStaysAuthenticated`（line 309）
-6. `testNetworkErrorDuringRefreshStaysAuthenticated`（line 352）
-7. `testExpiredTokenWithTransientRefreshFailureDoesNotMakeAPICall`（line 395）
-8. `testExpiredTokenWithPermanentRefreshFailureSignsOut`（line 438）
-9. `testRecoversFromKeychainOnPermanentRefreshFailure`（line 522）
-10. `testHardExpiresWhenKeychainEmpty`（line 534）
-11. `testNoRecoveryLoopWhenKeychainHasSameStaleToken`（line 547）
-12. `testHardExpiresWhenKeychainTokenAlreadyExpired`（line 557）
-13. `testNoRecoveryWhenMultipleAccounts`（line 570）
-14. `testNormalRefreshSuccessDoesNotTouchKeychain`（line 613）
-15. `testEndToEndRefreshRecoveryAcrossMultiplePolls`（line 658）
-16. `testEndToEnd401WithTransientFailureThenRecovery`（line 763）
-17. `testBootstrapDoesNotSaveRefreshToken`（line 898）
-18. `testMigrationStripsRefreshTokenMatchingKeychain`（line 925）
-19. `testMigrationDoesNotAffectDifferentRefreshToken`（line 963）
-20. `testKeychainRecoveryDoesNotSaveRefreshToken`（line 999）
+打开 `UsageServiceTests.swift`，删除以下测试方法（按 method name grep 定位整段 `func testXXX(...) {...}`；Task 2 给它们加了 `throw XCTSkip` 守门，本 step 物理删除整个方法）：
 
-保留（3 case）：
-- `testBackoffIntervalCapsAtSixtyMinutes`（line 11）
-- `testBackoffIntervalNeverReducesSixtyMinutePolling`（line 18）
-- `testFetchUsageSuccessClearsBackoff`（line 171）— 若该 case 用了 sendAuthorizedRequest 等被删 API，改造它走 fetchUsage + cliKeychainLoader spy + StubProtocol
+```
+testFetchUsageRefreshesOn401AndRetriesOnce
+testFetchUsageDoesNotSignOutWhenRetriedRequestIsRateLimited
+testFetchUsageSignsOutWhenRefreshFails
+testFetchProfileDoesNotSignOutWhenUserinfoStillReturns401AfterRefresh
+testServer500DuringRefreshStaysAuthenticated
+testNetworkErrorDuringRefreshStaysAuthenticated
+testExpiredTokenWithTransientRefreshFailureDoesNotMakeAPICall
+testExpiredTokenWithPermanentRefreshFailureSignsOut
+testRecoversFromKeychainOnPermanentRefreshFailure
+testHardExpiresWhenKeychainEmpty
+testNoRecoveryLoopWhenKeychainHasSameStaleToken
+testHardExpiresWhenKeychainTokenAlreadyExpired
+testNoRecoveryWhenMultipleAccounts
+testNormalRefreshSuccessDoesNotTouchKeychain
+testEndToEndRefreshRecoveryAcrossMultiplePolls
+testEndToEnd401WithTransientFailureThenRecovery
+testBootstrapDoesNotSaveRefreshToken
+testMigrationStripsRefreshTokenMatchingKeychain
+testMigrationDoesNotAffectDifferentRefreshToken
+testKeychainRecoveryDoesNotSaveRefreshToken
+```
+
+定位删除的方法：先用 `grep -n 'func test'` 列出**当前**所有测试方法名 + 行号，比对上面 keep-list 决定每个的去留；再逐个用文本编辑器选中 `func testXXX(...) {` 到对应 `}` 整段删除。**禁止用绝对 line 号**，因为前序 step 删改后行号会漂移。
+
+保留（**keep-list**，3 case，本 task 完后该文件只剩这 3 个 case）：
+- `testBackoffIntervalCapsAtSixtyMinutes`
+- `testBackoffIntervalNeverReducesSixtyMinutePolling`
+- `testFetchUsageSuccessClearsBackoff` — 若该 case 用了 sendAuthorizedRequest / loadCredentials 等被删 API，改造走 fetchUsage + cliKeychainLoader spy + 仿 GeminiAPIStubURLProtocol 的 stub
+
+兜底验证（确认 keep-list 之外的全删完）：
+```bash
+grep -E '^    func test' macos/Tests/UsageBarTests/UsageServiceTests.swift | sort
+```
+Expected: 仅 3 行（上面 keep-list）。
 
 预计 UsageServiceTests.swift 行数从 ~1100 → ~150 行。
 
@@ -1089,13 +1120,33 @@ grep -rn 'AccountSwitcherView' macos/Sources/ --include='*.swift' || echo 'PASS:
 ```
 Expected: PASS。
 
-- [ ] **Step 8.7: 在 spec 文件 verification log 勾选 SC + 填 evidence**
+- [ ] **Step 8.7: SC4 evidence — usage-bar 不再持有 refresh_token（issue #22 结构性证明）**
+
+issue #22 病根是 usage-bar 持有 CLI refresh_token，每次 refresh 触发 OAuth Token Rotation 把 CLI 那边的 token invalidate。本 spec 删 refresh 路径 + StoredCredentialsStore 写入后，usage-bar 仅在内存 cache 持 access_token，从不写 refresh_token 到任何位置。
+
+兜底证据：
+
+```bash
+# (1) usage-bar 生产代码中 refreshToken 字段只应出现在 StoredCredentials struct 内部 (field 定义 + helpers)
+grep -rn 'refreshToken' macos/Sources/UsageBar/ --include='*.swift'
+```
+Expected: 仅 `Models/StoredCredentials.swift` 里的 field 定义、`hasRefreshToken`、`strippingRefreshToken` 几行；以及 `Providers/Claude/ClaudeCLICredentialsStrategy.swift` 里从 Keychain payload 解析时的 `refreshToken:` 字段读取（必要 — 仍要尊重 KeychainPayload schema）。**生产代码不再有任何 `.refreshToken` 的写入路径**（如 `cred.refreshToken = ...` 或 `JSON encode/decode refreshToken to disk`）。
+
+```bash
+# (2) 验证：从未存在的 OAuth refresh URL 不再被代码引用
+! grep -rn 'platform.claude.com/v1/oauth/token\|refresh_token' macos/Sources/UsageBar/ --include='*.swift'
+```
+Expected: exit 0（无命中）。
+
+Evidence: 把上述 grep 输出 + commit sha 写到 SC4 verification log。
+
+- [ ] **Step 8.8: 在 spec 文件 verification log 勾选 SC + 填 evidence**
 
 打开 `docs/superpowers/specs/2026-05-14-claude-credentials-in-memory.md`，把 `## Verification log` 段的 `- [ ] SC1 — pending` 改成 `- [x] SC1 — 真机验证：xxx`（含 git sha / log 路径）。同样改 SC2~SC10。
 
 同时 spec frontmatter `spec_criteria` 各条 `done: false` → `done: true`，`evidence: null` → 简短一句说明。
 
-- [ ] **Step 8.8: Commit**
+- [ ] **Step 8.9: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-05-14-claude-credentials-in-memory.md
