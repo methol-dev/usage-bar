@@ -149,13 +149,16 @@ extension UsageService {
     /// - Parameter allowInteraction: false=后台 polling 安全（ACL prompt 静默降级返回 nil）；true=前台用户操作（允许首次弹 ACL）。
     /// - Returns: 最新有效 credentials；Keychain 无 / 不可读 / 解析失败 → nil。
     func ensureFreshCredentials(allowInteraction: Bool) async -> StoredCredentials? {
+        // 注：cache hit / loader 重读 两条路径都显式写 isAuthenticated。
+        // 现有 runtimeAuthSync sink 方向是 isAuthenticated → runtime，反向不通；
+        // UI 依赖 `claude.isAuthenticated` 触发 NotAuthenticatedView 分支。
+        // cache hit 时如 _test_setInMemoryCredentials 注入或某些 race 后 isAuthenticated 未同步，需补一次写。
         if let c = inMemoryCredentials, !c.isExpired() {
+            isAuthenticated = true
             return c
         }
         let creds = await cliKeychainLoader(allowInteraction)
         inMemoryCredentials = creds
-        // 注：必须显式写 isAuthenticated —— 现有 runtimeAuthSync sink 方向是 isAuthenticated → runtime，
-        // 反向不通；UI 依赖 `claude.isAuthenticated` 触发 NotAuthenticatedView 分支。
         isAuthenticated = (creds != nil)
         return creds
     }

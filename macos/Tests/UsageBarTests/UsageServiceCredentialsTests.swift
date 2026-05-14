@@ -21,6 +21,7 @@ final class UsageServiceCredentialsTests: XCTestCase {
         let creds = await service.ensureFreshCredentials(allowInteraction: false)
         XCTAssertEqual(creds?.accessToken, "t-cache")
         XCTAssertEqual(loadCount, 0, "keychain loader 不应被调用")
+        XCTAssertTrue(service.runtime.isConfigured, "cache hit 路径也应同步 isAuthenticated")
     }
 
     /// cache 过期 → 调 Keychain loader 拿新 token + 写回 cache
