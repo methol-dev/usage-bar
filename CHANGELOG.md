@@ -9,6 +9,34 @@
 
 ---
 
+## [v0.6.0] — 2026-05-15
+
+> spec: [`2026-05-13-gemini-provider`](./docs/superpowers/specs/2026-05-13-gemini-provider.md) · 版本: [`v0.6.0`](./docs/versions/v0.6.0-gemini-provider.md)
+
+### 新增（Added）
+
+- **接入 Gemini Code Assist for Individuals**：菜单栏 / Popover 现在可以显示 Pro 配额与 Flash 配额（`remainingFraction` + reset 倒计时），完整对标 Claude / Codex 现有形态。复用本机 `~/.gemini/oauth_creds.json`（由 `gemini` CLI 维护），无需重新登录。（[#27](https://github.com/methol/usage-bar/issues/27)）
+- **首次启动自动检测已安装的 AI 工具**：应用第一次打开时，自动检测本机已安装的工具（检测 `~/.claude/`、`~/.codex/`、`~/.gemini/` 等标准路径），仅默认开启已安装 provider 的显示开关；后续以用户自己配置的开关状态为准，不再重复检测。（[#35](https://github.com/methol/usage-bar/pull/35)）
+
+### 修复（Fixed）
+
+- Settings 界面 Provider 列表行高从 44 调高到 60，修复 Gemini 行内容被截断的显示问题。（[#31](https://github.com/methol/usage-bar/pull/31)）
+- 菜单栏用量数字统一改为英文格式，修复部分 macOS 系统语言设置下数字显示为中文格式的问题。（[#30](https://github.com/methol/usage-bar/pull/30)）
+
+### 内部（Internal）
+
+- 新增 `Providers/Gemini/` 目录：`GeminiProvider` / `GeminiCredentials`（含 OAuth token refresh + 原子写回）/ `GeminiOAuthClientLocator`（从本机 gemini-cli 安装包动态获取 OAuth client credentials）/ `GeminiUsageClient` / `GeminiUsageModel`（Pro/Flash 双段配额映射）
+- 新增 `AIToolDetector`：纯文件系统检测工具类，支持 `CODEX_HOME` / `GEMINI_HOME` 环境变量覆盖，注入 `fileManager`/`environment` 便于单测
+- CI 兼容 Xcode 15.4 严格 actor 隔离检查（补标 `@MainActor`）
+- 新增 40+ 单元测试（Gemini 各子模块 + AIToolDetector + ProviderCoordinator 首次启动路径）
+
+### 参考
+
+- 版本计划：[`docs/versions/v0.6.0-gemini-provider.md`](docs/versions/v0.6.0-gemini-provider.md)
+- 含 spec：`2026-05-13-gemini-provider`
+
+---
+
 ## [v0.5.3] — 2026-05-14
 
 > spec: [`2026-05-14-observable-migration`](./docs/superpowers/specs/2026-05-14-observable-migration.md) · 版本: [`v0.5.3`](./docs/versions/v0.5.3-observable-migration-release.md)
