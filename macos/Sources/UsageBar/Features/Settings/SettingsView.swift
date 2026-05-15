@@ -6,6 +6,7 @@ struct SettingsWindowContent: View {
     let coordinator: ProviderCoordinator
     let service: UsageService
     let notificationService: NotificationService
+    let appUpdater: AppUpdater
     // @AppStorage 直接绑定 enum（G5 review B1 修订）
     @AppStorage(MenuBarDisplayMode.storageKey) private var menubarMode: MenuBarDisplayMode = .icon
     // v0.2.2: Sparkle 双通道
@@ -80,6 +81,12 @@ struct SettingsWindowContent: View {
                 Text("Beta includes pre-release builds for testing.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if appUpdater.isConfigured {
+                    Button("Check for Updates…") {
+                        appUpdater.checkForUpdates()
+                    }
+                    .disabled(!appUpdater.canCheckForUpdates)
+                }
             }
 
         }

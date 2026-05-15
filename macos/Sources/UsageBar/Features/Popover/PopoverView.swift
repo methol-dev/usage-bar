@@ -273,16 +273,21 @@ struct PopoverView: View {
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
-                if appUpdater.isConfigured {
-                    Button("Check for Updates…") {
-                        appUpdater.checkForUpdates()
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                    .disabled(!appUpdater.canCheckForUpdates)
-                }
+                AppVersionLabel()
                 Button("Quit") { NSApplication.shared.terminate(nil) }
                     .buttonStyle(.borderless)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private struct AppVersionLabel: View {
+        private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+
+        var body: some View {
+            if let v = version {
+                Text("v\(v)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -305,6 +310,7 @@ struct PopoverView: View {
             Divider()
             HStack {
                 Spacer()
+                AppVersionLabel()
                 Button("Quit") { NSApplication.shared.terminate(nil) }
                     .buttonStyle(.borderless)
                     .font(.caption)
@@ -340,6 +346,7 @@ struct PopoverView: View {
                     .buttonStyle(.borderless)
                     .font(.caption)
                 Spacer()
+                AppVersionLabel()
                 Button("Quit") { NSApplication.shared.terminate(nil) }
                     .buttonStyle(.borderless)
             }

@@ -64,7 +64,8 @@ struct UsageBarApp: App {
             SettingsWindowContent(
                 coordinator: coordinator,
                 service: coordinator.claude,
-                notificationService: notificationService
+                notificationService: notificationService,
+                appUpdater: appUpdater
             )
         }
         .windowResizability(.contentSize)
