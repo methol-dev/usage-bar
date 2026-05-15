@@ -9,6 +9,21 @@
 
 ---
 
+## [v0.7.0] — 2026-05-15
+
+> 版本: [`v0.7.0`](./docs/versions/v0.7.0-update-button-position.md)
+
+### 改进（Changed）
+
+- **更新检测按钮移至设置**：「检查更新」按钮从 popover 底部栏移至「Settings → Updates」区段，与更新渠道选项集中在一起，交互更符合直觉。（[#36](https://github.com/methol/usage-bar/issues/36)）
+- **菜单栏显示版本号**：popover 底部栏「退出」按钮旁新增当前版本号（如 `v0.7.0`），方便随时确认正在运行的版本。（[#36](https://github.com/methol/usage-bar/issues/36)）
+
+### 参考
+
+- 版本计划：[`docs/versions/v0.7.0-update-button-position.md`](docs/versions/v0.7.0-update-button-position.md)
+
+---
+
 ## [v0.6.0] — 2026-05-15
 
 > spec: [`2026-05-13-gemini-provider`](./docs/superpowers/specs/2026-05-13-gemini-provider.md) · 版本: [`v0.6.0`](./docs/versions/v0.6.0-gemini-provider.md)
