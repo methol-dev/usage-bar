@@ -21,7 +21,6 @@ struct UsageBarApp: App {
         MenuBarExtra {
             PopoverView(
                 coordinator: coordinator,
-                claude: coordinator.claude,
                 historyService: historyService,
                 notificationService: notificationService,
                 appUpdater: appUpdater,

@@ -101,7 +101,7 @@ extension UsageService {
     func ensureFreshCredentials(allowInteraction: Bool) async -> StoredCredentials? {
         // 注：cache hit / loader 重读 两条路径都显式写 isAuthenticated。
         // isAuthenticated didSet 已同步 runtime.setConfigured；
-        // UI 依赖 `claude.isAuthenticated` 触发 NotAuthenticatedView 分支。
+        // UI 依赖 `claude.isAuthenticated` 决定 Claude tab 错误卡里是否给 Retry 入口（未认证降级态）。
         // cache hit 时如 _test_setInMemoryCredentials 注入或某些 race 后 isAuthenticated 未同步，需补一次写。
         if let c = inMemoryCredentials, !c.isExpired() {
             isAuthenticated = true

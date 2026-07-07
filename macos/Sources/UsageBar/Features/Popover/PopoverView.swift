@@ -2,7 +2,6 @@ import SwiftUI
 
 struct PopoverView: View {
     let coordinator: ProviderCoordinator
-    let claude: UsageService
     let historyService: UsageHistoryService
     let notificationService: NotificationService
     let appUpdater: AppUpdater
@@ -12,10 +11,9 @@ struct PopoverView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            let claudeEnabled = coordinator.enabledProviderIDs.contains(.claude)
-            if claudeEnabled && !claude.isAuthenticated {
-                NotAuthenticatedView(coordinator: coordinator, claude: claude)
-            } else if coordinator.availableIDs.isEmpty {
+            // 订阅用量拿不到（Claude 未登录 / token 过期）不再整屏接管 —— tab bar 与内容区永远渲染，
+            // 「未登录」降级到各 tab 内部：hero 卡走 snapshot == nil 骨架，本地折线图/费用统计照常。
+            if coordinator.availableIDs.isEmpty {
                 NoProvidersView()
             } else {
                 ProviderTabBar(selection: $selectedProvider, availableIDs: coordinator.availableIDs)
@@ -100,7 +98,10 @@ struct PopoverView: View {
         }
     }
 
-    /// 已注册的非 Claude provider 的用量区：观察其 `ProviderRuntime`，按 `isConfigured` 二选一渲染。
+    /// 已注册的非 Claude provider 的用量区：观察其 `ProviderRuntime`。
+    /// unconfigured 且**有**本地数据源（history / costStats，目前即 Codex）→ 局部降级：hero 卡走
+    /// snapshot == nil 骨架、加一张登录提示卡，本地折线图 / 费用照常；无本地数据源（Gemini）才整屏
+    /// `ProviderUnconfiguredView`。分支决策抽在 `ProviderPanelLayout.showsFullLayout`（可单测）。
     private struct ProviderUsageArea<BottomBar: View>: View {
         let runtime: ProviderRuntime
         let providerID: ProviderID
@@ -113,13 +114,24 @@ struct PopoverView: View {
         @ViewBuilder let bottomBar: () -> BottomBar
 
         var body: some View {
-            if runtime.isConfigured {
+            if ProviderPanelLayout.showsFullLayout(isConfigured: runtime.isConfigured,
+                                                   hasLocalHistory: history != nil,
+                                                   hasLocalCost: costStats != nil) {
                 if let h = history {
                     ProviderHistorySection(historyService: h.service, runtime: runtime,
                                            primaryLabel: h.primaryLabel, secondaryLabel: h.secondaryLabel,
                                            costStats: costStats, costContext: costContext)
                 } else {
                     ProviderUsageSection(runtime: runtime)
+                }
+                // 无凭证时 lastError == nil（CodexProvider 走 clear()），错误卡不出现 ——
+                // 需要单独一张提示卡告诉用户 hero 卡为什么是骨架、怎么恢复。
+                if !runtime.isConfigured {
+                    UsageCard {
+                        Label("\(providerID.displayName) not signed in. \(providerID.signInHint)",
+                              systemImage: "person.crop.circle.badge.questionmark")
+                            .foregroundStyle(.secondary).font(.caption)
+                    }
                 }
                 if let error = runtime.lastError {
                     UsageCard {
@@ -230,6 +242,20 @@ struct PopoverView: View {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
                         .font(.caption)
+                    // 未认证时的恢复入口（原整屏 NotAuthenticatedView 的职责下沉到这里）：
+                    // 重读 Claude CLI Keychain（允许首次 ACL prompt），成功即立刻拉一次用量。
+                    if !coordinator.claude.isAuthenticated {
+                        Button("Retry") {
+                            Task {
+                                await coordinator.claude.retrySignIn()
+                                if coordinator.claude.isAuthenticated {
+                                    await coordinator.claude.refreshNow()
+                                }
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .font(.caption)
+                    }
                 }
             }
 
@@ -319,38 +345,14 @@ struct PopoverView: View {
         }
     }
 
-    private struct NotAuthenticatedView: View {
-        let coordinator: ProviderCoordinator
-        let claude: UsageService
+}
 
-        var body: some View {
-            Text("Not signed in")
-                .font(.headline)
-            Text("Sign in with the Claude CLI, then tap Retry.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-            Button("Retry") {
-                Task { await coordinator.claude.retrySignIn() }
-            }
-            .buttonStyle(.borderedProminent)
-            .frame(maxWidth: .infinity)
-            if let error = claude.lastError {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
-                    .font(.caption)
-            }
-            Divider()
-            HStack {
-                SettingsLink { Text("Settings…") }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
-                Spacer()
-                AppVersionLabel()
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-                    .buttonStyle(.borderless)
-            }
-        }
+/// `ProviderUsageArea` 的布局决策（抽成纯函数便于单测）：unconfigured 且无任何本地数据源 →
+/// 整屏 `ProviderUnconfiguredView`；否则渲染完整布局（snapshot == nil 时 hero 卡自动骨架化，
+/// 本地折线图 / 费用统计不依赖订阅接口、照常显示）。
+enum ProviderPanelLayout {
+    static func showsFullLayout(isConfigured: Bool, hasLocalHistory: Bool, hasLocalCost: Bool) -> Bool {
+        isConfigured || hasLocalHistory || hasLocalCost
     }
 }
 
