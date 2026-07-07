@@ -65,6 +65,7 @@ placeholder ─首个 spec 落地─► planned ─开发开始─► in-progres
 | [v0.5.3](./v0.5.3-observable-migration-release.md) | observable-migration-release | shipped | ✅ | ✅ | 2026-05-14 | 🏗️ ObservableObject → @Observable 迁移（内部重构，用户无感知）|
 | [v0.6.0](./v0.6.0-gemini-provider.md) | gemini-provider | shipped | ✅ | ✅ | 2026-05-13 | 🔌 Gemini Code Assist for Individuals 接入(对标 Claude/Codex,Pro/Flash 双段配额,本机统计推迟) |
 | [v0.7.0](./v0.7.0-update-button-position.md) | update-button-position | shipped | ✅ | ✅ | 2026-05-15 | 🔧 「检查更新」按钮移至 Settings → Updates + popover 底部栏显示当前版本号 |
+| [v0.7.1](./v0.7.1-project-audit-hardening.md) | project-audit-hardening | in-progress | ✅ | | 2026-07-07 | 🧹 全项目排查加固：图表正确性 + 渲染性能 + fetch 重入防护 + CI/脚本加固 + 文档治理 |
 
 > **代码层 / 治理层 drift 说明**：本仓库采用"积压发版"模式 — 多个功能版本攒在一起、由更高版本（如 v0.3.2）一次性 tag 推送。
 > 因此 v0.0.7~v0.2.14 的 frontmatter 仍标 `in-progress`，但代码层已落地 main。完整 G6 closeout（回填 `shipped_date` + 改 `status: shipped`）属于专门动作，将在后续 docs-cleanup 后续工作中处理。

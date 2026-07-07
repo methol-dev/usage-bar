@@ -9,6 +9,34 @@
 
 ---
 
+## [v0.7.1] — 2026-07-07
+
+> 版本: [`v0.7.1`](./docs/versions/v0.7.1-project-audit-hardening.md)
+
+### 修复（Fixed）
+
+- **修正用量趋势图首点失真**：选择较短时间窗（如 1h/1d）时，窗口外的旧历史点不再被折算进第一个可见数据点，首点不会再显示为整段历史的均值。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+- **悬停无数据区域不再显示假数据**：图表 X 轴铺满所选时间窗但历史只覆盖一部分时，悬停空白区域不再弹出「0% / 0%」的伪造 tooltip。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+- **消除重复请求与重复图表数据点**：Claude 用量刷新补上重入保护与账号切换防护，后台轮询、手动 Refresh、修改轮询间隔并发时不再产生重复网络请求和重复历史点；账号切换后在途的旧响应会被丢弃。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+- **本机成本月度数据文件损坏不再静默丢失**：解码失败的月度文件覆盖前先备份为 `.bak`，源 JSONL 已被 Claude CLI 清理时仍可人工恢复。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+
+### 改进（Changed）
+
+- **popover 渲染性能优化**：费用汇总改为缓存按需重算（原先每次渲染对 31 天全量事件逐条跑正则匹配）；趋势图数据点身份稳定化，悬停不再全量重建图表；热力图分位阈值全网格只算一次；日期解析 formatter 静态缓存；定价表前缀匹配不再每次全表排序。重度用户 popover 悬停/轮询时的主线程卡顿显著减轻。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+- **VoiceOver 可分辨选中项**：时间范围选择器与 provider tab 的选中项补上 `.isSelected` 标注。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+
+### 内部（Internal）
+
+- CI：release workflow 首步预检 `SPARKLE_PRIVATE_KEY`（原先在 GitHub Release 已发布后才校验）、发版时补跑 `swift test`、SwiftPM 依赖缓存；build.yml 去掉冗余的单架构构建。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+- 脚本：build.sh 构建失败也还原 LiteLLM 快照；mock-server 时间戳每请求现算等 4 项修复；issue 脚本修复 `gh` 默认 30 条截断与并发合并时记错 merge commit。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+- 文档：versions/specs 索引补缺与状态同步、28 处相对链接层级修正、8 个 spec frontmatter YAML 修复、mock server 与凭证模型描述对齐。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+
+### 参考
+
+- 版本计划：[`docs/versions/v0.7.1-project-audit-hardening.md`](docs/versions/v0.7.1-project-audit-hardening.md)
+
+---
+
 ## [v0.7.0] — 2026-05-15
 
 > 版本: [`v0.7.0`](./docs/versions/v0.7.0-update-button-position.md)
