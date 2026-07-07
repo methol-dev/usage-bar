@@ -2,7 +2,7 @@
 
 > AI 标准流程：为 usage-bar 接入一个新的用量数据源（如 Cursor / Copilot / Gemini）。  
 > 本文件是操作级清单；架构决策见 [spec `2026-05-12-multi-provider-refactor`](../superpowers/specs/2026-05-12-multi-provider-refactor.md)，  
-> 扩展性设计原则见 [memory `project_provider_extensibility`](../../.claude/projects/-Users-methol-data-code-methol-usage-bar/memory/project_provider_extensibility.md)。
+> 扩展性设计原则见机器本地 memory `project_provider_extensibility.md`（`.claude` 项目 memory，不随仓库分发）。
 
 ---
 

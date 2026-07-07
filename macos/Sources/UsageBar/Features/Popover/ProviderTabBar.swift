@@ -29,6 +29,8 @@ struct ProviderTabBar: View {
                         .contentShape(Rectangle())   // 整个药丸（含两侧空白）都可点
                 }
                 .buttonStyle(.plain)
+                // 选中态只靠字重/底色表达，VoiceOver 听不出来，需显式标注
+                .accessibilityAddTraits(provider == selection ? [.isSelected] : [])
             }
         }
         .padding(3)

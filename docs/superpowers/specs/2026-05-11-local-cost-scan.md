@@ -70,7 +70,7 @@ automated_checks:
   - "SC_AUTO_NO_REAL_TOKEN_PREFIX: ! grep -nrI -E 'sk-ant-(oat|ort|api)[0-9a-zA-Z]|sk-proj-[0-9a-zA-Z]|AKIA[0-9A-Z]{16}' macos/ docs/ CHANGELOG.md 2>/dev/null  # 后置硬匹配避免命中 spec 描述用的 grep 表达式自身"
   - "SC_AUTO_NO_CONTENT_READ: ! grep -nrIE 'message\\.content|JSONLUsageEvent[^/]*\\.content|Envelope\\.Message[^/]*\\bcontent\\b\\s*:' macos/Sources/UsageBar/JSONLCostParser.swift macos/Sources/UsageBar/LocalCostScanner.swift macos/Sources/UsageBar/LocalCostCard.swift 2>/dev/null  # G2 C 修订：仅捕获 message.content 或 schema 字段引用，不误报 let content 变量"
 manual_checks:
-  - "已用过 Claude CLI 的用户启动 .app：popover 出现"本地 30 天估算 ≈ $X.XX"卡片"
+  - "已用过 Claude CLI 的用户启动 .app：popover 出现\"本地 30 天估算 ≈ $X.XX\"卡片"
   - "未装 Claude CLI / 无 JSONL 文件用户：cost 卡片完全隐藏（不显示 $0.00 误导）"
   - "**隐私 manual check**：开发期不允许把任何用户对话日志贴到 commit / spec / PR / 测试 fixture；测试 fixture 全部由 spec 作者手写"
   - "缓存命中 manual check：popover 打开两次，第二次 < 100ms（命中 60s cache）"

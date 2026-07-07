@@ -218,9 +218,9 @@ CI 跑 `swift build -c release` + `swift test` + `make release-artifacts` + `ver
 ## 7. 引用
 
 - 前置 spec：[`2026-05-11-local-cost-scan.md`](./2026-05-11-local-cost-scan.md)（Claude 本机扫描流水线）、[`2026-05-12-usage-store-redesign.md`](./2026-05-12-usage-store-redesign.md)（per-provider `UsageEventStore`）、[`2026-05-12-codex-provider.md`](./2026-05-12-codex-provider.md)、[`2026-05-12-codex-history-trend.md`](./2026-05-12-codex-history-trend.md)（`ProviderHistorySection`）、[`2026-05-12-popover-redesign.md`](./2026-05-12-popover-redesign.md)
-- 调研：[`../research/codex-data-sources.md`](../research/codex-data-sources.md)（§4「本地 session JSONL」）
-- ADR：[`../adr/0005-reopen-multi-provider-direction.md`](../adr/0005-reopen-multi-provider-direction.md)
-- 落地版本：[`../versions/v0.2.9-codex-cost-heatmap.md`](../versions/v0.2.9-codex-cost-heatmap.md)
+- 调研：[`../research/codex-data-sources.md`](../../research/codex-data-sources.md)（§4「本地 session JSONL」）
+- ADR：[`../adr/0005-reopen-multi-provider-direction.md`](../../adr/0005-reopen-multi-provider-direction.md)
+- 落地版本：[`../versions/v0.2.9-codex-cost-heatmap.md`](../../versions/v0.2.9-codex-cost-heatmap.md)
 
 ## Verification log
 

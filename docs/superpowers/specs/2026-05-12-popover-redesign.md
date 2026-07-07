@@ -56,9 +56,9 @@ reviews:
 
 owner 给了一张参考截图（圆角卡片浮在柔和渐变上、时钟/日历图标、"Resets in: 2h 46m at 11:44 PM"、"Pace: safe"，顶部一排 Claude/Codex/Cursor/Copilot/Gemini tab），要求 popover 朝那个方向重做；同时希望折线图上能看出"配速"——在两条用量折线下方叠一层极浅的 pace 面积，一眼看出此刻比"匀速用完额度"快了还是慢了。
 
-截图里的多 provider tab 与 [ADR 0002](../adr/0002-claude-only-not-multi-provider.md)（"只做 Claude"）冲突；owner 明确要做（"后面准备对接 codex"），故本 spec 同时新增 [ADR 0005](../adr/0005-reopen-multi-provider-direction.md) supersede 0002。本版本只搭 UI 外壳，Codex 数据层对接留给后续独立版本。
+截图里的多 provider tab 与 [ADR 0002](../../adr/0002-claude-only-not-multi-provider.md)（"只做 Claude"）冲突；owner 明确要做（"后面准备对接 codex"），故本 spec 同时新增 [ADR 0005](../../adr/0005-reopen-multi-provider-direction.md) supersede 0002。本版本只搭 UI 外壳，Codex 数据层对接留给后续独立版本。
 
-落地版本：[v0.2.4 popover-redesign](../versions/v0.2.4-popover-redesign.md)。
+落地版本：[v0.2.4 popover-redesign](../../versions/v0.2.4-popover-redesign.md)。
 
 ## 2. 决策摘要
 
@@ -238,9 +238,9 @@ ForEach(pace5h) { p in
 
 ## 7. 引用
 
-- 相关 ADR：[`0005-reopen-multi-provider-direction.md`](../adr/0005-reopen-multi-provider-direction.md)（supersedes [`0002`](../adr/0002-claude-only-not-multi-provider.md)）；[`0001-swift-native-only.md`](../adr/0001-swift-native-only.md)
+- 相关 ADR：[`0005-reopen-multi-provider-direction.md`](../../adr/0005-reopen-multi-provider-direction.md)（supersedes [`0002`](../../adr/0002-claude-only-not-multi-provider.md)）；[`0001-swift-native-only.md`](../../adr/0001-swift-native-only.md)
 - 相关 spec：[`2026-05-11-hero-popover.md`](./2026-05-11-hero-popover.md)（本 spec 局部取代其卡片尺寸设计）、[`2026-05-11-pace-tracking.md`](./2026-05-11-pace-tracking.md)（复用 `PaceState`/`computePaceState`）、[`2026-05-12-usage-store-redesign.md`](./2026-05-12-usage-store-redesign.md)（per-provider 存储为后续 Codex 对接铺路）
-- 落地版本：[`../versions/v0.2.4-popover-redesign.md`](../versions/v0.2.4-popover-redesign.md)
+- 落地版本：[`../versions/v0.2.4-popover-redesign.md`](../../versions/v0.2.4-popover-redesign.md)
 
 ## Verification log
 

@@ -162,8 +162,8 @@ CI 跑 `swift build -c release` + `swift test` + `make release-artifacts` + `ver
 ## 5. 引用
 
 - 前置 spec：[`2026-05-12-multi-provider-refactor.md`](./2026-05-12-multi-provider-refactor.md)、[`2026-05-12-codex-provider.md`](./2026-05-12-codex-provider.md)、[`2026-05-12-codex-history-trend.md`](./2026-05-12-codex-history-trend.md)、[`2026-05-12-codex-cost-heatmap.md`](./2026-05-12-codex-cost-heatmap.md)、[`2026-05-12-popover-redesign.md`](./2026-05-12-popover-redesign.md)
-- ADR：[`../adr/0005-reopen-multi-provider-direction.md`](../adr/0005-reopen-multi-provider-direction.md)
-- 落地版本：[`../versions/v0.2.10-settings-provider-list.md`](../versions/v0.2.10-settings-provider-list.md)
+- ADR：[`../adr/0005-reopen-multi-provider-direction.md`](../../adr/0005-reopen-multi-provider-direction.md)
+- 落地版本：[`../versions/v0.2.10-settings-provider-list.md`](../../versions/v0.2.10-settings-provider-list.md)
 - 母法：[`2026-05-11-docs-governance.md`](./2026-05-11-docs-governance.md)
 
 ## Verification log

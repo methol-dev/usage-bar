@@ -32,7 +32,7 @@ spec_criteria:
     done: false
     evidence: ""
   - id: SC6
-    criterion: UsageService.runtimeAuthSync: AnyCancellable? 删除，改用 isAuthenticated.didSet 同步 runtime.setConfigured
+    criterion: "UsageService.runtimeAuthSync: AnyCancellable? 删除，改用 isAuthenticated.didSet 同步 runtime.setConfigured"
     done: false
     evidence: ""
   - id: SC7

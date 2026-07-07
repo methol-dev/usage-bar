@@ -39,6 +39,12 @@ final class UsageService {
     /// v0.2.11：取代原 `currentInterval`（自持 timer 退役后，「下次拉的间隔」由 `ProviderCoordinator` 的统一 timer 负责）。
     private var currentBackoffSeconds: TimeInterval = 0
     private var backoffUntil: Date?
+    /// 重入保护（与 Codex/Gemini provider 同款）：后台 tick、popover Refresh、updatePollingInterval
+    /// 三个入口可能在 `session.data(for:)` 挂起点交错，没有 guard 会产生重复请求 + 重复 history 数据点。
+    private var isRefreshing = false
+    /// 账号切换代际：`retrySignIn()` 时 +1；在飞的 fetch 在写值前比对，不一致即丢弃陈旧响应
+    /// （`ProviderCoordinator.onBackgroundTick` 的注释依赖这一兜底）。
+    private var accountSwitchEpoch = 0
     /// 后台 tick 时额外回调（驱动 Claude 的本机用量统计刷新；装配处设成 `{ Task { await usageStats.refresh() } }`，`UsageStatsService.refresh` 内部已自管 detached 后台优先级）。
     var onPollTick: (@MainActor () -> Void)?
 
@@ -110,6 +116,7 @@ extension UsageService {
     /// v0.5.1 Retry 按钮 / 启动 task 用：清 cache + force allowInteraction=true 重读 Keychain。
     /// 与 ensureFreshCredentials(allowInteraction: false) 的区别：① 必清 cache（绕过未过期判定）；② 允许首次 ACL prompt。
     func retrySignIn() async {
+        accountSwitchEpoch += 1
         inMemoryCredentials = nil
         _ = await ensureFreshCredentials(allowInteraction: true)
     }
@@ -141,6 +148,11 @@ extension UsageService {
     // MARK: API Fetch
 
     func fetchUsage() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        let epoch = accountSwitchEpoch
+
         // v0.5.1: 凭证读取走 ensureFreshCredentials（in-memory cache → Claude CLI Keychain）；
         // 401 → 清 cache → 重读 Keychain；拿到新 token 重试一次；同 token 即报 token 过期。
         guard let creds = await ensureFreshCredentials(allowInteraction: false) else {
@@ -152,6 +164,8 @@ extension UsageService {
 
         do {
             let (data, http) = try await performAuthorizedRequest(token: creds.accessToken, url: usageEndpoint)
+            // 网络挂起期间若发生 retrySignIn（账号切换），丢弃这次陈旧响应，不写任何状态。
+            guard epoch == accountSwitchEpoch else { return }
 
             if http.statusCode == 401 {
                 let oldToken = creds.accessToken
@@ -164,11 +178,13 @@ extension UsageService {
                     return
                 }
                 let (data2, http2) = try await performAuthorizedRequest(token: retried.accessToken, url: usageEndpoint)
+                guard epoch == accountSwitchEpoch else { return }
                 try processUsageResponse(data: data2, http: http2)
                 return
             }
             try processUsageResponse(data: data, http: http)
         } catch {
+            guard epoch == accountSwitchEpoch else { return }
             lastError = error.localizedDescription
             runtime.setError(error.localizedDescription, clearSnapshot: false)
         }

@@ -44,7 +44,7 @@ spec_criteria:
     done: true
     evidence: "swift test: 274 tests, 0 failures, 0 skipped (Task 6 后); 新增 UsageServiceCredentialsTests 6 case (cache hit / 过期重读 / keychain 空 / 401 retry / 同 token 报过期 / retrySignIn force reload)"
   - id: SC9
-    criterion: `make release-artifacts` + `verify-release.sh` 全绿
+    criterion: "`make release-artifacts` + `verify-release.sh` 全绿"
     done: true
     evidence: "make release-artifacts → UsageBar.zip + UsageBar.dmg 产出; verify-release.sh 两次均 'Release archive looks good'"
   - id: SC10

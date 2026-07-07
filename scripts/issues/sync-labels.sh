@@ -16,7 +16,8 @@ command -v jq >/dev/null || { echo "未找到 jq" >&2; exit 2; }
 REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
 echo "[sync-labels] target: $REPO"
 
-EXISTING="$(gh label list -R "$REPO" --json name -q '.[].name' || true)"
+# 不加 || true:列表拉取失败必须 fail fast，否则会对已有 label 全量 create 然后中途报错
+EXISTING="$(gh label list -R "$REPO" --limit 200 --json name -q '.[].name')"
 
 jq -c '.[]' "$LABELS_FILE" | while read -r row; do
   name="$(echo "$row" | jq -r .name)"

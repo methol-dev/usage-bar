@@ -22,7 +22,7 @@ command -v jq >/dev/null || { echo "未找到 jq" >&2; exit 2; }
 
 DEFAULT_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || echo main)"
 
-PR_NUM="$(gh pr list --state open --json number,headRefName \
+PR_NUM="$(gh pr list --state open --limit 200 --json number,headRefName \
   | jq -r ".[] | select(.headRefName | startswith(\"issue/${ISSUE_NUM}-\")) | .number" \
   | head -1)"
 
@@ -42,7 +42,9 @@ git pull --ff-only
 git branch -D "$BRANCH" 2>/dev/null || true
 
 TODAY="$(date +%F)"
-HEAD_SHA="$(git rev-parse --short HEAD)"
+# 用 PR 的 mergeCommit 而不是 pull 后的 HEAD:并发合并时 HEAD 可能已是别人的 commit
+MERGE_SHA="$(gh pr view "$PR_NUM" --json mergeCommit -q .mergeCommit.oid)"
+HEAD_SHA="$(git rev-parse --short "${MERGE_SHA:-HEAD}")"
 ART_DIR="docs/artifacts/issues/$ISSUE_NUM"
 mkdir -p "$ART_DIR"
 

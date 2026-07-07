@@ -32,16 +32,17 @@ struct UsageHeatmapModel {
         self.isEmpty = nonZero.isEmpty
 
         // 分位数动态分档：8 个非零档（0 档专留 usd==0）。阈值 = nonZero 的 1/8...7/8 分位。
+        // 阈值只依赖 nonZero，整个网格算一次即可（原先每个格子都重算 7 个分位数）。
+        func quantile(_ q: Double) -> Double {
+            let pos = q * Double(nonZero.count - 1)
+            let lo = Int(pos.rounded(.down)), hi = min(lo + 1, nonZero.count - 1)
+            let frac = pos - Double(lo)
+            return nonZero[lo] * (1 - frac) + nonZero[hi] * frac
+        }
+        let thresholds: [Double] = nonZero.count > 1 ? (1...7).map { quantile(Double($0) / 8.0) } : []
         func bucket(for usd: Double) -> Int {
             if usd <= 0 || nonZero.isEmpty { return 0 }
             if nonZero.count == 1 { return 4 }
-            func quantile(_ q: Double) -> Double {
-                let pos = q * Double(nonZero.count - 1)
-                let lo = Int(pos.rounded(.down)), hi = min(lo + 1, nonZero.count - 1)
-                let frac = pos - Double(lo)
-                return nonZero[lo] * (1 - frac) + nonZero[hi] * frac
-            }
-            let thresholds = (1...7).map { quantile(Double($0) / 8.0) }
             var b = 1
             for t in thresholds where usd > t { b += 1 }
             return min(b, 8)
@@ -82,13 +83,9 @@ struct UsageHeatmapView: View {
     let isInitializing: Bool
 
     @State private var hovered: UsageHeatmapModel.Cell?
-    @State private var model: UsageHeatmapModel
-
-    init(daySpends: [DaySpend], isInitializing: Bool) {
-        self.daySpends = daySpends
-        self.isInitializing = isInitializing
-        _model = State(initialValue: UsageHeatmapModel(daySpends: daySpends))
-    }
+    /// nil = 尚未构建。不能在 init 里 `State(initialValue:)` 构建：init 在父视图每次
+    /// 重渲染都会执行，构建结果除第一次外全被 State 丢弃（371 次 Calendar/DateFormatter 调用白做）。
+    @State private var model: UsageHeatmapModel?
 
     private func color(for bucket: Int) -> Color {
         if bucket == 0 { return Color.secondary.opacity(0.15) }
@@ -99,7 +96,8 @@ struct UsageHeatmapView: View {
             if isInitializing {
                 HStack { ProgressView().controlSize(.small); Text("Loading…").font(.caption2).foregroundStyle(.secondary) }
             } else {
-                let m = model
+                // onAppear 之前的首帧兜底：现场构建一次；之后一律走缓存的 @State。
+                let m = model ?? UsageHeatmapModel(daySpends: daySpends)
                 let lastIndex = m.weeks.count - 1
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -148,6 +146,9 @@ struct UsageHeatmapView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .onAppear {
+            if model == nil { model = UsageHeatmapModel(daySpends: daySpends) }
+        }
         .onChange(of: daySpends) { _, newValue in
             model = UsageHeatmapModel(daySpends: newValue)
             hovered = nil   // 避免悬空：旧 model 的 cell 不在新 model 里

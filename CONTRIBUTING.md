@@ -113,7 +113,7 @@ To connect the app to the mock server:
    ```
 3. Rebuild and run the app, then click Refresh.
 
-This only mocks `GET /api/oauth/usage`. The current app still uses Anthropic’s real OAuth/browser flow unless you separately rewire the auth endpoints.
+The mock server serves four routes: `GET /api/oauth/usage` (usage payload for the active scenario), `GET /api/oauth/userinfo` (static fake user info), `GET /scenario/<name>` (switch scenario at runtime), and `POST /v1/oauth/token` (fake token endpoint for manual experiments). The real browser OAuth flow is NOT mocked — the app still uses Anthropic’s real OAuth/browser flow unless you separately rewire the auth endpoints.
 
 Available scenarios:
 
