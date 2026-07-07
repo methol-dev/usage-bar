@@ -19,11 +19,11 @@ spec_criteria:
     done: true
     evidence: "commit f4ad6dc: git rm demo.png；grep 残留仅 docs/artifacts/issues/11 + spec/version/plan 自身；272 swift test + verify-release 全绿"
   - id: SC3
-    criterion: `AppResources.swift` 重命名 `BundleLocator.swift`；类型 `AppResourceBundleFinder` 重命名 `BundleLocator`；外部函数 `usageBarResourceBundle()` **保留原名**（2 处调用方 `PollingOptionFormatter` / `MenuBarIconRenderer` 不需改）；`swift build` + `swift test` 绿
+    criterion: "`AppResources.swift` 重命名 `BundleLocator.swift`；类型 `AppResourceBundleFinder` 重命名 `BundleLocator`；外部函数 `usageBarResourceBundle()` **保留原名**（2 处调用方 `PollingOptionFormatter` / `MenuBarIconRenderer` 不需改）；`swift build` + `swift test` 绿"
     done: true
     evidence: "commit 7536e31: git mv 改名 (rename 84% similarity)；类名 AppResourceBundleFinder → BundleLocator；函数名保留；272 swift test 全绿"
   - id: SC4
-    criterion: `Providers/Claude/UsageService.swift` 同一文件内用 `// MARK: -` 分章节 + 多个 `extension UsageService { ... }` 块把 OAuth / Polling / Backoff 三段独立成区；**每个 method 保留原 access modifier**（private 仍 private，internal 仍 internal）、**不动方法签名**、**不动 method body**；evidence 命令 `git diff origin/main..HEAD --stat -- 'macos/Sources/UsageBar/Providers/Claude/UsageService.swift'` 应见 1 file changed；OAuth / backoff / polling 相关测试全绿（`UsageServiceTests` / `UsageServiceMultiAccountTests` 全过）
+    criterion: "`Providers/Claude/UsageService.swift` 同一文件内用 `// MARK: -` 分章节 + 多个 `extension UsageService { ... }` 块把 OAuth / Polling / Backoff 三段独立成区；**每个 method 保留原 access modifier**（private 仍 private，internal 仍 internal）、**不动方法签名**、**不动 method body**；evidence 命令 `git diff origin/main..HEAD --stat -- 'macos/Sources/UsageBar/Providers/Claude/UsageService.swift'` 应见 1 file changed；OAuth / backoff / polling 相关测试全绿（`UsageServiceTests` / `UsageServiceMultiAccountTests` 全过）"
     done: true
     evidence: "commit 35b74c4: 单文件改动 (1 file changed, 259 ins, 239 del —— 行数差是 // MARK: 注释)；BEFORE/AFTER signature sort+diff 各 125 行完全一致空输出；272 swift test 全绿；make release-artifacts + verify-release 全绿"
   - id: SC5

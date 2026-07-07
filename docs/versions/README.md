@@ -3,7 +3,7 @@ slug: versions-index
 title: 版本路线索引
 type: index
 created: 2026-05-11
-updated: 2026-05-14
+updated: 2026-07-07
 ---
 
 # Versions
@@ -60,15 +60,16 @@ placeholder ─首个 spec 落地─► planned ─开发开始─► in-progres
 | [v0.3.2](./v0.3.2-code-structure-hygiene.md) | code-structure-hygiene | shipped | ✅ | ✅ | 2026-05-13 | 🧹 代码结构治理：目录分 9 子目录（Providers/Claude+Codex）+ demo.png 清理 + UsageService 同文件章节化 + AppResources 改名 |
 | [v0.4.0](./v0.4.0-view-layer-modernization.md) | view-layer-modernization | shipped | ✅ | | 2026-05-13 | 🎨 view 层现代化：GCD 清理 + chartXSelection + PopoverView 抽 struct |
 | [v0.4.1](./v0.4.1-docs-cleanup.md) | docs-cleanup | shipped | ✅ | | 2026-05-13 | 📚 文档治理整理：AGENTS.md 3 层 + docs/agents/ 子目录 + drift 修复（纯文档，无代码改动） |
-| [v0.5.3](./v0.5.3-observable-migration-release.md) | observable-migration-release | shipped | ✅ | ✅ | 2026-05-14 | 🏗️ ObservableObject → @Observable 迁移（内部重构，用户无感知）|
 | [v0.5.0](./v0.5.0-observable-migration.md) | observable-migration | implemented | ✅ | | 2026-05-14 | 🏗️ ObservableObject → @Observable 迁移 + UsageService 887 行拆分 |
 | [v0.5.1](./v0.5.1-claude-credentials-in-memory.md) | claude-credentials-in-memory | in-progress | ⏸ | | 2026-05-14 | 🔧 Claude 凭证改 in-memory only（删持久化 / 多账号 UI / OAuth refresh；纯 CLI Keychain 借读） |
-| [v0.6.0](./v0.6.0-gemini-provider.md) | gemini-provider | in-progress | ✅ | | 2026-05-13 | 🔌 Gemini Code Assist for Individuals 接入(对标 Claude/Codex,Pro/Flash 双段配额,本机统计推迟) |
+| [v0.5.3](./v0.5.3-observable-migration-release.md) | observable-migration-release | shipped | ✅ | ✅ | 2026-05-14 | 🏗️ ObservableObject → @Observable 迁移（内部重构，用户无感知）|
+| [v0.6.0](./v0.6.0-gemini-provider.md) | gemini-provider | shipped | ✅ | ✅ | 2026-05-13 | 🔌 Gemini Code Assist for Individuals 接入(对标 Claude/Codex,Pro/Flash 双段配额,本机统计推迟) |
+| [v0.7.0](./v0.7.0-update-button-position.md) | update-button-position | shipped | ✅ | ✅ | 2026-05-15 | 🔧 「检查更新」按钮移至 Settings → Updates + popover 底部栏显示当前版本号 |
 
 > **代码层 / 治理层 drift 说明**：本仓库采用"积压发版"模式 — 多个功能版本攒在一起、由更高版本（如 v0.3.2）一次性 tag 推送。
 > 因此 v0.0.7~v0.2.14 的 frontmatter 仍标 `in-progress`，但代码层已落地 main。完整 G6 closeout（回填 `shipped_date` + 改 `status: shipped`）属于专门动作，将在后续 docs-cleanup 后续工作中处理。
 >
-> **当前 git tag**：`v0.0.6`（fork 上游截止）+ `v0.3.2`（本仓库目前唯一独立 tag）。
+> **当前 git tag**：`v0.0.6`（fork 上游截止）；本仓库独立 tag 已陆续发布至 `v0.7.0`（`v0.3.2` / `v0.5.1` / `v0.5.2` / `v0.5.3` / `v0.6.0` / `v0.7.0`），release 明细见 [`CHANGELOG.md`](../../CHANGELOG.md)。
 >
 > **目标（用户 2026-05-12 定）**：把 Codex tab 做到和 Claude tab 界面/功能一致 —— v0.2.6 已上额度窗口卡 + pace；v0.2.8 补趋势 + 折线图；v0.2.9 补成本 + 消费热力图。v0.2.7 是穿插的独立小修（Claude 凭证回退）。新版本立项时按 §7.1 命名规范 append 即可。
 >

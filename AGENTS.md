@@ -30,7 +30,7 @@
 
 - **形态**：macOS 14+ 菜单栏 app
 - **当前 tag**：fork 自 Blimp-Labs 截止 `v0.0.6`；本仓库自 `v0.0.7` 起独立编号（[ADR 0004](./docs/adr/0004-fork-divergence-from-blimp-labs.md)）
-- **Remote**：`github.com/methol/usage-bar`
+- **Remote**：`github.com/methol-dev/usage-bar`
 - **架构原则**：
   - Swift 原生、不引入 Electron/Tauri（[ADR 0001](./docs/adr/0001-swift-native-only.md)）
   - 多 provider（[ADR 0005](./docs/adr/0005-reopen-multi-provider-direction.md)，supersede 0002）

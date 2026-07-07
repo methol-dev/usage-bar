@@ -67,7 +67,7 @@ manual_checks:
   - "已装 Claude CLI 的用户首次启动 .app：菜单栏图标从 unauthenticated 变为 authenticated（无需手动 sign-in）"
   - "未装 Claude CLI 的用户启动 .app：行为与 v0.1.0 一致（显示 sign-in）"
   - "**安全 manual check**：grep -nrI 'sk-ant-' macos/ docs/ 应无任何匹配（commit / spec / 测试 mock 都不含真实 token 前缀）"
-  - "**主线程响应**（G3 B1）：启动 .app 首次触发 Keychain ACL 提示时，菜单栏图标点击响应 < 200ms / 不出现 spinning beachball；OS 弹出"允许访问 Claude Code-credentials"提示后用户操作不卡住其他 UI"
+  - "**主线程响应**（G3 B1）：启动 .app 首次触发 Keychain ACL 提示时，菜单栏图标点击响应 < 200ms / 不出现 spinning beachball；OS 弹出\"允许访问 Claude Code-credentials\"提示后用户操作不卡住其他 UI"
 reviews:
   - gate: G2
     reviewer: codex:codex-rescue (general-purpose fallback, agentId a9c0258fed8db7bdb, with security review focus)

@@ -33,7 +33,7 @@ issue 提了两条参考:`codexbar.app` 怎么获取 rate,以及仓库里 Claude
 
 Gemini 个人 OAuth 走 Google 端 client_id / secret。CodexBar 选择从本机已装的 gemini-cli 安装目录(Homebrew / npm / bun 三处之一)中**用正则从 `oauth2.js` 抠出** client_id/secret —— 其理由是规避法律风险("凭证形式上属于用户机器")。硬编码进自己的 app 是另一条路,但等同于把 Google 发给 gemini-cli 的 secret 重新分发,**触及 Google API ToS 与可能的商标 / 凭证盗用风险**。
 
-→ 这条决定属于 [`AGENTS.md`](../../../AGENTS.md) §5 hard gate **#6 触发法律 / 合规风险信号**,**必须人工决策**,不在 AI 自决范围。
+→ 这条决定属于 [`AGENTS.md`](../../../../AGENTS.md) §5 hard gate **#6 触发法律 / 合规风险信号**,**必须人工决策**,不在 AI 自决范围。
 
 ### 3. 改动面体量估算
 
@@ -60,7 +60,7 @@ Gemini 个人 OAuth 走 Google 端 client_id / secret。CodexBar 选择从本机
 
 ### 选项 A(推荐)— 升级到主回路 spec → plan → 实施
 
-走 [`AGENTS.md`](../../../AGENTS.md) §3 主回路:`superpowers:brainstorming` → 写 spec(在 `docs/superpowers/specs/2026-05-13-gemini-provider.md`)→ G2 reviewer → plan → 实施。spec 至少要决:
+走 [`AGENTS.md`](../../../../AGENTS.md) §3 主回路:`superpowers:brainstorming` → 写 spec(在 `docs/superpowers/specs/2026-05-13-gemini-provider.md`)→ G2 reviewer → plan → 实施。spec 至少要决:
 
 1. quota 数据源是 CodexBar 那条私有 endpoint 路径,还是先做"只读凭证识别身份,不显示 rate,只做本机估算";
 2. OAuth client_id/secret 来源(动态抠 / 硬编码 / 让用户自己注册);
@@ -81,7 +81,7 @@ Gemini 个人 OAuth 走 Google 端 client_id / secret。CodexBar 选择从本机
 ### 选项 C — 关闭 / 延后 issue
 
 理由可包括:
-- v0.4.x 路线优先级在别处(参见 [`project_provider_abstraction` memory](../../../.claude/projects/-Users-methol-data-code-methol-usage-bar/memory/project_provider_abstraction.md) 末尾候选列表)
+- v0.4.x 路线优先级在别处(参见机器本地 memory `project_provider_abstraction.md` 末尾候选列表)
 - 等 gemini-cli 官方加 quota 公开 API / JSONL session log(#15292)再做,避免长期跟私有 schema 跑
 
 ## 影响范围
@@ -94,7 +94,7 @@ Gemini 个人 OAuth 走 Google 端 client_id / secret。CodexBar 选择从本机
 
 ## 守护线自检
 
-> 逐项对照 [`docs/agents/operations.md`](../../agents/operations.md) §2 "守护线 checklist"。任一项触发 → 是否需要人工介入填 YES。
+> 逐项对照 [`docs/agents/operations.md`](../../../agents/operations.md) §2 "守护线 checklist"。任一项触发 → 是否需要人工介入填 YES。
 
 - [x] 不触碰凭证 / 密钥链路 → **触发**(新增 Google OAuth client + token refresh 链路)
 - [x] 不引入新第三方依赖 / 不改 LICENSE → **可能触发**(取决于是否引入 GoogleAuth Swift 库;若手写 OAuth 不引入)
@@ -103,7 +103,7 @@ Gemini 个人 OAuth 走 Google 端 client_id / secret。CodexBar 选择从本机
 - [ ] 不手改 `Info.plist` 版本号 → 未触发
 - [x] **单 issue 影响面不跨"app 代码 / 发版链路 / 治理文档"三大块,且改动文件数大致 ≤ 5** → **触发**(8~12 文件)
 
-额外触发的 hard gate(见 [`AGENTS.md`](../../../AGENTS.md) §5):
+额外触发的 hard gate(见 [`AGENTS.md`](../../../../AGENTS.md) §5):
 - [x] **#6 触发法律 / 合规风险信号**(Google OAuth client_id/secret 来源决策)
 
 ## 是否需要人工介入

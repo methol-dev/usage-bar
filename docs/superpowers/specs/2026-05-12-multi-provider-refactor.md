@@ -16,11 +16,11 @@ spec_criteria:
     done: true
     evidence: "commit df5a2b9：新增 ProviderID.swift（5 case + displayName + Identifiable）；删 UsageStoreTypes.UsageProvider enum 与 ProviderTabBar.ProviderTab；UsageEventStore.provider 字段改 ProviderID；ProviderID.claude.rawValue == \"claude\" 与磁盘 data/claude/ 兼容。177→167 测试全过（实际是测试数变化，下同）。"
   - id: SC1
-    criterion: 存在 `protocol UsageProvider`（`id: ProviderID` / `displayName` / `isConfigured` / `supportsBackgroundPolling` / `defaultPollMinutes` / `fetchSnapshot() async throws -> ProviderUsageSnapshot` / `refreshNow() async`）与统一模型 `ProviderUsageSnapshot`（`primaryWindow`/`secondaryWindow`/`extraWindows`/`creditLine`/`planLabel`）+ `UsageWindow`（`label`/`utilizationPct`/`resetsAt`/`windowDuration`）+ `CreditLine`；Claude 以 `ClaudeUsageProvider` 形式实现该协议（沿用现有 OAuth/refresh/多账号/backoff/polling 全部逻辑，`fetchSnapshot` = 现有 endpoint → 解码 `UsageResponse` → 映射成 snapshot）
+    criterion: "存在 `protocol UsageProvider`（`id: ProviderID` / `displayName` / `isConfigured` / `supportsBackgroundPolling` / `defaultPollMinutes` / `fetchSnapshot() async throws -> ProviderUsageSnapshot` / `refreshNow() async`）与统一模型 `ProviderUsageSnapshot`（`primaryWindow`/`secondaryWindow`/`extraWindows`/`creditLine`/`planLabel`）+ `UsageWindow`（`label`/`utilizationPct`/`resetsAt`/`windowDuration`）+ `CreditLine`；Claude 以 `ClaudeUsageProvider` 形式实现该协议（沿用现有 OAuth/refresh/多账号/backoff/polling 全部逻辑，`fetchSnapshot` = 现有 endpoint → 解码 `UsageResponse` → 映射成 snapshot）"
     done: true
     evidence: "commit d711d92/95cd76c：UsageProvider.swift（@MainActor protocol id/isConfigured/supportsBackgroundPolling/runtime/refreshNow()）；ProviderUsageSnapshot.swift（UsageWindow{label,utilizationPct 0..100,resetsAt:Date?,windowDuration} / NamedUsageWindow / CreditLine / ProviderUsageSnapshot{primary/secondary/extraWindows/creditLine/planLabel}）；UsageService conform UsageProvider；UsageModel.swift 的 UsageResponse.asProviderSnapshot() 做映射（fetchSnapshot 实施期定为不进协议、改 asProviderSnapshot 扩展；UsageService 实施期定不改名）。ProviderAbstractionTests.testMap* 逐字段断言。"
   - id: SC2
-    criterion: 存在 `ProviderRegistry`（当前只注册 Claude 一个）+ 每 provider 一个 `ProviderRuntime`（`@MainActor ObservableObject`：`snapshot`/`lastUpdated`/`lastError`/`isConfigured`/`trendPrimary`/`trendSecondary`，**由所属 provider 写入**）+ `ProviderCoordinator`（持有 registry 与 `[ProviderID: ProviderRuntime]` + `primaryProviderID`，提供 `runtime(for:)`/`primaryRuntime`/`refreshNow(id:)`；**本版本 coordinator 不自己跑 timer**——Claude 的后台 polling 仍归 `ClaudeUsageProvider` 自己，它每次 fetch 成功后把映射出的 snapshot 写进自己的 `ProviderRuntime`）；`UsageBarApp` 通过 `ProviderCoordinator` 装配，不再直接 `@StateObject UsageService()`（`UsageService` 演化成 `ClaudeUsageProvider`）
+    criterion: "存在 `ProviderRegistry`（当前只注册 Claude 一个）+ 每 provider 一个 `ProviderRuntime`（`@MainActor ObservableObject`：`snapshot`/`lastUpdated`/`lastError`/`isConfigured`/`trendPrimary`/`trendSecondary`，**由所属 provider 写入**）+ `ProviderCoordinator`（持有 registry 与 `[ProviderID: ProviderRuntime]` + `primaryProviderID`，提供 `runtime(for:)`/`primaryRuntime`/`refreshNow(id:)`；**本版本 coordinator 不自己跑 timer**——Claude 的后台 polling 仍归 `ClaudeUsageProvider` 自己，它每次 fetch 成功后把映射出的 snapshot 写进自己的 `ProviderRuntime`）；`UsageBarApp` 通过 `ProviderCoordinator` 装配，不再直接 `@StateObject UsageService()`（`UsageService` 演化成 `ClaudeUsageProvider`）"
     done: true
     evidence: "commit 95cd76c/782c3de：ProviderRegistry.swift / ProviderRuntime.swift / ProviderCoordinator.swift；UsageBarApp 改 @StateObject ProviderCoordinator(claude: UsageService())，.task 装配迁移、polling 仍由 UsageService.startPolling()。ProviderAbstractionTests.testRegistryClaudeOnly / testCoordinatorDefaultsToClaude / testCoordinatorPrimarySwitchTracksRuntime / testProviderRuntimeSuccessThenError。"
   - id: SC3
@@ -42,7 +42,7 @@ spec_criteria:
   - id: SC7
     criterion: 活体用量渲染只走抽象层 —— `git grep -n 'UsageResponse\|UsageBucket' macos/Sources/UsageBar` 的命中只出现在 `ClaudeUsageProvider.swift` / `UsageModel.swift`（Claude 内部解码模型与映射）及其测试里，菜单栏（`MenuBarLabel`）与 popover 用量区（`ProviderUsageSection`/`UsageHeroCard`）不引用它们，只读 `ProviderRuntime`/`ProviderUsageSnapshot`/`UsageWindow`
     done: true
-    evidence: "`git grep -n \"UsageResponse\|UsageBucket\" macos/Sources/UsageBar` 命中仅：UsageModel.swift（Claude 解码模型 + asProviderSnapshot 映射）、UsageService.swift（@Published var usage + JSONDecoder().decode）、以及 ProviderUsageSnapshot.swift / UsageHeroCard.swift 各一处文档注释。菜单栏（MenuBarLabel）与 popover 用量区（ProviderUsageSection / UsageHeroCard 代码部分）只读 ProviderRuntime/ProviderUsageSnapshot/UsageWindow。"
+    evidence: "`git grep -n \"UsageResponse\\|UsageBucket\" macos/Sources/UsageBar` 命中仅：UsageModel.swift（Claude 解码模型 + asProviderSnapshot 映射）、UsageService.swift（@Published var usage + JSONDecoder().decode）、以及 ProviderUsageSnapshot.swift / UsageHeroCard.swift 各一处文档注释。菜单栏（MenuBarLabel）与 popover 用量区（ProviderUsageSection / UsageHeroCard 代码部分）只读 ProviderRuntime/ProviderUsageSnapshot/UsageWindow。"
 automated_checks:
   - "SC_AUTO_BUILD: cd macos && swift build -c release"
   - "SC_AUTO_TEST: cd macos && swift test"
@@ -72,7 +72,7 @@ reviews:
 
 ## 1. 背景与目标
 
-[ADR 0005](../adr/0005-reopen-multi-provider-direction.md) 重新开放多 provider 方向、分两步走：第 1 步 v0.2.4 搭好了 popover 顶部的 provider tab UI 外壳（Claude 可用，其余占位）；第 2 步要对接 Codex 数据层。但当前"活体用量"链路（`UsageService` + `UsageResponse`/`UsageBucket` + `MenuBarLabel` + `PopoverView.usageView` + `TrendCalculator`/`PaceCalculator` + `UsageHistoryService`）是**对 Claude 写死**的 —— 直接把 Codex 接进来要么塞进 `UsageService`（污染那个 Claude OAuth/polling 单一真相源），要么写一份平行的 `CodexUsageService`/`CodexUsageView`（重复代码、两套要各自维护）。两条都不优雅。
+[ADR 0005](../../adr/0005-reopen-multi-provider-direction.md) 重新开放多 provider 方向、分两步走：第 1 步 v0.2.4 搭好了 popover 顶部的 provider tab UI 外壳（Claude 可用，其余占位）；第 2 步要对接 Codex 数据层。但当前"活体用量"链路（`UsageService` + `UsageResponse`/`UsageBucket` + `MenuBarLabel` + `PopoverView.usageView` + `TrendCalculator`/`PaceCalculator` + `UsageHistoryService`）是**对 Claude 写死**的 —— 直接把 Codex 接进来要么塞进 `UsageService`（污染那个 Claude OAuth/polling 单一真相源），要么写一份平行的 `CodexUsageService`/`CodexUsageView`（重复代码、两套要各自维护）。两条都不优雅。
 
 本 spec 先打地基：把活体用量链路抽象成"一个 provider 一个 `UsageProvider` 实现 + 统一的 `ProviderUsageSnapshot` 形状 + 每 provider 一个 `ProviderRuntime` 状态容器 + 一个 `ProviderCoordinator` 协调器"，Claude 改写成"恰好是当前唯一注册的 provider"。**纯重构，Claude 用户行为零回归**（唯一可见变化：Settings 多一个目前只有 Claude 可选的"主 provider" Picker）。地基好了之后，[v0.2.6 Codex provider](./2026-05-12-codex-provider.md) 只需新增一个 `CodexUsageProvider`，视图/状态容器/tab 切换全复用本 spec 的泛化层。
 
@@ -209,10 +209,10 @@ reviews:
 
 ## 7. 引用
 
-- 相关 ADR：[`../adr/0005-reopen-multi-provider-direction.md`](../adr/0005-reopen-multi-provider-direction.md)（supersede 了 [`0002`](../adr/0002-claude-only-not-multi-provider.md)）
-- 相关调研：[`../research/competitive-analysis.md`](../research/competitive-analysis.md)（§3.2 实现机制差距）、[`../research/codex-data-sources.md`](../research/codex-data-sources.md)
+- 相关 ADR：[`../adr/0005-reopen-multi-provider-direction.md`](../../adr/0005-reopen-multi-provider-direction.md)（supersede 了 [`0002`](../../adr/0002-claude-only-not-multi-provider.md)）
+- 相关调研：[`../research/competitive-analysis.md`](../../research/competitive-analysis.md)（§3.2 实现机制差距）、[`../research/codex-data-sources.md`](../../research/codex-data-sources.md)
 - 相关 spec：[`2026-05-12-popover-redesign.md`](./2026-05-12-popover-redesign.md)（v0.2.4，搭了 provider tab UI 外壳）、[`2026-05-12-codex-provider.md`](./2026-05-12-codex-provider.md)（v0.2.6，本 spec 的下游消费者）
-- 落地版本：[`../versions/v0.2.5-multi-provider-refactor.md`](../versions/v0.2.5-multi-provider-refactor.md)
+- 落地版本：[`../versions/v0.2.5-multi-provider-refactor.md`](../../versions/v0.2.5-multi-provider-refactor.md)
 
 ## Verification log
 
