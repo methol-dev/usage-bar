@@ -75,7 +75,14 @@ actor UsageEventStore {
         for (monthKey, newEvents) in grouped {
             let url = monthFileURL(monthKey)
             let parsed = loadMonth(monthKey)
-            if parsed == nil && fm.fileExists(atPath: url.path) { dirty.insert(monthKey) }
+            if parsed == nil && fm.fileExists(atPath: url.path) {
+                dirty.insert(monthKey)
+                // 解码失败的旧文件先挪成 .bak 再覆盖：恢复依赖「下次 collect 重扫源 JSONL」，
+                // 但 Claude CLI 会清理旧 session 文件，源没了的话直接覆盖 = 该月数据永久丢失。
+                let backup = url.deletingPathExtension().appendingPathExtension("bak.json")
+                try? fm.removeItem(at: backup)
+                try? fm.moveItem(at: url, to: backup)
+            }
             var existing = parsed?.events ?? []
             var seen = Set(existing.map { "\($0.msgId)|\($0.reqId)" })
             for e in newEvents {

@@ -24,8 +24,10 @@ enum UsageChartInterpolation {
 
         let sorted = points.sorted { $0.timestamp < $1.timestamp }
 
+        // 数据范围之外没有可插值的真实数据：返回 nil（调用方不显示 tooltip），
+        // 不能伪造 0%/0% —— 图表 X 域总是铺满选定时间窗，历史可能只覆盖其中一段。
         if date < sorted.first!.timestamp || date > sorted.last!.timestamp {
-            return UsageChartInterpolatedValues(date: date, pct5h: 0, pct7d: 0)
+            return nil
         }
 
         for i in 0..<(sorted.count - 1) {
@@ -74,13 +76,16 @@ struct UsageChartSectionView: View {
     var costContext: ProviderCostContext? = nil
 
     @State private var selectedRange: TimeRange = .day1
+    /// 缓存的费用汇总：`costForEvents` 对 31 天原始事件逐条跑 model 归一化（含正则），
+    /// 事件量大时不能放进 body 的计算属性里每次渲染重算（会在主线程卡顿）。
+    @State private var costSummary: CostSummary?
 
     /// 根据当前选定时间范围，从 recentEvents 中计算 CostSummary。
-    private var costSummary: CostSummary? {
+    private func recomputeCostSummary() {
         let cutoff = Date().addingTimeInterval(-selectedRange.interval)
         let summary = UsageAggregator.costForEvents(recentEvents, since: cutoff, now: Date(),
                                                     pricing: costContext?.pricing ?? ClaudeModelPriceTable.shared)
-        return summary.scannedFileCount > 0 ? summary : nil
+        costSummary = summary.scannedFileCount > 0 ? summary : nil
     }
 
     var body: some View {
@@ -94,6 +99,9 @@ struct UsageChartSectionView: View {
                 LocalCostCard(summary: cost, displayName: costContext?.displayName ?? { ClaudePricing.displayName($0) })
             }
         }
+        .onAppear { recomputeCostSummary() }
+        .onChange(of: selectedRange) { recomputeCostSummary() }
+        .onChange(of: recentEvents) { recomputeCostSummary() }
     }
 }
 

@@ -41,6 +41,7 @@ actor ScanCursorStore {
     func nextReadOffset(for fileURL: URL, currentSize: Int, currentMTime: Date) -> Int? {
         guard let c = loaded().files[fileURL.path] else { return 0 }   // 首见
         if c.size == currentSize && abs(c.mtime.timeIntervalSince(currentMTime)) < 1 { return nil }   // 没变（mtime 容 1s 抖动）
+        if c.size == currentSize { return 0 }                           // 同尺寸但 mtime 变了 → 原地等长改写，续读会漏；全读
         if currentSize < c.size { return 0 }                            // 变小 → 全读
         if currentMTime < c.mtime.addingTimeInterval(-1) { return 0 }   // mtime 跳到更早 → 全读
         return c.lineOffset                                             // 变大 → 续读

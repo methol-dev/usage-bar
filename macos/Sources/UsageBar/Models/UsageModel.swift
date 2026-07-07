@@ -71,33 +71,45 @@ struct UsageBucket: Codable {
         )
     }
 
-    private static func parseResetDate(from value: String?) -> Date? {
-        guard let value, !value.isEmpty else { return nil }
-
-        let isoFormatters: [ISO8601DateFormatter.Options] = [
+    // formatter 缓存：DateFormatter 构造成本高，而 resetsAtDate 在每次 poll 的
+    // reconcile/snapshot 路径上会被读多次；DateFormatter 自 macOS 10.9 起线程安全（只读使用）。
+    private static let isoFormatters: [ISO8601DateFormatter] = {
+        let optionSets: [ISO8601DateFormatter.Options] = [
             [.withInternetDateTime, .withFractionalSeconds],
             [.withInternetDateTime]
         ]
-
-        for options in isoFormatters {
+        return optionSets.map { options in
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = options
+            return formatter
+        }
+    }()
+
+    private static let fallbackFormatters: [DateFormatter] = {
+        let patterns = [
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd'T'HH:mm:ss"
+        ]
+        return patterns.map { pattern in
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = pattern
+            return formatter
+        }
+    }()
+
+    private static func parseResetDate(from value: String?) -> Date? {
+        guard let value, !value.isEmpty else { return nil }
+
+        for formatter in isoFormatters {
             if let date = formatter.date(from: value) {
                 return date
             }
         }
 
-        let fallbackPatterns = [
-            "yyyy-MM-dd'T'HH:mm:ss.SSSSSS",
-            "yyyy-MM-dd'T'HH:mm:ss.SSS",
-            "yyyy-MM-dd'T'HH:mm:ss"
-        ]
-
-        for pattern in fallbackPatterns {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone(secondsFromGMT: 0)
-            formatter.dateFormat = pattern
+        for formatter in fallbackFormatters {
             if let date = formatter.date(from: value) {
                 return date
             }

@@ -38,6 +38,9 @@ final class ModelPricingCatalog: @unchecked Sendable {
 
     private let lock = NSLock()
     private var table: [String: ModelUnitPricing] = [:]   // key = 上游原名小写
+    /// `table` 键的有序快照，随 `table` 同步更新。前缀回退匹配需要字典序确定性，
+    /// 表有几千个 key，不能在每次查表 miss 时现排。
+    private var sortedKeys: [String] = []
     private var loaded = false
     private var refreshInFlight = false
 
@@ -86,6 +89,7 @@ final class ModelPricingCatalog: @unchecked Sendable {
             ?? Self.loadParsed(from: bundledURL, minBytes: effMinBytes)
         lock.lock()
         table = parsed ?? [:]
+        sortedKeys = table.keys.sorted()
         loaded = parsed != nil
         lock.unlock()
     }
@@ -132,14 +136,13 @@ final class ModelPricingCatalog: @unchecked Sendable {
     // MARK: - 查表（逐级回退候选链）
 
     func unitPricing(rawModel: String) -> ModelUnitPricing? {
-        lock.lock(); let snapshot = table; lock.unlock()
+        lock.lock(); let snapshot = table; let keys = sortedKeys; lock.unlock()
         guard !snapshot.isEmpty else { return nil }
         let candidates = Self.pricingCandidates(for: rawModel)
         for cand in candidates {
             if let hit = snapshot[cand] { return hit }
         }
         // 步骤 6：前缀匹配 —— 以任一候选为前缀的 key，排除带 foreign route 前缀的，字典序第一（确定性）。
-        let keys = snapshot.keys.sorted()
         for cand in candidates {
             if let k = keys.first(where: { key in
                 key.hasPrefix(cand) && !Self.foreignRoutePrefixes.contains(where: { key.contains($0) })
@@ -228,7 +231,7 @@ final class ModelPricingCatalog: @unchecked Sendable {
                    let metaData = try? JSONSerialization.data(withJSONObject: ["fetched_at": ISO8601DateFormatter().string(from: now)]) {
                     try? metaData.write(to: metaURL, options: [.atomic])
                 }
-                self.lock.lock(); self.table = parsed; self.loaded = true; self.lock.unlock()
+                self.lock.lock(); self.table = parsed; self.sortedKeys = parsed.keys.sorted(); self.loaded = true; self.lock.unlock()
             }
         }
     }

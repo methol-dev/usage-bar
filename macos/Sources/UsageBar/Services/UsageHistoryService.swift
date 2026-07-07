@@ -111,12 +111,14 @@ class UsageHistoryService {
     // MARK: - Downsampling
 
     func downsampledPoints(for range: TimeRange) -> [UsageDataPoint] {
-        let allPoints = history.dataPoints
+        let now = Date()
+        let rangeStart = now.addingTimeInterval(-range.interval)
+        // 先按选中范围过滤：范围外的旧点（保留期最长 30 天）若被 clamp 进首个 bucket，
+        // 会把第一个可见数据点污染成整段历史的均值、时间戳还落在图表域之外。
+        let allPoints = history.dataPoints.filter { $0.timestamp >= rangeStart }
 
         guard allPoints.count > range.targetPointCount else { return allPoints }
 
-        let now = Date()
-        let rangeStart = now.addingTimeInterval(-range.interval)
         let bucketCount = range.targetPointCount
         let bucketDuration = range.interval / Double(bucketCount)
 
@@ -125,7 +127,6 @@ class UsageHistoryService {
         for point in allPoints {
             let offset = point.timestamp.timeIntervalSince(rangeStart)
             var index = Int(offset / bucketDuration)
-            if index < 0 { index = 0 }
             if index >= bucketCount { index = bucketCount - 1 }
             buckets[index].append(point)
         }
