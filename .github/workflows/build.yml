@@ -12,8 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build release binary
-        run: cd macos && swift build -c release
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            macos/.build
+            ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm-${{ runner.os }}-${{ hashFiles('macos/Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-
 
       - name: Run tests
         run: cd macos && swift test

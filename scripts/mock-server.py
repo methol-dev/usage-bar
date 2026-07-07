@@ -19,11 +19,16 @@ Scenarios:
     error           - Returns 500 server error
 
 To point the app at this server, modify UsageService.swift:
-    private let usageEndpoint = URL(string: "http://localhost:8080/api/oauth/usage")!
+    nonisolated static let defaultUsageEndpoint = URL(string: "http://127.0.0.1:8080/api/oauth/usage")!
 
-Then restart the app. This only mocks the usage endpoint for refresh/testing.
-The server also exposes a fake /v1/oauth/token endpoint for manual experiments,
-but the app does not use it unless you explicitly repoint its auth flow too.
+Then restart the app. Routes served:
+    GET  /api/oauth/usage     - usage payload for the active scenario
+    GET  /api/oauth/userinfo  - static fake user info
+    GET  /scenario/<name>     - switch scenario at runtime
+    POST /v1/oauth/token      - fake token endpoint for manual experiments
+
+The real browser OAuth flow is NOT mocked; the app does not use the fake token
+endpoint unless you explicitly repoint its auth flow too.
 """
 
 import argparse
@@ -38,7 +43,9 @@ def iso_future(hours=0, days=0):
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
 
 
-SCENARIOS = {
+def build_scenarios():
+    # 每次调用重新计算 resets_at；模块级只算一次的话，服务器跑几小时后时间戳会过期成负倒计时
+    return {
     "normal": {
         "five_hour": {"utilization": 25.0, "resets_at": iso_future(hours=3)},
         "seven_day": {"utilization": 45.0, "resets_at": iso_future(days=4)},
@@ -162,9 +169,11 @@ SCENARIOS = {
 }
 
 
-class MockHandler(BaseHTTPRequestHandler):
-    scenario = "normal"
+# 仅用于场景名列表（argparse choices / 错误提示）；响应数据一律用 build_scenarios() 现算
+SCENARIOS = build_scenarios()
 
+
+class MockHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/oauth/usage":
             self.handle_usage()
@@ -230,13 +239,18 @@ class MockHandler(BaseHTTPRequestHandler):
             )
             return
 
-        data = SCENARIOS.get(scenario, SCENARIOS["normal"])
+        scenarios = build_scenarios()
+        data = scenarios.get(scenario, scenarios["normal"])
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(data, indent=2).encode())
 
     def handle_token(self):
+        # 先读完请求 body，否则带 body 的 curl 请求可能收到 connection reset
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > 0:
+            self.rfile.read(length)
         # Accept any code and return a fake token
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -253,7 +267,7 @@ class MockHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         scenario = self.server.scenario
-        print(f"[{scenario}] {args[0]}")
+        print(f"[{scenario}] {format % args}")
 
 
 def main():

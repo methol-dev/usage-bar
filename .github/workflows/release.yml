@@ -16,10 +16,32 @@ jobs:
     env:
       REPOSITORY_NAME: ${{ github.event.repository.name }}
     steps:
+      - name: Preflight Sparkle signing secret
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [[ -z "${SPARKLE_PRIVATE_KEY:-}" ]]; then
+            echo "::error::Missing SPARKLE_PRIVATE_KEY repository secret."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            macos/.build
+            ~/Library/Caches/org.swift.swiftpm
+          key: swiftpm-${{ runner.os }}-${{ hashFiles('macos/Package.resolved') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+
+      - name: Run tests
+        run: cd macos && swift test
 
       - name: Build release app bundle
         run: |

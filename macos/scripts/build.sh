@@ -95,6 +95,9 @@ restore_litellm_snapshot() {
 
 build_app_bundle() {
     fetch_litellm_prices
+    # 构建中途任何一步失败（swift build / actool / codesign）也必须还原快照，
+    # 否则工作区留下未经审查的网络下载 diff，可能被后续流程误提交。
+    trap restore_litellm_snapshot EXIT
 
     echo "==> Building release binary (universal: arm64 + x86_64)..."
     swift build -c release --arch arm64 --arch x86_64
