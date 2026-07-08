@@ -3,7 +3,7 @@ slug: adr-index
 title: ADR 索引
 type: index
 created: 2026-05-11
-updated: 2026-05-13
+updated: 2026-07-08
 ---
 
 # Architecture Decision Records
@@ -23,6 +23,7 @@ updated: 2026-05-13
 | [0004](./0004-fork-divergence-from-blimp-labs.md) | Fork divergence from Blimp-Labs | accepted | 自 v0.0.7 起独立编号 + URL 校准 |
 | [0005](./0005-reopen-multi-provider-direction.md) | 重新开放多 provider 方向 | accepted | supersede 0002；先搭 UI 外壳，逐步对接（首个 Codex） |
 | [0006](./0006-rename-claudeusagebar-to-usagebar.md) | Rename ClaudeUsageBar → UsageBar | accepted | app / 模块 / bundle 去掉 `Claude` 前缀；bundle id → `com.tuzhihao.app.UsageBar`；本地数据目录 → `~/.config/usage-bar/` |
+| [0007](./0007-agent-rules-restructure.md) | AI 开发规则改用 `.agent/rules/` 组织 | accepted | AGENTS.md 收敛为入口 + Rules Index；规则按领域拆分带 `globs`；删 `docs/agents|workflow|user-guide` 等冗余 |
 
 ## 状态机
 

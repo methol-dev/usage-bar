@@ -16,7 +16,7 @@
 - [ ] `ProviderID` 枚举已有该 provider 的 case（`macos/Sources/UsageBar/Models/ProviderID.swift`）  
   若没有：加一行 `case <name>`（`rawValue` 同时是磁盘目录名，用小写英文，**不改现有 case**）
 - [ ] 理解了凭证来源（文件路径、格式）与 API 端点（或本地日志路径）
-- [ ] 新 provider 的数据接入不触碰 AGENTS.md §6 的 hard gate（凭证写入 / 新第三方依赖 / ADR）
+- [ ] 新 provider 的数据接入不触碰 AGENTS.md「Hard Gates」的情形（凭证写入 / 新第三方依赖 / ADR）
 
 ---
 

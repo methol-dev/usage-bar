@@ -7,7 +7,7 @@ Thanks for your interest in contributing! This guide will help you get set up an
 > under the governance contract in [`AGENTS.md`](AGENTS.md). Human contributors are welcome —
 > please prefer opening a [GitHub Issue](https://github.com/methol/usage-bar/issues/new) describing
 > the bug or feature first; AI agents will pick it up via the
-> [issue-driven workflow](docs/workflow/issue-driven.md) and produce a PR. Direct PRs are still
+> [issue-driven workflow](.agent/rules/workflows/issue-driven.md) and produce a PR. Direct PRs are still
 > accepted but may be re-routed through that flow for consistency.
 
 ## Prerequisites

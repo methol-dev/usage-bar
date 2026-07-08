@@ -17,15 +17,10 @@ AI 可执行的标准操作流程。每份 runbook 都是"命令式"的——按
 | [`release.md`](./release.md) | 标准发版流程（含 AI 自动写 CHANGELOG） |
 | [`add-new-provider.md`](./add-new-provider.md) | 接入新用量数据源 provider 的实施清单 |
 
-### Placeholder runbooks（占位，未来落地）
+### 未来可能新增（尚未建文件，真正需要时再写）
 
-> 这些文件仅有骨架，**真正执行前必须先按 [`AGENTS.md`](../../AGENTS.md) §6 hard gate 升级人类**。
-
-| Runbook | 用途 | 触发时机 |
-|---|---|---|
-| [`notarization.md`](./notarization.md) | Apple Developer ID 公证 | v0.2.1 落地时填 |
-| [`sparkle-keys.md`](./sparkle-keys.md) | Sparkle Ed25519 密钥操作 | 凭证操作时填 |
-| [`incident-response.md`](./incident-response.md) | 应急响应 + 回滚 + 复盘 | 首次 incident 时填 |
+> 下列操作涉及人类持有的凭证 / 应急决策，**执行前必须先按 [`AGENTS.md`](../../AGENTS.md)「Hard Gates」升级人类**，
+> 届时先写 runbook 再动手：Apple Developer ID 公证、Sparkle Ed25519 密钥操作、应急响应 + 回滚 + 复盘。
 
 ## 编写新 runbook
 

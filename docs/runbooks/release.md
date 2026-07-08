@@ -200,7 +200,7 @@ CI workflow 若使用 generate-appcast 工具需根据 tag 后缀注入 `--chann
 - [ ] 无 critical issue 在 GitHub Issues 内开出
 - [ ] 用户社群（如有）无重大反馈
 
-任一项失败 → 走 `incident-response.md` 流程。
+任一项失败 → 属 [`AGENTS.md`](../../AGENTS.md)「Hard Gates」第 4 条，升级人类并按需回滚（撤 release / 回退 appcast）。
 
 ## 10. Runs log
 
@@ -218,4 +218,4 @@ CI workflow 若使用 generate-appcast 工具需根据 tag 后缀注入 `--chann
 
 - 母法：[`../superpowers/specs/2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md) §4.2 G6/G7
 - ADR 0004：[`../adr/0004-fork-divergence-from-blimp-labs.md`](../adr/0004-fork-divergence-from-blimp-labs.md)
-- 关联：[`notarization.md`](./notarization.md)、[`sparkle-keys.md`](./sparkle-keys.md)、[`incident-response.md`](./incident-response.md)
+- 关联：公证 / Sparkle 密钥 / 应急响应 runbook 尚未建档（见 [`README.md`](./README.md)「未来可能新增」），涉及时先过 hard gate

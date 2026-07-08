@@ -1,14 +1,11 @@
 ---
-slug: agents-conventions
-title: 文档写作约定 + frontmatter 速查 + 命名规范
-type: guide
-created: 2026-05-13
-updated: 2026-05-13
+alwaysApply: false
+globs: "docs/**/*.md, *.md"
 ---
 
-# 写作约定 + frontmatter 速查 + 命名规范
+# 文档写作规则
 
-写 spec / ADR / version / runbook / 索引时的统一规范。**完整 schema 与字段语义在 [母法 spec](../superpowers/specs/2026-05-11-docs-governance.md) §3.3，本文件是速查版**。
+写 spec / ADR / version / runbook / 索引时的统一规范。**完整 schema 与字段语义在 [母法 spec](../../docs/superpowers/specs/2026-05-11-docs-governance.md) §3.3，本文件是速查版**。
 
 ## 1. 写作风格
 
@@ -32,7 +29,7 @@ updated: 2026-05-13
 | `status` | ✅ | `draft` 起步，G2 后改 `accepted`，G6 全勾后改 `implemented` |
 | `created` / `updated` | ✅ | ISO 日期；`updated` 每次实质改动后同步 |
 | `owner` | ✅ | `claude-code` / `human` / 其他 runner 名 |
-| `model` | ✅ | 写作模型 ID（`claude-opus-4-7` / `claude-sonnet-4-6` / `gpt-5-codex`） |
+| `model` | ✅ | 写作模型 ID |
 | `target_version` | ✅ | 该 spec 计划落地的 `vX.Y.Z` |
 | `related_adrs` / `related_research` | 可空 | ADR 编号数组 / research slug 数组 |
 | `spec_criteria` | ✅ | 对象数组 `[{id, criterion, done, evidence}]`，G6 据此判定 |
@@ -83,19 +80,19 @@ updated: 2026-05-13
 ### ADR 文件
 
 - `NNNN-<kebab-case-slug>.md`（4 位数字 + slug）
-- 编号严格递增；不复用，不重排
+- 编号严格递增；不复用，不重排；ADR append-only 不可变
 - supersede 时：新 ADR 引用旧 ADR id 并在 `Context` 节说明替换原因；同时把旧 ADR 的 `status` 改为 `superseded-by NNNN`
 
 ### 索引文件（README.md）
 
-- 必有 frontmatter（`slug` + `type=index` + `created/updated`）
+- spec / ADR / version 索引必有 frontmatter（`slug` + `type=index` + `created/updated`）
 - 表格列与对应文件 frontmatter 同步；frontmatter 是单源真相
 
 ## 5. 大小写与术语
 
 - 项目名：`UsageBar`（不是 `Usage Bar` 不是 `usage-bar`；后者只用于 URL / repo 名）
 - 历史名 `ClaudeUsageBar` 仅出现在 ADR 0006 与 v0.2.13 spec/version 文档中
-- 模型 ID：保留厂商命名（`claude-opus-4-7` / `gpt-5-codex` / `o4-mini`）
+- 模型 ID：保留厂商命名
 - 命令 / 文件路径：等宽字体，反引号包裹
 
 ## 6. 链接
@@ -103,3 +100,12 @@ updated: 2026-05-13
 - 仓库内部链接用相对路径（`../adr/0001-...md`），不用绝对路径或 GitHub URL
 - 跨子目录链接需明确层级（避免 `./xxx.md` 在不同位置 ambiguous）
 - 外部链接（GitHub、Sparkle 等）使用完整 https URL
+
+## 7. CHANGELOG
+
+由 AI 在发版 runbook（[`docs/runbooks/release.md`](../../docs/runbooks/release.md) §5）自动生成，不手工日常维护。规则：
+
+- **不要直接 copy PR 标题**（多为英文）
+- 每条 PR / commit 翻译成中文 + 按"用户视角"重写
+- 分类：新增 / 改进 / 修复 / 安全隐私 / 内部
+- 引用对应 version 文件与 spec id
