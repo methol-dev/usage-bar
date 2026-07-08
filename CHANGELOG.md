@@ -44,8 +44,8 @@
 
 ### 改进（Changed）
 
-- **更新检测按钮移至设置**：「检查更新」按钮从 popover 底部栏移至「Settings → Updates」区段，与更新渠道选项集中在一起，交互更符合直觉。（[#36](https://github.com/methol/usage-bar/issues/36)）
-- **菜单栏显示版本号**：popover 底部栏「退出」按钮旁新增当前版本号（如 `v0.7.0`），方便随时确认正在运行的版本。（[#36](https://github.com/methol/usage-bar/issues/36)）
+- **更新检测按钮移至设置**：「检查更新」按钮从 popover 底部栏移至「Settings → Updates」区段，与更新渠道选项集中在一起，交互更符合直觉。（[#36](https://github.com/methol-dev/usage-bar/issues/36)）
+- **菜单栏显示版本号**：popover 底部栏「退出」按钮旁新增当前版本号（如 `v0.7.0`），方便随时确认正在运行的版本。（[#36](https://github.com/methol-dev/usage-bar/issues/36)）
 
 ### 参考
 
@@ -59,13 +59,13 @@
 
 ### 新增（Added）
 
-- **接入 Gemini Code Assist for Individuals**：菜单栏 / Popover 现在可以显示 Pro 配额与 Flash 配额（`remainingFraction` + reset 倒计时），完整对标 Claude / Codex 现有形态。复用本机 `~/.gemini/oauth_creds.json`（由 `gemini` CLI 维护），无需重新登录。（[#27](https://github.com/methol/usage-bar/issues/27)）
-- **首次启动自动检测已安装的 AI 工具**：应用第一次打开时，自动检测本机已安装的工具（检测 `~/.claude/`、`~/.codex/`、`~/.gemini/` 等标准路径），仅默认开启已安装 provider 的显示开关；后续以用户自己配置的开关状态为准，不再重复检测。（[#35](https://github.com/methol/usage-bar/pull/35)）
+- **接入 Gemini Code Assist for Individuals**：菜单栏 / Popover 现在可以显示 Pro 配额与 Flash 配额（`remainingFraction` + reset 倒计时），完整对标 Claude / Codex 现有形态。复用本机 `~/.gemini/oauth_creds.json`（由 `gemini` CLI 维护），无需重新登录。（[#27](https://github.com/methol-dev/usage-bar/issues/27)）
+- **首次启动自动检测已安装的 AI 工具**：应用第一次打开时，自动检测本机已安装的工具（检测 `~/.claude/`、`~/.codex/`、`~/.gemini/` 等标准路径），仅默认开启已安装 provider 的显示开关；后续以用户自己配置的开关状态为准，不再重复检测。（[#35](https://github.com/methol-dev/usage-bar/pull/35)）
 
 ### 修复（Fixed）
 
-- Settings 界面 Provider 列表行高从 44 调高到 60，修复 Gemini 行内容被截断的显示问题。（[#31](https://github.com/methol/usage-bar/pull/31)）
-- 菜单栏用量数字统一改为英文格式，修复部分 macOS 系统语言设置下数字显示为中文格式的问题。（[#30](https://github.com/methol/usage-bar/pull/30)）
+- Settings 界面 Provider 列表行高从 44 调高到 60，修复 Gemini 行内容被截断的显示问题。（[#31](https://github.com/methol-dev/usage-bar/pull/31)）
+- 菜单栏用量数字统一改为英文格式，修复部分 macOS 系统语言设置下数字显示为中文格式的问题。（[#30](https://github.com/methol-dev/usage-bar/pull/30)）
 
 ### 内部（Internal）
 
@@ -87,7 +87,7 @@
 
 ### 内部（Internal）
 
-- 全仓状态管理迁移至 Swift Observation framework（`@Observable`）：9 个模型/服务类从旧的 `ObservableObject` + `@Published` 体系切换到 macOS 14 原生追踪机制，手动 Combine 聚合层（`RuntimeAggregator`）随之删除。用户无感知功能变化，内存占用略有改善，属性变化响应更精准。（[#33](https://github.com/methol/usage-bar/pull/33)）
+- 全仓状态管理迁移至 Swift Observation framework（`@Observable`）：9 个模型/服务类从旧的 `ObservableObject` + `@Published` 体系切换到 macOS 14 原生追踪机制，手动 Combine 聚合层（`RuntimeAggregator`）随之删除。用户无感知功能变化，内存占用略有改善，属性变化响应更精准。（[#33](https://github.com/methol-dev/usage-bar/pull/33)）
 
 ---
 
@@ -104,7 +104,7 @@
 ### 修复（Fixed）
 
 - token 过期后 popover 卡在 "Not signed in" 状态：Retry 按钮现在真正重读 Keychain（之前因 `accounts.json` 存在被短路）。
-- 从结构上消除 issue [#22](https://github.com/methol/usage-bar/issues/22) 这一类 OAuth Token Rotation 失败：usage-bar 不再持有 refresh_token，CLI 轮换 token 后不会再被迫退出登录。
+- 从结构上消除 issue [#22](https://github.com/methol-dev/usage-bar/issues/22) 这一类 OAuth Token Rotation 失败：usage-bar 不再持有 refresh_token，CLI 轮换 token 后不会再被迫退出登录。
 
 ---
 

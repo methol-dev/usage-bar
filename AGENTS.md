@@ -18,7 +18,7 @@
 
 - **形态**：macOS 14+ 菜单栏 app（SwiftUI + Swift Charts + Sparkle），展示 Claude / Codex / Gemini API 用量
 - **技术栈**：Swift 5.9+ / SwiftPM；自定义 bundle 组装（非 stock SwiftPM）；Sparkle 是唯一运行时依赖
-- **Remote**：`github.com/methol/usage-bar`；fork 自 Blimp-Labs 截止 `v0.0.6`，自 `v0.0.7` 起独立编号（[ADR 0004](./docs/adr/0004-fork-divergence-from-blimp-labs.md)）
+- **Remote**：`github.com/methol-dev/usage-bar`；fork 自 Blimp-Labs 截止 `v0.0.6`，自 `v0.0.7` 起独立编号（[ADR 0004](./docs/adr/0004-fork-divergence-from-blimp-labs.md)）
 - **架构原则**：
   - Swift 原生、不引入 Electron/Tauri（[ADR 0001](./docs/adr/0001-swift-native-only.md)）
   - 多 provider，抽象须为新 provider 留低成本扩展位（[ADR 0005](./docs/adr/0005-reopen-multi-provider-direction.md)）

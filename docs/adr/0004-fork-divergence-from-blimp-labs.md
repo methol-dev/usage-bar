@@ -10,6 +10,10 @@ deciders: claude-code, methol
 
 ## Context
 
+> **后记（2026-07-08）**：仓库规范地址现为 `github.com/methol-dev/usage-bar`（appcast 相应为
+> `methol-dev.github.io/usage-bar/appcast.xml`）。下文 `methol/usage-bar` 为写作时点快照；
+> 本 ADR 的核心决策（版本号独立、不 cherry-pick 上游、URL 校准原则）不受影响。
+
 事实快照（2026-05-11）：
 
 - 本仓库 git remote: `github.com/methol/usage-bar`

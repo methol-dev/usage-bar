@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: 大粒度 / 跨模块任务(走 spec / ADR / version 流程)
-    url: https://github.com/methol/usage-bar/tree/main/docs
+    url: https://github.com/methol-dev/usage-bar/tree/main/docs
     about: 需要 spec / ADR 支撑的大粒度任务不走 issue,走 AGENTS.md 描述的 research → spec/ADR → plan → 实施 主回路(见 docs/README.md)

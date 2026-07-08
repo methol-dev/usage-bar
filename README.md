@@ -43,7 +43,7 @@ A tiny macOS menu bar app that shows your Claude API and Codex usage at a glance
 
 ### Download
 
-1. Download `UsageBar.dmg` from the [latest release](https://github.com/methol/usage-bar/releases/latest)
+1. Download `UsageBar.dmg` from the [latest release](https://github.com/methol-dev/usage-bar/releases/latest)
 2. Open the disk image and drag `UsageBar.app` into `Applications`
 3. Launch the app from `/Applications`
 4. macOS may require right-click → **Open** on first launch
@@ -53,7 +53,7 @@ A tiny macOS menu bar app that shows your Claude API and Codex usage at a glance
 Requires Xcode 15+ / Swift 5.9+ and macOS 14 (Sonoma) or later.
 
 ```sh
-git clone https://github.com/methol/usage-bar.git
+git clone https://github.com/methol-dev/usage-bar.git
 cd usage-bar
 make app            # build .app bundle
 make dmg            # build drag-to-Applications disk image
@@ -172,7 +172,7 @@ gh secret set SPARKLE_PRIVATE_KEY < /tmp/usage-bar.sparkle.key
 The appcast feed URL used by release builds is:
 
 ```text
-https://methol.github.io/usage-bar/appcast.xml
+https://methol-dev.github.io/usage-bar/appcast.xml
 ```
 
 ### Project structure

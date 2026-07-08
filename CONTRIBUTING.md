@@ -5,7 +5,7 @@ Thanks for your interest in contributing! This guide will help you get set up an
 > **Note: this project is AI-led** ([ADR 0003](docs/adr/0003-ai-led-development.md)).
 > Day-to-day implementation, testing, and CHANGELOG generation are handled by AI agents
 > under the governance contract in [`AGENTS.md`](AGENTS.md). Human contributors are welcome —
-> please prefer opening a [GitHub Issue](https://github.com/methol/usage-bar/issues/new) describing
+> please prefer opening a [GitHub Issue](https://github.com/methol-dev/usage-bar/issues/new) describing
 > the bug or feature first; AI agents will pick it up via the
 > [issue-driven workflow](.agent/rules/workflows/issue-driven.md) and produce a PR. Direct PRs are still
 > accepted but may be re-routed through that flow for consistency.
@@ -19,7 +19,7 @@ Thanks for your interest in contributing! This guide will help you get set up an
 ## Getting started
 
 ```sh
-git clone https://github.com/methol/usage-bar.git
+git clone https://github.com/methol-dev/usage-bar.git
 cd usage-bar
 make app
 ```

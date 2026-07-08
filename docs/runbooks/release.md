@@ -23,8 +23,8 @@ git rev-parse --abbrev-ref HEAD
 git status --short
 # 期望输出：空
 
-# remote 必须是 methol/usage-bar
-git remote -v | grep -q 'methol/usage-bar' || { echo "❌ Wrong remote, see ADR 0004"; exit 1; }
+# remote 必须是 methol-dev/usage-bar
+git remote -v | grep -q 'methol-dev/usage-bar' || { echo "❌ Wrong remote, see ADR 0004"; exit 1; }
 
 # 当前最新 tag
 LATEST_TAG=$(git tag --sort=-v:refname | head -1)
@@ -33,7 +33,7 @@ echo "Latest tag: $LATEST_TAG"
 
 判定条件：
 - [ ] 分支 = main、工作区 clean
-- [ ] remote = methol/usage-bar
+- [ ] remote = methol-dev/usage-bar
 - [ ] 待发版本号严格 > LATEST_TAG（semver 比较）
 - [ ] 待发版本号在 `docs/versions/` 有对应文件且 `status: in-progress`
 
@@ -148,7 +148,7 @@ CI 完成后：
 - [ ] GitHub Release 已自动创建
 - [ ] 上传资源：`UsageBar.zip` + `UsageBar.dmg`
 - [ ] release notes 含本版本 CHANGELOG entry（自动从 `release_notes_zh` 同步）
-- [ ] Sparkle appcast (`https://methol.github.io/usage-bar/appcast.xml`) 已更新
+- [ ] Sparkle appcast (`https://methol-dev.github.io/usage-bar/appcast.xml`) 已更新
 - [ ] minor / major 版本：额外跑 `/ultrareview` 整体 review
 
 ## 8. version 文件状态翻转
