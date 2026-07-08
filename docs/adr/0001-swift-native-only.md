@@ -46,7 +46,7 @@ deciders: claude-code, methol
 
 ### Neutral
 
-- 与 CodexBar 等开源竞品在技术栈上无差异化，差异化靠产品体验（详见 ADR 0002）
+- 与 CodexBar 等开源竞品在技术栈上无差异化，差异化靠产品体验（定位见 [ADR 0005](./0005-reopen-multi-provider-direction.md)）
 
 ## Alternatives considered
 
@@ -70,6 +70,5 @@ deciders: claude-code, methol
 
 ## References
 
-- 母法：[`../superpowers/specs/2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md)
 - 调研：[`../research/competitive-analysis.md`](../research/competitive-analysis.md) §5 Swift 化执行策略
 - 现有代码栈：`macos/Package.swift`、`macos/Sources/UsageBar/`

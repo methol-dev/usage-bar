@@ -7,7 +7,7 @@
 以下仅 Claude Code 专属：
 
 - 用 `AskUserQuestion` 触发 hard gate 升级（给 2~3 个具体选项 + 推荐项，不要开放式问）
-- 用 `TaskCreate` 追踪 brainstorming → spec → plan 进度，每步 `TaskUpdate`
-- `superpowers:brainstorming` skill 是设计任务的入口；`writing-plans` 是后续 plan 阶段
-- codex 工具不可用时**直接走 `general-purpose` subagent fallback，不要停下问用户**（已记 memory）
+- 功能开发用 `EnterPlanMode` 制定计划；plan review 用 `general-purpose` subagent（评审工具不可用时同样 fallback 到 subagent，不要停下问用户，已记 memory）
+- 用 `TaskCreate` / `TaskUpdate` 追踪 plan → 实施 → review 各步进度
+- 代码检查用 `/review` + `/security-review`；开 PR 前用 `/simplify` 精简冗余代码
 - Mock server 使用与还原要求见 [`.agent/rules/mock-server.md`](./.agent/rules/mock-server.md)

@@ -90,6 +90,6 @@ owner 于 2026-07-08 指示参考 [looplj/axonhub](https://github.com/looplj/axo
 ## References
 
 - 参考项目：[looplj/axonhub](https://github.com/looplj/axonhub)（`AGENTS.md` + `.agent/rules/` 模式）
-- 母法 spec：[`../superpowers/specs/2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md)
+- 母法 spec：`2026-05-11-docs-governance`（已由 [ADR 0008](./0008-retire-spec-governance.md) 移除，见 git history）
 - [ADR 0003 — AI-led development](./0003-ai-led-development.md)
 - v0.4.1 docs-cleanup spec：`2026-05-13-docs-cleanup`（被本 ADR 部分替代的上一轮文档结构；历史 spec，见 git history）

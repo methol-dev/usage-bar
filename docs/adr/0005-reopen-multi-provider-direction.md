@@ -10,7 +10,7 @@ deciders: claude-code, methol
 
 ## Context
 
-[ADR 0002](./0002-claude-only-not-multi-provider.md) 在 2026-05-11 决定"专注 Claude，不做多 provider"，理由是工程范围收敛、与 CodexBar 拼广度无差异化、AI 单兵维护多回退路径不现实。
+ADR 0002（已随 2026-07-08 治理清理移除正文，见 git history）在 2026-05-11 决定"专注 Claude，不做多 provider"，理由是工程范围收敛、与 CodexBar 拼广度无差异化、AI 单兵维护多回退路径不现实。
 
 到 v0.2.3 为止，那个判断对早期是对的：先把 Claude 一条线（OAuth + CLI 凭证 + JSONL 扫描 + 多账号 + 用量持久化 + 热力图）做扎实。但现在情况变了：
 
@@ -44,7 +44,7 @@ deciders: claude-code, methol
 ### Neutral
 
 - 与 CodexBar 仍不构成直接替代（它卷广度，我们卷精度 + 少数几家）
-- ADR 0002 转为 `superseded-by 0005`，正文保留作历史记录
+- ADR 0002 转为 `superseded-by 0005`（正文已于 2026-07-08 随治理清理移除，编号保留空缺，见 git history）
 
 ## Alternatives considered
 
@@ -65,7 +65,6 @@ deciders: claude-code, methol
 
 ## References
 
-- 被本 ADR supersede：[`0002-claude-only-not-multi-provider.md`](./0002-claude-only-not-multi-provider.md)
-- 相关 spec：[`../superpowers/specs/2026-05-12-popover-redesign.md`](../superpowers/specs/2026-05-12-popover-redesign.md)
+- 被本 ADR supersede：ADR 0002（正文已移除，见 git history）
+- 相关 spec：`2026-05-12-popover-redesign`、`2026-05-12-usage-store-redesign`（历史 spec，见 git history）
 - 相关 ADR：[`0001-swift-native-only.md`](./0001-swift-native-only.md)（Swift 原生约束对所有 provider 同样适用）
-- v0.2.3 per-provider 存储：[`../superpowers/specs/2026-05-12-usage-store-redesign.md`](../superpowers/specs/2026-05-12-usage-store-redesign.md)

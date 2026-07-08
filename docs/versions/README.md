@@ -8,11 +8,10 @@ updated: 2026-07-07
 
 # Versions
 
-版本路线图 + 每个版本的 spec 清单 / 验收 / release notes 草稿。每个 `vX.Y.Z` 一个文件。
+版本路线图 + 每个版本的变更清单 / 验收 / release notes 草稿。每个 `vX.Y.Z` 一个文件。
 
 > 模板：[`_TEMPLATE.md`](./_TEMPLATE.md)  
-> Frontmatter schema：见母法 [`2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md) §3.3  
-> 版本号约定：见母法 §7.1
+> Frontmatter schema：见 [`.agent/rules/docs.md`](../../.agent/rules/docs.md) §2
 
 ## 状态机
 
@@ -68,16 +67,14 @@ placeholder ─首个 spec 落地─► planned ─开发开始─► in-progres
 | [v0.7.1](./v0.7.1-project-audit-hardening.md) | project-audit-hardening | in-progress | ✅ | | 2026-07-07 | 🧹 全项目排查加固：图表正确性 + 渲染性能 + fetch 重入防护 + CI/脚本加固 + 文档治理 |
 
 > **代码层 / 治理层 drift 说明**：本仓库采用"积压发版"模式 — 多个功能版本攒在一起、由更高版本（如 v0.3.2）一次性 tag 推送。
-> 因此 v0.0.7~v0.2.14 的 frontmatter 仍标 `in-progress`，但代码层已落地 main。完整 G6 closeout（回填 `shipped_date` + 改 `status: shipped`）属于专门动作，将在后续 docs-cleanup 后续工作中处理。
+> 因此 v0.0.7~v0.2.14 的 frontmatter 仍标 `in-progress`，但代码层已落地 main。完整 closeout（回填 `shipped_date` + 改 `status: shipped`）属于专门动作，待后续统一处理。
 >
 > **当前 git tag**：`v0.0.6`（fork 上游截止）；本仓库独立 tag 已陆续发布至 `v0.7.0`（`v0.3.2` / `v0.5.1` / `v0.5.2` / `v0.5.3` / `v0.6.0` / `v0.7.0`），release 明细见 [`CHANGELOG.md`](../../CHANGELOG.md)。
 >
-> **目标（用户 2026-05-12 定）**：把 Codex tab 做到和 Claude tab 界面/功能一致 —— v0.2.6 已上额度窗口卡 + pace；v0.2.8 补趋势 + 折线图；v0.2.9 补成本 + 消费热力图。v0.2.7 是穿插的独立小修（Claude 凭证回退）。新版本立项时按 §7.1 命名规范 append 即可。
->
-> 注：母法 spec [`2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md) §7.2 / §7.3 中的 v0.2.3~v1.0.0 路线是 v0.0.7 立项历史快照（implemented spec 不可变），不代表当前路线。
+> **目标（用户 2026-05-12 定）**：把 Codex tab 做到和 Claude tab 界面/功能一致 —— v0.2.6 已上额度窗口卡 + pace；v0.2.8 补趋势 + 折线图；v0.2.9 补成本 + 消费热力图。v0.2.7 是穿插的独立小修（Claude 凭证回退）。新版本立项时按下方命名规范 append 即可。
 
 ## 命名规范
 
 - 文件名：`vX.Y.Z-<kebab-case-codename>.md`
 - 版本号严格递增；不跳号；patch 含 feature 在 0.x 阶段是合法的
-- placeholder 升级到 planned 时：清空 `includes_specs` 示例、填 `target_date`
+- placeholder 升级到 planned 时：填 `target_date`、删除文件顶部的 Placeholder guardrail 提示框

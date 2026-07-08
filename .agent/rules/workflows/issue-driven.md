@@ -53,7 +53,7 @@ issue 由 "Closes #<num>" 自动关闭（结束；记录都在 issue + PR 里）
 
 1. 凭证 / 密钥链路：OAuth token 刷新、`credentials.json` 格式、Sparkle 私钥、`SU_FEED_URL` 注入（hard gate，见 `AGENTS.md`）
 2. 新第三方依赖 / 改 `LICENSE` / 改开源收费定位
-3. 受保护文件：`docs/adr/*` 已 accepted 的 ADR、`AGENTS.md`、母法 spec、`.github/workflows/release.yml`、`macos/Package.swift` 依赖 pin、`verify-release.sh` invariant（issue / 用户明确要求除外）
+3. 受保护文件：`docs/adr/*` 已 accepted 的 ADR、`AGENTS.md`、`.agent/rules/**`、`.github/workflows/release.yml`、`macos/Package.swift` 依赖 pin、`verify-release.sh` invariant（issue / 用户明确要求除外）
 4. 敏感写入链路：`Providers/Claude/UsageService.swift`、`Models/StoredCredentials.swift`、`App/AppUpdater.swift`、`appcast.xml` 生成、codesign / `build.sh` framework 嵌入
 5. 在 `UsageService` 之外重复 fetch / auth / 轮询逻辑（架构红线，见 [`swift.md`](../swift.md)）
 6. 评审两轮仍不收敛，或 CI 红且原因超出 AI 能力边界（语义歧义、需人取舍）

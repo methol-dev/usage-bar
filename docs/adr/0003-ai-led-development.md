@@ -22,16 +22,16 @@ deciders: claude-code, methol
 
 **AI 主导，人类辅助**：
 
-- **AI（默认 Claude Code）** 主导：调研、设计、ADR 拟定、spec 撰写、writing-plans、实施、review、发版 runbook 执行、CHANGELOG 撰写
+- **AI（默认 Claude Code）** 主导：调研、设计、ADR 拟定、plan 制定、实施、review、发版 runbook 执行、CHANGELOG 撰写
 - **人类（methol）** 辅助：
-  - 仅在 [`../superpowers/specs/2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md) §4.6 列举的 hard gates 情形必须介入
+  - 仅在 [`AGENTS.md`](../../AGENTS.md)「Hard Gates」列举的情形必须介入
   - 提供凭证 / 密钥 / Apple Developer 账号等 AI 不可持有的资源
   - 在 AI 自身明确表态"拿不准"时（AskUserQuestion）做选择
   - 对 AI 产出有否决权（但非主动审批权——人类不必逐条审 spec）
 
-**review 机制兜底**：AI 自审自批是禁止的。母法 §4.2 设了 7 个 review gate，关键 gate（G2 / G5）必须由独立 reviewer（跨模型 / 跨 session）通过；母法 §4.4 角色矩阵指定具体工具与 fallback 路径。
+**review 机制兜底**：AI 自审自批是禁止的。plan review 与 code review 必须由独立 reviewer（subagent / 跨模型 / 人类）通过。（初版为母法 spec 的 7 个 review gate，2026-07-08 起按 [ADR 0008](./0008-retire-spec-governance.md) 简化为工作流内嵌检查点。）
 
-**文档为第一公民**：因为是 AI-led，文档必须写到"任意陌生 AI 会话只读文档就能 5 分钟接续"的程度。这是母法本 spec 的核心成功标准。
+**文档为第一公民**：因为是 AI-led，文档必须写到"任意陌生 AI 会话只读文档就能 5 分钟接续"的程度。
 
 ## Consequences
 
@@ -44,8 +44,8 @@ deciders: claude-code, methol
 
 ### Negative
 
-- 文档治理重型：本 spec / AGENTS.md / 17 条 SC / 7 个 gate 显然是过度治理对一个 ~3.5k 行 Swift 项目而言。**反论**：长期回报；治理本身是 AI 的"协议"，不立则 AI 间无法协作
-- AI 失误兜底压力大：人类不审批 = 必须靠 review gate 与自动化 verification 兜住失误。母法 §4.2 / §4.5 已设计
+- 文档治理重型：初版的母法 spec / 17 条 SC / 7 个 gate 对一个 ~3.5k 行 Swift 项目显然是过度治理。**后记（2026-07-08）**：该担忧成真，治理已按 [ADR 0007](./0007-agent-rules-restructure.md) / [ADR 0008](./0008-retire-spec-governance.md) 轻量化
+- AI 失误兜底压力大：人类不审批 = 必须靠独立 review 与自动化 verification（构建 / 测试 / CI）兜住失误
 - 法律 / 商业责任仍在人类：commits 上的 Author 是人类（或 `Co-Authored-By: Claude` 标记）；产品发布前的最终审视仍是人类（hard gate）
 
 ### Neutral
@@ -74,6 +74,5 @@ deciders: claude-code, methol
 
 ## References
 
-- 母法：[`../superpowers/specs/2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md) §1 / §4 / §5
-- 用户全局指令：`/Users/methol/.claude/CLAUDE.md`（中文 / Plan / Subagent / 中文 git log / brainstorming + karpathy-guidelines）
-- 相关 ADR：[`0001-swift-native-only.md`](./0001-swift-native-only.md)、[`0002-claude-only-not-multi-provider.md`](./0002-claude-only-not-multi-provider.md)
+- 用户全局指令：`/Users/methol/.claude/CLAUDE.md`（中文 / Plan Mode / Subagent / 中文 git log / karpathy-guidelines）
+- 相关 ADR：[`0001-swift-native-only.md`](./0001-swift-native-only.md)、[`0008-retire-spec-governance.md`](./0008-retire-spec-governance.md)（工作流现行形态）

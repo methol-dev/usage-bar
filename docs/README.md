@@ -2,19 +2,17 @@
 
 文档总索引。任意 AI 进入本仓库后，建议读完根目录 `AGENTS.md` 之后立刻读本文件，理解文档分布。
 
-> 治理母法：[`superpowers/specs/2026-05-11-docs-governance.md`](./superpowers/specs/2026-05-11-docs-governance.md)（spec id `2026-05-11-docs-governance`）。
-> 其 §3.1 目录树为历史快照；AI 开发规则现按 [ADR 0007](./adr/0007-agent-rules-restructure.md) 组织在根目录 [`.agent/rules/`](../.agent/rules/)。
+> 治理演进：AI 开发规则在根目录 [`.agent/rules/`](../.agent/rules/)（[ADR 0007](./adr/0007-agent-rules-restructure.md)）；
+> spec / superpowers 治理层已废弃（[ADR 0008](./adr/0008-retire-spec-governance.md)），设计讨论走 plan review + PR，决策沉淀走 ADR。
 
 ## 子目录
 
 | 目录 | 用途 | 何时写 |
 |---|---|---|
-| [`research/`](./research/) | 长期事实性调研（业界 / 竞品 / 外部 API 变化） | 主动调研、或调研跨多 spec 复用 |
-| [`superpowers/specs/`](./superpowers/specs/) | 单次设计 spec（brainstorming 产出）；implemented 后定期清理进 git history，母法永久保留 | 启动新功能 / 模块 / 流程 |
-| `superpowers/plans/` | 实施 plan（writing-plans 产出），一次性产物：merge 后即删 | spec 通过 G2 后，进入实施前 |
 | [`adr/`](./adr/) | 架构决策记录（append-only） | 决策需让 6 个月后的 AI 也能看懂 |
 | [`versions/`](./versions/) | 版本路线 + 每版本验收 + release notes 草稿 | 计划下一个 vX.Y.Z 时；发版前后更新 |
 | [`runbooks/`](./runbooks/) | AI 可执行的标准操作流程 | 任何 AI 要按部就班跑的操作 |
+| [`research/`](./research/) | 长期事实性调研（业界 / 竞品 / 外部 API 变化） | 主动调研、或调研跨多任务复用 |
 
 ## 根目录配套
 
@@ -31,7 +29,6 @@
 
 - 当前 tag：fork 自 Blimp-Labs 截止 `v0.0.6`；本仓库自 `v0.0.7` 起独立编号（[ADR 0004](./adr/0004-fork-divergence-from-blimp-labs.md)）
 - 当前版本计划：见 [`versions/README.md`](./versions/README.md)
-- 当前进行中 spec：见 [`superpowers/specs/README.md`](./superpowers/specs/README.md)
 
 ## 写作约定
 

@@ -33,11 +33,11 @@ cd macos && swift test --filter UsageServiceTests/testBackoffIntervalCapsAtSixty
 | 改 Swift 代码 | `cd macos && swift build -c release` + `cd macos && swift test` |
 | 改 build / bundle / `scripts/` | `make release-artifacts` + `bash macos/scripts/verify-release.sh macos/UsageBar.zip` |
 | 改 UI | `make app` 后手动起 app 回归金路径（尽量少跑 Xcode build） |
-| 改纯文档 | 链接核对 + frontmatter lint（母法 spec `automated_checks`）；无脚本则人工核对 |
+| 改纯文档 | markdown 链接存在性核对 + frontmatter 核对；无脚本则人工核对 |
 
-## G4 硬证据
+## 完成硬证据
 
-下列命令产出绿色输出 = "我做完了"的硬证据（治理框架 G4，见 `AGENTS.md`）：
+下列命令产出绿色输出 = "我做完了"的硬证据（见 `AGENTS.md` Global Rules 第 4 条）：
 
 ```sh
 cd macos && swift build -c release
@@ -46,4 +46,4 @@ make release-artifacts
 bash macos/scripts/verify-release.sh macos/UsageBar.zip
 ```
 
-纯文档版本：见母法 spec frontmatter `automated_checks` 中的 `SC_AUTO_LINKCHECK` / `SC_AUTO_FRONTMATTER`。
+纯文档版本：markdown 相对链接全部可解析 + ADR / version frontmatter 字段齐全。

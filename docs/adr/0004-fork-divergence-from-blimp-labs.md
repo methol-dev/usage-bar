@@ -19,7 +19,7 @@ deciders: claude-code, methol
   - 安装下载链接（line 37）
   - 克隆命令示例（line 47）
   - **Sparkle appcast 域名 `blimp-labs.github.io/claude-usage-bar/appcast.xml`（line 130）**——⚠️ 如本仓库走 tag-driven release 注入 `SU_FEED_URL`，发出去的 app 会从上游 GitHub Pages 拉更新，等同发布**上游版本**给本仓库用户
-- 本仓库即将开始独立功能升级（v0.0.7 起，详见 [`../superpowers/specs/2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md) §7.2）
+- 本仓库即将开始独立功能升级（v0.0.7 起）
 
 如果不固化分叉：
 
@@ -85,7 +85,6 @@ deciders: claude-code, methol
 
 ## References
 
-- 母法：[`../superpowers/specs/2026-05-11-docs-governance.md`](../superpowers/specs/2026-05-11-docs-governance.md) §6 / §7
 - 调研：[`../research/competitive-analysis.md`](../research/competitive-analysis.md)
 - 相关 ADR：[`0003-ai-led-development.md`](./0003-ai-led-development.md)
 - 发版 runbook：[`../runbooks/release.md`](../runbooks/release.md)

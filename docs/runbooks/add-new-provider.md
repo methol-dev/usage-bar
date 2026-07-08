@@ -9,7 +9,7 @@
 ## 0. 适用范围与前置条件
 
 **适用**：读取某 CLI 工具留在本机的凭证、调用其 API 或扫描本地日志、展示用量/费用卡。  
-**不适用**：架构级改造、引入新第三方 Swift 依赖、触动 OAuth 链路 —— 这类先立 spec 走 G2。
+**不适用**：架构级改造、引入新第三方 Swift 依赖、触动 OAuth 链路 —— 这类先走 `AGENTS.md`「开发工作流」（plan mode + plan review，必要时写 ADR）。
 
 **前置**：
 
@@ -188,7 +188,7 @@ bash macos/scripts/verify-release.sh macos/UsageBar.zip
 - [ ] 受保护文件未改动（`verify-release.sh` / `AGENTS.md` / `docs/adr/` / `Package.swift` 依赖 pin）
 - [ ] 凭证写入链路未改动（`UsageService.swift` / `StoredCredentials.swift`）
 - [ ] `ProviderID.allCases` 顺序：新 case 加在现有末尾（Settings 排序依赖初始顺序）
-- [ ] G5 code review 通过（`subagent` 独立判断）
+- [ ] 独立 code review 通过（`/review` + `/security-review`，subagent 独立判断）
 
 ---
 
