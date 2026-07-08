@@ -48,8 +48,6 @@ macos/Sources/UsageBar/
 └── Resources/       # Info.plist, Assets.xcassets, litellm_model_prices.json
 ```
 
-See [`docs/superpowers/specs/2026-05-13-code-structure-hygiene.md`](docs/superpowers/specs/2026-05-13-code-structure-hygiene.md) §3.3 for the authoritative file mapping.
-
 ## Build commands
 
 | Command | What it does |

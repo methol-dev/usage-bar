@@ -10,12 +10,11 @@
 | 目录 | 用途 | 何时写 |
 |---|---|---|
 | [`research/`](./research/) | 长期事实性调研（业界 / 竞品 / 外部 API 变化） | 主动调研、或调研跨多 spec 复用 |
-| [`superpowers/specs/`](./superpowers/specs/) | 单次设计 spec（brainstorming 产出） | 启动新功能 / 模块 / 流程 |
-| [`superpowers/plans/`](./superpowers/plans/) | 实施 plan（writing-plans 产出） | spec 通过 G2 后，进入实施前 |
+| [`superpowers/specs/`](./superpowers/specs/) | 单次设计 spec（brainstorming 产出）；implemented 后定期清理进 git history，母法永久保留 | 启动新功能 / 模块 / 流程 |
+| `superpowers/plans/` | 实施 plan（writing-plans 产出），一次性产物：merge 后即删 | spec 通过 G2 后，进入实施前 |
 | [`adr/`](./adr/) | 架构决策记录（append-only） | 决策需让 6 个月后的 AI 也能看懂 |
 | [`versions/`](./versions/) | 版本路线 + 每版本验收 + release notes 草稿 | 计划下一个 vX.Y.Z 时；发版前后更新 |
 | [`runbooks/`](./runbooks/) | AI 可执行的标准操作流程 | 任何 AI 要按部就班跑的操作 |
-| [`artifacts/issues/<num>/`](./artifacts/issues/) | issue 驱动流程的逐 issue 产物（`diagnosis` / `plan-review` / `verification` / `done.json` / `handoff`），由 `scripts/issues/*.sh` 维护 | 每个走 issue 驱动的 issue |
 
 ## 根目录配套
 

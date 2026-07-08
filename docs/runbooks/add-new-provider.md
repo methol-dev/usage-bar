@@ -1,7 +1,7 @@
 # Runbook — 接入新 Provider
 
 > AI 标准流程：为 usage-bar 接入一个新的用量数据源（如 Cursor / Copilot / Gemini）。  
-> 本文件是操作级清单；架构决策见 [spec `2026-05-12-multi-provider-refactor`](../superpowers/specs/2026-05-12-multi-provider-refactor.md)，  
+> 本文件是操作级清单；架构决策见 [ADR 0005](../adr/0005-reopen-multi-provider-direction.md) 与 spec `2026-05-12-multi-provider-refactor`（历史 spec，见 git history），  
 > 扩展性设计原则见机器本地 memory `project_provider_extensibility.md`（`.claude` 项目 memory，不随仓库分发）。
 
 ---
