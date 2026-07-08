@@ -40,8 +40,9 @@ macos/Sources/UsageBar/
 └── Resources/       # Info.plist、Assets、litellm_model_prices.json
 ```
 
-文档地图见 [`docs/README.md`](./docs/README.md)：`adr/`（决策）、`versions/`（版本路线）、
-`runbooks/`（可执行流程）、`research/`（调研）。
+`docs/` 下只有两类：[`adr/`](./docs/adr/README.md)（架构决策记录，append-only）与
+`runbooks/`（[release](./docs/runbooks/release.md) / [add-new-provider](./docs/runbooks/add-new-provider.md)）。
+用户视角变更记录看 [`CHANGELOG.md`](./CHANGELOG.md)。
 
 ## 任务路径
 
@@ -53,11 +54,10 @@ macos/Sources/UsageBar/
 | 发版 | [`docs/runbooks/release.md`](./docs/runbooks/release.md) |
 | 接新 provider | [`docs/runbooks/add-new-provider.md`](./docs/runbooks/add-new-provider.md) |
 | 改架构 / 写 ADR | [`docs/adr/_TEMPLATE.md`](./docs/adr/_TEMPLATE.md) + 下方 Hard Gates |
-| 写 version / 文档 | [`.agent/rules/docs.md`](./.agent/rules/docs.md) + [version 模板](./docs/versions/_TEMPLATE.md) |
-| 调研 | [`docs/research/README.md`](./docs/research/README.md) |
+| 写文档 | [`.agent/rules/docs.md`](./.agent/rules/docs.md) |
 | 不在上表 | 兜底：先 plan mode 出计划、review 通过再动手 |
 
-**第一次进项目**：读完本文件 → [`docs/README.md`](./docs/README.md) → [`docs/versions/README.md`](./docs/versions/README.md) 知道当前在做什么版本。
+**第一次进项目**：读完本文件，按 Rules Index 按需读规则；看 [`CHANGELOG.md`](./CHANGELOG.md) 与 `git log` 了解最近变更。
 
 ## 开发工作流
 
@@ -70,10 +70,10 @@ macos/Sources/UsageBar/
 4. 代码检查       /review（正确性 / 质量）+ /security-review（凭证 / 权限）
 5. 精简          /simplify 清理冗余代码
 6. PR            创建 PR；CI 绿后 squash merge
-7. 发版          docs/runbooks/release.md（version 文档 + CHANGELOG + tag + 24h health check）
+7. 发版          docs/runbooks/release.md（CHANGELOG + tag + 24h health check）
 ```
 
-- 设计讨论与计划不落盘入库；决策沉淀走 ADR，版本验收走 `docs/versions/`。
+- 设计讨论与计划不落盘入库；决策沉淀走 ADR，版本记录只有 `CHANGELOG.md`。
 - 架构级选择（新依赖、方向调整、破坏性变更）先写 ADR 再实施。
 
 ## Hard Gates — 必须停下问人类的 6 种情形
@@ -100,7 +100,3 @@ macos/Sources/UsageBar/
 | [docs.md](./.agent/rules/docs.md) | `docs/**/*.md`, `*.md` | 写作风格、frontmatter 速查（ADR / version）、命名规范、CHANGELOG 规则 |
 | [mock-server.md](./.agent/rules/mock-server.md) | Manual | Mock server 四条路由、指向 / 还原要求、凭证前提 |
 | [workflows/issue-driven.md](./.agent/rules/workflows/issue-driven.md) | Manual | Issue 驱动生命周期 + 标签 / 需人介入清单等项目配置 |
-
-## 引用
-
-- ADR 索引：[`docs/adr/README.md`](./docs/adr/README.md) ・ 版本路线：[`docs/versions/README.md`](./docs/versions/README.md)

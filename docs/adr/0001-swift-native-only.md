@@ -70,5 +70,5 @@ deciders: claude-code, methol
 
 ## References
 
-- 调研：[`../research/competitive-analysis.md`](../research/competitive-analysis.md) §5 Swift 化执行策略
+- 调研：`competitive-analysis` §5 Swift 化执行策略（历史调研，已随 2026-07-08 文档清理移除，见 git history）
 - 现有代码栈：`macos/Package.swift`、`macos/Sources/UsageBar/`

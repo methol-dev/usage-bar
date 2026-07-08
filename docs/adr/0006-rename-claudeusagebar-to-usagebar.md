@@ -76,5 +76,5 @@ owner 已明确决定改名为 `UsageBar`、bundle id 用 `com.tuzhihao.app.Usag
 
 - [ADR 0004 — Fork divergence from Blimp-Labs](./0004-fork-divergence-from-blimp-labs.md)（上游引用保留依据）
 - [ADR 0005 — 重新开放多 provider 方向](./0005-reopen-multi-provider-direction.md)
-- 版本：[`../versions/v0.2.13-rename-usagebar.md`](../versions/v0.2.13-rename-usagebar.md)
+- 版本：`v0.2.13-rename-usagebar`（历史 version 文档，已随 2026-07-08 文档清理移除，见 git history）
 - 实施 commits：`7a420d6`（ClaudeUsageBar→UsageBar）、`533469f`（本地存储 / bundle id / ADR 0001 引用）

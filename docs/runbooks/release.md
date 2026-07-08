@@ -35,17 +35,16 @@ echo "Latest tag: $LATEST_TAG"
 - [ ] 分支 = main、工作区 clean
 - [ ] remote = methol-dev/usage-bar
 - [ ] 待发版本号严格 > LATEST_TAG（semver 比较）
-- [ ] 待发版本号在 `docs/versions/` 有对应文件且 `status: in-progress`
 
 ## 1. 待发版本验收
 
 ```bash
 VER=v0.0.X       # 替换为待发版本
-VERSION_FILE=docs/versions/${VER}-*.md
+PREV_TAG=$(git tag --sort=-v:refname | head -1)
+git log --oneline ${PREV_TAG}..HEAD    # 核对本版本包含的变更
 ```
 
-- [ ] version 文件「包含的变更」列出的 PR 全部已 merge
-- [ ] version 文件「验收 checklist」全勾
+- [ ] 范围核对：上述 commit 全部为本版本预期内容，无未完成的半截功能
 
 ## 2. CI 与 review 通过
 
@@ -115,7 +114,6 @@ git log --oneline ${PREV_TAG}..HEAD
 - 内部重构、文档、CI 变更（用户不感知的可省略）
 
 ### 参考
-- 版本计划：[`docs/versions/${VER}-...md`](docs/versions/${VER}-...md)
 - 含 PR：${PR_LIST}
 ```
 
@@ -129,7 +127,7 @@ git log --oneline ${PREV_TAG}..HEAD
 判定：
 - [ ] CHANGELOG.md 顶部已含 v${VER} entry
 - [ ] 中文表达；技术术语保留英文
-- [ ] 引用本版本的 version 文件与 PR 号
+- [ ] 引用本版本的 PR 号
 
 ## 6. 推送 tag
 
@@ -147,23 +145,11 @@ git push origin ${VER}
 CI 完成后：
 - [ ] GitHub Release 已自动创建
 - [ ] 上传资源：`UsageBar.zip` + `UsageBar.dmg`
-- [ ] release notes 含本版本 CHANGELOG entry（自动从 `release_notes_zh` 同步）
+- [ ] release notes 含本版本 CHANGELOG entry
 - [ ] Sparkle appcast (`https://methol-dev.github.io/usage-bar/appcast.xml`) 已更新
 - [ ] minor / major 版本：额外跑 `/ultrareview` 整体 review
 
-## 8. version 文件状态翻转
-
-```bash
-# 在 docs/versions/${VER}-*.md 中：
-# status: in-progress → shipped
-# shipped_date: YYYY-MM-DD（提交者本地日期）
-```
-
-判定：
-- [ ] version 文件 frontmatter status / shipped_date 已更新
-- [ ] commit message：`chore(release): mark ${VER} as shipped`
-
-## 8.5 Sparkle 双通道（v0.2.2+）
+## 8. Sparkle 双通道（v0.2.2+）
 
 自 v0.2.2 起 app 支持 Sparkle stable / beta 双通道。tag 命名约定：
 
@@ -212,4 +198,4 @@ CI workflow 若使用 generate-appcast 工具需根据 tag 后缀注入 `--chann
 
 - ADR 0004：[`../adr/0004-fork-divergence-from-blimp-labs.md`](../adr/0004-fork-divergence-from-blimp-labs.md)
 - ADR 0008：[`../adr/0008-retire-spec-governance.md`](../adr/0008-retire-spec-governance.md)（工作流现行形态）
-- 关联：公证 / Sparkle 密钥 / 应急响应 runbook 尚未建档（见 [`README.md`](./README.md)「未来可能新增」），涉及时先过 hard gate
+- 关联：公证 / Sparkle 密钥 / 应急响应 runbook 尚未建档，涉及时先过 hard gate 再写

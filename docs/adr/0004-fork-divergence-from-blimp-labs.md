@@ -89,6 +89,6 @@ deciders: claude-code, methol
 
 ## References
 
-- 调研：[`../research/competitive-analysis.md`](../research/competitive-analysis.md)
+- 调研：`competitive-analysis`（历史调研，已随 2026-07-08 文档清理移除，见 git history）
 - 相关 ADR：[`0003-ai-led-development.md`](./0003-ai-led-development.md)
 - 发版 runbook：[`../runbooks/release.md`](../runbooks/release.md)

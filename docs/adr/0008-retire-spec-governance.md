@@ -39,8 +39,9 @@ deciders: methol, claude-code
 配套调整：
 
 - **spec / plan 文档不再入库**：设计讨论保留在 plan review 与 PR 描述中；决策沉淀走 ADR
-- **version 文档保留**（发版验收与 release notes 的载体），frontmatter 去掉 `includes_specs`，
-  验收从"spec criteria 全 done"改为"计划变更全部 merge + CI 绿"
+- **version 文档层一并废弃**（同日修订：初稿曾保留 `docs/versions/` 作发版验收与 release notes
+  载体；随 owner 进一步清理，该目录连同 `docs/research/` 整体移除）——`CHANGELOG.md` 成为唯一
+  版本记录，发版验收 checklist 内嵌 release runbook
 - **7 Gates 术语退役**：其实质要求内嵌到工作流步骤（独立 review、每 commit 构建测试绿、发版 pre-flight）
 - **Hard Gates（6 种必须问人类的情形）不变**，权威副本在 `AGENTS.md`
 - **ADR 体系保留**（append-only、编号不复用）；本次移除已 superseded 的 ADR 0002，编号 0002 保留空缺
@@ -58,7 +59,7 @@ deciders: methol, claude-code
 ### Negative
 
 - 失去 spec 级设计存档：功能的设计意图今后由 plan review 记录、PR 描述与 ADR 承担
-- 历史文档（versions / CHANGELOG / 旧 ADR）中的 spec 引用成为纯历史名词，链接不再可解析（不回改）
+- 历史文档（CHANGELOG / 旧 ADR）中的 spec / version / research 引用成为纯历史名词，链接不再可解析（不回改）
 
 ### Neutral
 
