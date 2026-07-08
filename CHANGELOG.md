@@ -9,7 +9,7 @@
 
 ---
 
-## [v0.7.1] — 2026-07-07
+## [v0.7.1] — 2026-07-08
 
 > 版本: [`v0.7.1`](./docs/versions/v0.7.1-project-audit-hardening.md)
 
@@ -19,6 +19,7 @@
 - **悬停无数据区域不再显示假数据**：图表 X 轴铺满所选时间窗但历史只覆盖一部分时，悬停空白区域不再弹出「0% / 0%」的伪造 tooltip。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
 - **消除重复请求与重复图表数据点**：Claude 用量刷新补上重入保护与账号切换防护，后台轮询、手动 Refresh、修改轮询间隔并发时不再产生重复网络请求和重复历史点；账号切换后在途的旧响应会被丢弃。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
 - **本机成本月度数据文件损坏不再静默丢失**：解码失败的月度文件覆盖前先备份为 `.bak`，源 JSONL 已被 Claude CLI 清理时仍可人工恢复。（[#40](https://github.com/methol-dev/usage-bar/pull/40)）
+- **订阅用量获取失败时面板不再整个不可用**：Claude 未登录 / token 过期不再整屏接管弹窗（此前连其他 provider 的 tab 也会消失）；Codex 凭证缺失时同理。Session / Weekly 卡降级为骨架占位，不依赖订阅源的本地用量折线图、本机费用统计与热力图照常显示，错误卡内提供 Retry 入口。（[#41](https://github.com/methol-dev/usage-bar/pull/41)）
 
 ### 改进（Changed）
 
