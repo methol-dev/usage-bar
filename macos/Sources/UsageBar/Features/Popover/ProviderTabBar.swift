@@ -64,9 +64,9 @@ struct ProviderComingSoonView: View {
     }
 }
 
-/// 选中一个已对接但当前未配置（无凭证）的 provider 时显示。
-/// （v0.2.5 暂时用不到 —— 唯一可用 provider 是 Claude，未登录走 PopoverView 的 signInView；
-/// v0.2.6 Codex tab 在 `~/.codex/auth.json` 缺失时会展示它。）
+/// 选中一个已对接但当前未配置（无凭证）**且无本地数据源**的 provider（如 Gemini）时显示。
+/// （有本地数据源的 provider —— Codex、Claude —— 未配置时不再整屏替换，
+/// 走 `PopoverView` 的局部降级：骨架 hero 卡 + 提示卡 + 本地折线图/费用照常。）
 struct ProviderUnconfiguredView: View {
     let provider: ProviderID
     var onBackToClaude: () -> Void
@@ -78,7 +78,7 @@ struct ProviderUnconfiguredView: View {
                 .foregroundStyle(.secondary)
             Text("\(provider.displayName) not signed in")
                 .font(.subheadline)
-            Text(hint)
+            Text(provider.signInHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -89,13 +89,17 @@ struct ProviderUnconfiguredView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
     }
+}
 
-    private var hint: String {
-        switch provider {
+extension ProviderID {
+    /// 该 provider 未检测到凭证时的操作提示 —— 整屏 `ProviderUnconfiguredView`
+    /// 与局部降级模式的提示卡（`PopoverView.ProviderUsageArea`）共用。
+    var signInHint: String {
+        switch self {
         case .codex:
             return "Run `codex` in your terminal, then come back."
         default:
-            return "Sign in via the \(provider.displayName) CLI / app."
+            return "Sign in via the \(displayName) CLI / app."
         }
     }
 }
