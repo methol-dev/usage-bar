@@ -41,7 +41,7 @@ macos/Sources/UsageBar/
 ```
 
 文档地图见 [`docs/README.md`](./docs/README.md)：`adr/`（决策）、`superpowers/specs|plans/`（设计产出）、
-`versions/`（版本路线）、`runbooks/`（可执行流程）、`research/`（调研）、`artifacts/issues/`（issue 产物）。
+`versions/`（版本路线）、`runbooks/`（可执行流程）、`research/`（调研）。
 
 ## 任务路径
 

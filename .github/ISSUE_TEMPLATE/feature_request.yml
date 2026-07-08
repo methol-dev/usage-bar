@@ -1,7 +1,7 @@
 name: "💡 小功能点 / 增强"
 description: 在现有骨架上的小需求或增强(需要 spec / ADR 的大粒度任务走 AGENTS.md 主回路,不走 issue)
 title: "[feat] "
-labels: ["type:feat", "status:triaged"]
+labels: ["type:feat"]
 body:
   - type: textarea
     id: problem

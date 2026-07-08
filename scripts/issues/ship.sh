@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# 推送当前 issue 分支并开 PR,进入 ship 评审阶段。
+# 推送当前 issue 分支并开 PR。
 #
-# 用法: scripts/issues/ship.sh <issue-number>
+# 用法: scripts/issues/ship.sh <issue-number> [pr-body-file]
+#   pr-body-file:AI 事先写好的 PR body(含诊断摘要 + 验证记录);
+#                不传则用最小骨架,AI 需事后 gh pr edit 补全。
 # 前置:
 #   - 当前在 issue/<num>-<slug> 分支
-#   - docs/artifacts/issues/<num>/{diagnosis,plan-review,verification}.md 已填充
-#   - 本地验证通过(按项目 CLAUDE.md 配置段的"本地验证命令")
+#   - 本地验证通过(.agent/rules/build-test.md 验证矩阵)
 set -euo pipefail
 
 ISSUE_NUM="${1:-}"
-[[ -z "$ISSUE_NUM" ]] && { echo "用法: $0 <issue-number>" >&2; exit 2; }
+BODY_FILE="${2:-}"
+[[ -z "$ISSUE_NUM" ]] && { echo "用法: $0 <issue-number> [pr-body-file]" >&2; exit 2; }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
@@ -24,11 +26,6 @@ if [[ ! "$BRANCH" =~ ^issue/${ISSUE_NUM}- ]]; then
   exit 2
 fi
 
-ART_DIR="docs/artifacts/issues/$ISSUE_NUM"
-for f in diagnosis.md plan-review.md verification.md; do
-  [[ -f "$ART_DIR/$f" ]] || { echo "缺少 $ART_DIR/$f" >&2; exit 2; }
-done
-
 ISSUE_TITLE="$(gh issue view "$ISSUE_NUM" --json title -q .title)"
 
 PR_TITLE="$(printf '%s' "$ISSUE_TITLE" \
@@ -36,41 +33,30 @@ PR_TITLE="$(printf '%s' "$ISSUE_TITLE" \
 
 git push -u origin "$BRANCH"
 
-PR_BODY_FILE="$(mktemp)"
-trap 'rm -f "$PR_BODY_FILE"' EXIT
-
-cat > "$PR_BODY_FILE" <<EOF
+TMP_BODY=""
+if [[ -z "$BODY_FILE" ]]; then
+  TMP_BODY="$(mktemp)"
+  trap 'rm -f "$TMP_BODY"' EXIT
+  cat > "$TMP_BODY" <<EOF
 Closes #${ISSUE_NUM}
 
-## 诊断 / 修复方案
-见 \`docs/artifacts/issues/${ISSUE_NUM}/diagnosis.md\`
-
-## 方案评审(Plan Review)
-$(sed -n '/^## 评审结论/,/^## 关键反馈/p' "$ART_DIR/plan-review.md" | sed '1d;$d')
+## 修改摘要
+(AI 补全:做了什么 + 为什么)
 
 ## 验证
-$(cat "$ART_DIR/verification.md")
-
-## Ship 评审
-- 由 AI 调评审者(项目配置段 reviewer)对本 PR diff 评审,结果以 PR review comment 投放
-- VERDICT=PASS 且未触发 status:needs-human → AI 直接 \`scripts/issues/merge.sh ${ISSUE_NUM}\`
-- VERDICT=NEEDS_HUMAN → AI 打 status:needs-human 等人工,可继续处理其他 issue
-
-## 自动化 checklist
-- [ ] 本地验证记录已补齐
-- [ ] CI 绿
-- [ ] 相关 CLAUDE.md / 文档如需更新已同步
+(AI 补全:验证命令与结果,按 .agent/rules/build-test.md 矩阵)
 EOF
+  BODY_FILE="$TMP_BODY"
+elif ! grep -q "Closes #${ISSUE_NUM}" "$BODY_FILE"; then
+  echo "警告: PR body 未包含 'Closes #${ISSUE_NUM}',issue 不会自动关闭" >&2
+fi
 
 PR_URL="$(gh pr create \
   --base "$DEFAULT_BRANCH" \
   --head "$BRANCH" \
   --title "$PR_TITLE" \
-  --body-file "$PR_BODY_FILE")"
-
-gh issue edit "$ISSUE_NUM" --remove-label "status:in-progress"  2>/dev/null || true
-gh issue edit "$ISSUE_NUM" --add-label    "status:ship-review"  2>/dev/null || true
-gh pr edit    "$PR_URL"   --add-label    "status:ship-review"  2>/dev/null || true
+  --body-file "$BODY_FILE")"
 
 echo "[ship] PR: $PR_URL"
-echo "[ship] 下一步:AI 触发 ship 评审(贴在 PR review comment),通过后跑 scripts/issues/merge.sh $ISSUE_NUM"
+echo "[ship] 下一步:AI 调评审 subagent 审 PR diff(结果贴 PR review comment)"
+echo "[ship]   PASS → scripts/issues/merge.sh $ISSUE_NUM;NEEDS_HUMAN → 打 status:needs-human 停"

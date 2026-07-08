@@ -10,11 +10,7 @@
 
   { "name": "scope:infra", "color": "006b75", "description": "CI / scripts / build / docs 工具链;本仓库单 app 不细分模块" },
 
-  { "name": "status:triaged", "color": "c2e0c6", "description": "AI 已分诊,确认范围与类型" },
-  { "name": "status:plan-review", "color": "fef2c0", "description": "修复方案已产出,进入 AI 评审" },
-  { "name": "status:in-progress", "color": "1f883d", "description": "AI 正在实施" },
-  { "name": "status:ship-review", "color": "bfd4f2", "description": "PR 已创建,进入上线前 AI 评审" },
+  { "name": "status:in-progress", "color": "1f883d", "description": "AI 已认领,实施中(其余阶段看 issue/PR 自身状态)" },
   { "name": "status:needs-human", "color": "e99695", "description": "AI 判定需要人工介入,等待决策" },
-  { "name": "status:blocked", "color": "6f42c1", "description": "外部依赖阻塞(前置 / 环境)" },
-  { "name": "status:done", "color": "0e8a16", "description": "已合并 / 已关闭" }
+  { "name": "status:blocked", "color": "6f42c1", "description": "外部依赖阻塞(前置 / 环境)" }
 ]
