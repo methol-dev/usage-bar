@@ -83,17 +83,20 @@ final class ClaudeCLICredentialsStrategyTests: XCTestCase {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent(".credentials.json")
-        let json = """
-        {"claudeAiOauth":{"accessToken":"mock-access-5","refreshToken":"mock-refresh-5",\
-        "expiresAt":1778520574000,"scopes":["user:profile"]}}
-        """
+        // expiresAt 必须取未来时刻：loadFromFile 会丢弃过期 token（见 testLoadFromFileExpiredTokenIgnored）。
+        let futureMs = Int64((Date().timeIntervalSince1970 + 3600) * 1000)
+        let json = #"""
+        {"claudeAiOauth":{"accessToken":"mock-access-5","refreshToken":"mock-refresh-5","expiresAt":\#(futureMs),"scopes":["user:profile"]}}
+        """#
         try Data(json.utf8).write(to: file)
 
         let creds = ClaudeCLICredentialsStrategy.loadFromFile(file)
         XCTAssertNotNil(creds)
         XCTAssertTrue(creds?.accessToken.hasPrefix("mock-") ?? false)
         XCTAssertEqual(creds?.scopes, ["user:profile"])
-        XCTAssertEqual(creds!.expiresAt!.timeIntervalSince1970, 1778520574.0, accuracy: 0.001)
+        // 不强制解包 —— 断言失败就该只失败本 case，不能 fatal error 带崩整个测试进程。
+        XCTAssertEqual(creds?.expiresAt?.timeIntervalSince1970 ?? 0,
+                       TimeInterval(futureMs) / 1000.0, accuracy: 0.001)
     }
 
     func testLoadFromFileMissingReturnsNil() {
