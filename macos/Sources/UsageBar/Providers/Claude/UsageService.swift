@@ -156,6 +156,8 @@ extension UsageService {
         // v0.5.1: 凭证读取走 ensureFreshCredentials（in-memory cache → Claude CLI Keychain）；
         // 401 → 清 cache → 重读 Keychain；拿到新 token 重试一次；同 token 即报 token 过期。
         guard let creds = await ensureFreshCredentials(allowInteraction: false) else {
+            // notice 而非 error：未装/未登录 Claude CLI 是正常的未配置态，每个轮询 tick 都会走到这里。
+            DiagnosticLog.claudeUsage.notice("fetch aborted: no credentials (root cause in claude.credentials category)")
             lastError = "Sign in with Claude CLI, then tap Retry"
             isAuthenticated = false
             runtime.setError("Sign in with Claude CLI, then tap Retry", clearSnapshot: true)
@@ -168,10 +170,12 @@ extension UsageService {
             guard epoch == accountSwitchEpoch else { return }
 
             if http.statusCode == 401 {
+                DiagnosticLog.claudeUsage.warning("fetch: HTTP 401, re-reading credentials for one retry")
                 let oldToken = creds.accessToken
                 inMemoryCredentials = nil
                 guard let retried = await ensureFreshCredentials(allowInteraction: false),
                       retried.accessToken != oldToken else {
+                    DiagnosticLog.claudeUsage.error("fetch: 401 retry impossible (no fresher token) — token expired")
                     lastError = "Token expired; run `claude` to refresh."
                     isAuthenticated = false
                     runtime.setError("Token expired; run `claude` to refresh.", clearSnapshot: false)
@@ -185,6 +189,15 @@ extension UsageService {
             try processUsageResponse(data: data, http: http)
         } catch {
             guard epoch == accountSwitchEpoch else { return }
+            // SC7：只记错误类别 + URLError code 数值（如 -1009 offline / -1200 TLS），
+            // 不透传 userInfo / DecodingError context（可能含 URL 或 body 片段）。
+            // 系统代理（PAC / HTTP proxy）问题通常表现为 -1003/-1004/-1200 类传输层错误。
+            if error is DecodingError {
+                DiagnosticLog.claudeUsage.error("fetch: HTTP 200 but response decode failed (schema drift?)")
+            } else {
+                let urlErrorCode = (error as? URLError)?.code.rawValue ?? 0
+                DiagnosticLog.claudeUsage.error("fetch: transport error (URLError code \(urlErrorCode, privacy: .public))")
+            }
             lastError = error.localizedDescription
             runtime.setError(error.localizedDescription, clearSnapshot: false)
         }
@@ -197,15 +210,19 @@ extension UsageService {
             let prev = currentBackoffSeconds == 0 ? baseInterval : currentBackoffSeconds
             currentBackoffSeconds = Self.backoffInterval(retryAfter: retryAfter, currentInterval: prev)
             backoffUntil = Date().addingTimeInterval(currentBackoffSeconds)
+            // Retry-After 以 Double 插值（未消毒的服务端值转 Int 会 trap）；backoff 值经 backoffInterval 保证有限。
+            DiagnosticLog.claudeUsage.warning("fetch: HTTP 429, Retry-After \(retryAfter ?? -1, privacy: .public)s, backing off \(Int(self.currentBackoffSeconds), privacy: .public)s")
             lastError = "Rate limited — backing off to \(Int(currentBackoffSeconds))s"
             runtime.setError(lastError ?? "Rate limited", clearSnapshot: false)
             return
         }
         guard http.statusCode == 200 else {
+            DiagnosticLog.claudeUsage.error("fetch: HTTP \(http.statusCode, privacy: .public)")
             lastError = "HTTP \(http.statusCode)"
             runtime.setError("HTTP \(http.statusCode)", clearSnapshot: false)
             return
         }
+        DiagnosticLog.claudeUsage.info("fetch: HTTP 200 ok")
         let decoded = try JSONDecoder().decode(UsageResponse.self, from: data)
         let reconciled = decoded.reconciled(with: usage)
         usage = reconciled
@@ -228,6 +245,11 @@ extension UsageService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+        // 上游自 2026-03 起按 User-Agent 对该端点分桶限流：无 UA / 未知 UA 落入激进桶，
+        // 极易持续 429（见 anthropics/claude-code#31637）。先与 Codex provider 同款诚实 UA；
+        // 若诊断日志证实仍持续 429，再评估是否对齐社区工具发 `claude-code/<version>`（ToS 灰区，
+        // 属 AGENTS.md Hard Gate 6，需用户拍板）。
+        request.setValue(AppHTTP.userAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -247,6 +269,9 @@ extension UsageService {
         retryAfter: TimeInterval?,
         currentInterval: TimeInterval
     ) -> TimeInterval {
-        min(max(retryAfter ?? currentInterval, currentInterval * 2), maxBackoffInterval)
+        // Retry-After 是服务端/代理可控输入：`Double("inf")`/`Double("nan")` 都能解析成功，
+        // NaN 会穿透 min/max 污染 backoff 状态（下游 `Int(...)` 插值直接 trap）。非有限或负值按缺失处理。
+        let sanitized = retryAfter.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        return min(max(sanitized ?? currentInterval, currentInterval * 2), maxBackoffInterval)
     }
 }
