@@ -48,11 +48,8 @@ enum AIToolDetector {
             detected.insert(.copilot)
         }
 
-        // Claude Web 扩展无本地文件足迹，无法在装扩展前探测；扩展成功同步过一次（写了
-        // claude-web.json）后自动纳入 → 下次启动自动亮出 tab（否则需用户在 Settings 手动启用）。
-        if fileManager.fileExists(atPath: home.appendingPathComponent(".config/usage-bar/claude-web.json").path) {
-            detected.insert(.claudeWeb)
-        }
+        // 注:Claude Web 自 ADR 0010 起是 Claude 的**数据源**、非顶层 provider —— 这里不再返回 `.claudeWeb`。
+        // 扩展同步文件(claude-web.json)是否存在,由 `ProviderCoordinator` 决定 Claude 的 web 源是否默认勾选。
 
         return detected
     }

@@ -9,8 +9,11 @@ import Observation
 @MainActor
 @Observable
 final class ProviderCoordinator {
-    /// Claude provider（一等公民，一定存在）—— 登录 UX / polling 设置等 Claude 专属 UI 直接用它。
+    /// Claude 的 CLI 源(裸 `UsageService`)—— 登录 UX / polling 设置等 Claude 专属 UI 直接用它。
+    /// 注:`.claude` 在 registry 里注册的是**门面** `claudeGroup`(多数据源),不是这个裸 service。
     let claude: UsageService
+    /// Claude 顶层 provider 的门面(CLI + Web 两数据源,ADR 0010)—— Settings 数据源控件 / Claude 区读它。
+    let claudeGroup: ClaudeProvider
     let registry: ProviderRegistry
     private let defaults: UserDefaults
 
@@ -46,15 +49,30 @@ final class ProviderCoordinator {
          firstLaunchDetector: () -> Set<ProviderID> = { AIToolDetector.detect() }) {
         self.claude = claude
         self.defaults = defaults
-        let registry = ProviderRegistry(providers: [claude] + additionalProviders)
+
+        // 顶层 provider 集合:`.claudeWeb` 降为 Claude 的子源(ADR 0010),不再作为顶层 tab/菜单项 ——
+        // 从排序 / 启用 / 菜单栏可见三个持久集合里一律排除(PR#43 存量里的 "claude-web" 读时被过滤掉)。
+        let topLevel = ProviderID.allCases.filter { $0 != .claudeWeb }
+
+        // Claude 门面:内部持 CLI(= claude)+ Web 两个数据源,按用户选择/优先级取数(命中即停)。
+        // web 是否默认勾选:PR#43 曾把 `.claudeWeb` 存进 enabledProviders,或已存在扩展同步文件 → 视为想要 web。
+        let legacyWebEnabled = (defaults.stringArray(forKey: Self.enabledProvidersKey) ?? [])
+            .contains(ProviderID.claudeWeb.rawValue)
+        let webFilePresent = FileManager.default.fileExists(atPath: ClaudeWebStore.fileURL.path)
+        let group = ClaudeProvider(cli: claude, web: ClaudeWebProvider(), defaults: defaults,
+                                   webAlreadyOn: legacyWebEnabled || webFilePresent)
+        self.claudeGroup = group
+
+        // 注册表:`.claude` 注册**门面**(非裸 UsageService);web 不作为顶层注册。orderedIDs 用去 claudeWeb 的顶层集。
+        let registry = ProviderRegistry(providers: [group] + additionalProviders, orderedIDs: topLevel)
         self.registry = registry
 
         // 全部算进本地变量，再统一赋给 stored props（Swift：所有 stored props 初始化前不能经 self 读其它 prop）。
 
-        // 顺序：读盘 → 丢不在 ProviderID.allCases 里的（实际无）→ 末尾补漏掉的（按注册表顺序）
+        // 顺序：读盘 → 只留顶层 id → 末尾补漏掉的（按注册表顺序）
         let storedOrder = (defaults.stringArray(forKey: Self.providerOrderKey) ?? [])
             .compactMap(ProviderID.init(rawValue:))
-            .filter { ProviderID.allCases.contains($0) }
+            .filter { topLevel.contains($0) }
         var order = storedOrder
         var seen = Set(order)
         for id in registry.orderedIDs where !seen.contains(id) { order.append(id); seen.insert(id) }
@@ -62,27 +80,28 @@ final class ProviderCoordinator {
 
         // 首次启动（key 未写过时才调用检测器，结果缓存在 cache 里供两处复用）。
         // 两个 key 独立存盘，任一缺失才调一次检测器；两个都存在时跳过，不调检测器。
+        // detector 结果 ∩ 顶层集：剥掉 claudeWeb 等非顶层 id（web 的默认开启走门面的 webAlreadyOn seed）。
         var _firstLaunchCache: Set<ProviderID>? = nil
         func firstLaunchSet() -> Set<ProviderID> {
             if let cached = _firstLaunchCache { return cached }
-            let d = firstLaunchDetector()
-            let result = d.isEmpty ? Set(ProviderID.allCases) : d
+            let d = firstLaunchDetector().intersection(Set(topLevel))
+            let result = d.isEmpty ? Set(topLevel) : d
             _firstLaunchCache = result
             return result
         }
 
-        // 启用集：读盘 → ∩ allCases；从没存过 → 首次启动检测结果
+        // 启用集：读盘 → ∩ 顶层集；从没存过 → 首次启动检测结果
         var enabled: Set<ProviderID>
         if let storedEnabled = defaults.stringArray(forKey: Self.enabledProvidersKey) {
-            enabled = Set(storedEnabled.compactMap(ProviderID.init(rawValue:)).filter { ProviderID.allCases.contains($0) })
+            enabled = Set(storedEnabled.compactMap(ProviderID.init(rawValue:)).filter { topLevel.contains($0) })
         } else {
             enabled = firstLaunchSet()
         }
 
-        // 菜单栏可见集：读盘 → ∩ allCases；从没存过 → 首次启动检测结果（与 enabled 共享缓存）
+        // 菜单栏可见集：读盘 → ∩ 顶层集；从没存过 → 首次启动检测结果（与 enabled 共享缓存）
         let menuBarVisible: Set<ProviderID>
         if let stored = defaults.stringArray(forKey: Self.menuBarVisibleProvidersKey) {
-            menuBarVisible = Set(stored.compactMap(ProviderID.init(rawValue:)).filter { ProviderID.allCases.contains($0) })
+            menuBarVisible = Set(stored.compactMap(ProviderID.init(rawValue:)).filter { topLevel.contains($0) })
         } else {
             menuBarVisible = firstLaunchSet()
         }

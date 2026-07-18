@@ -219,7 +219,8 @@ struct PopoverView: View {
         var body: some View {
             // TODO(perf): trend/pace 在 body 每次重渲染都 O(n) 重算（v0.0.9/v0.0.11 G5 R2 noted）。
             // 30 天 ~千点 history 下影响可接受；polling↑/retention↑ 至 ~万点时迁 UsageService 缓存计算结果。
-            let runtime = coordinator.claude.runtime
+            // 门面 runtime：镜像「当前生效数据源」（cli 或 web）的用量。菜单栏与此处同源（ADR 0010）。
+            let runtime = coordinator.claudeGroup.runtime
             let points = historyService.history.dataPoints
             let snap = runtime.snapshot
             let trend5h = computeTrend(currentPct: snap?.primaryWindow?.utilizationPct, points: points, metric: \.pct5h)
@@ -243,14 +244,14 @@ struct PopoverView: View {
                         .foregroundStyle(.red)
                         .font(.caption)
                     // 未认证时的恢复入口（原整屏 NotAuthenticatedView 的职责下沉到这里）：
-                    // 重读 Claude CLI Keychain（允许首次 ACL prompt），成功即立刻拉一次用量。
-                    if !coordinator.claude.isAuthenticated {
+                    // 重读 Claude CLI Keychain（允许首次 ACL prompt），成功即经门面立刻拉一次用量。
+                    // 仅在生效源为 CLI（非 web）且 CLI 未登录时给 Retry —— web 的错误文案本身即引导「打开 claude.ai」。
+                    // 重试后走门面 refreshNow（B2：写门面镜像 runtime，否则 UI 绑的门面 runtime 不更新）。
+                    if coordinator.claudeGroup.activeSource != .web && !coordinator.claude.isAuthenticated {
                         Button("Retry") {
                             Task {
                                 await coordinator.claude.retrySignIn()
-                                if coordinator.claude.isAuthenticated {
-                                    await coordinator.claude.refreshNow()
-                                }
+                                await coordinator.claudeGroup.refreshNow()
                             }
                         }
                         .buttonStyle(.bordered)
