@@ -228,7 +228,7 @@ private struct SourceControl: View {
         if id == .claude {
             let group = coordinator.claudeGroup
             Menu {
-                ForEach(ClaudeDataSource.allCases) { src in
+                ForEach(UsageSource.allCases) { src in
                     Toggle(src.displayName, isOn: Binding(
                         get: { group.enabledSources.contains(src) },
                         set: { group.setSourceEnabled(src, $0) }
@@ -239,7 +239,7 @@ private struct SourceControl: View {
                     get: { group.enabledByPriority.first ?? group.sourcePriority.first ?? .web },
                     set: { group.setPreferred($0) }
                 )) {
-                    ForEach(ClaudeDataSource.allCases) { Text($0.displayName).tag($0) }
+                    ForEach(UsageSource.allCases) { Text($0.displayName).tag($0) }
                 }
             } label: {
                 chip(summary(group), interactive: true)
@@ -273,7 +273,7 @@ private struct SourceControl: View {
     }
 
     /// 例如「Web › CLI」——按优先级列出已启用的源。
-    private func summary(_ g: ClaudeProvider) -> String {
+    private func summary(_ g: MultiSourceProvider) -> String {
         let names = g.enabledByPriority.map { $0 == .web ? "Web" : "CLI" }
         return names.isEmpty ? "Sources" : names.joined(separator: " › ")
     }

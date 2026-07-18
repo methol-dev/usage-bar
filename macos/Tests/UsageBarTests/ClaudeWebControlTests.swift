@@ -69,7 +69,7 @@ final class ClaudeWebControlTests: XCTestCase {
     @MainActor
     func testControlPausedWhenWebSourceDisabled() {
         let d = freshDefaults()
-        d.set(["cli"], forKey: ClaudeProvider.enabledKey)   // 显式只启用 cli，避免依赖真实 claude-web.json 足迹
+        d.set(["cli"], forKey: MultiSourceProvider.enabledKey(for: .claude))   // 显式只启用 cli，避免依赖真实 claude-web.json 足迹
         let c = makeCoordinator(d)
         XCTAssertFalse(c.claudeGroup.enabledSources.contains(.web))
         XCTAssertTrue(c.currentClaudeWebControl().paused)
