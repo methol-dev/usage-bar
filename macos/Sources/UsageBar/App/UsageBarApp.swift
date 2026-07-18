@@ -74,8 +74,9 @@ struct UsageBarApp: App {
                 appUpdater: appUpdater
             )
         }
-        // .contentSize 会锁死窗口尺寸不可手动缩放；改 .contentMinSize：内容尺寸作为下限，允许放大。
-        .windowResizability(.contentMinSize)
+        // 窗口紧贴内容尺寸（内容已固定 width 480 + 有上限的可滚动高度）——避免窗口比内容宽一大截、
+        // 内容浮在灰底里。高度有 maxHeight 上限 + Form 内部滚动，不会再占满屏。
+        .windowResizability(.contentSize)
         .windowStyle(.titleBar)
     }
 }

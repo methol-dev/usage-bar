@@ -44,55 +44,99 @@ struct ClaudeWebPayload: Equatable {
 
 /// claude.ai `/api/organizations/{id}/usage` 原始 JSON → 统一 `ProviderUsageSnapshot`。
 ///
-/// TODO(Phase 0 spike):该网页接口**未文档化、真实 schema 未知**。下面是 best-effort 猜测映射
-/// (假设它可能沿用 oauth/usage 的 five_hour / seven_day + utilization/resets_at 形状,或 session/weekly 命名);
-/// 用户在自己已登录的 claude.ai 抓到真实响应后据实重写本文件。找不到任何窗口 → 返回 nil
-/// (provider 退化为「已连接但无可映射数据」的骨架态)。全部按 optional 探测,坏字段不崩。
+/// 依据真实响应定稿(2026-07,owner 抓取):
+/// - `five_hour.utilization`(0...100)+ `resets_at` → 主窗口(Session/5h);
+/// - `seven_day.utilization` + `resets_at` → 次窗口(Weekly/7d);
+/// - `seven_day_opus` / `seven_day_sonnet`(非 null 且有 utilization)→ per-model 额外行;
+/// - `extra_usage`(is_enabled/utilization/used_credits/monthly_limit,分→元 /100),否则回退 `spend`
+///   (enabled/percent/used.amount_minor÷10^exponent)→ 额度线。
+///
+/// 全按 optional 探测,坏 / 缺字段不崩。任何窗口都拿不到 → nil(provider 退化为「已连接但无可映射数据」骨架态)。
 enum ClaudeWebUsageMapper {
     static func snapshot(from usage: [String: Any]?) -> ProviderUsageSnapshot? {
         guard let usage else { return nil }
-        let primary = window(anyOf(usage, "five_hour", "session", "five_hour_window"),
-                             label: "Session", short: "5h")
-        let secondary = window(anyOf(usage, "seven_day", "weekly", "week", "seven_day_window"),
-                               label: "Weekly", short: "7d")
-        guard primary != nil || secondary != nil else { return nil }
-        return ProviderUsageSnapshot(primaryWindow: primary, secondaryWindow: secondary)
+        let primary = window(usage["five_hour"] as? [String: Any], label: "Session", short: "5h",
+                             duration: 5 * 60 * 60)
+        let secondary = window(usage["seven_day"] as? [String: Any], label: "Weekly", short: "7d",
+                               duration: 7 * 24 * 60 * 60)
+        let extras = perModelWindows(usage)
+        let credit = creditLine(usage)
+        guard primary != nil || secondary != nil || !extras.isEmpty || credit != nil else { return nil }
+        return ProviderUsageSnapshot(primaryWindow: primary, secondaryWindow: secondary,
+                                     extraWindows: extras, creditLine: credit)
     }
 
-    private static func anyOf(_ dict: [String: Any], _ keys: String...) -> [String: Any]? {
-        for k in keys { if let v = dict[k] as? [String: Any] { return v } }
+    /// per-model 行(seven_day_opus / seven_day_sonnet)—— 仅在存在且有 utilization 时显示,复用 7d 时长。
+    private static func perModelWindows(_ usage: [String: Any]) -> [NamedUsageWindow] {
+        var out: [NamedUsageWindow] = []
+        for (key, id, title) in [("seven_day_opus", "opus", "Opus"), ("seven_day_sonnet", "sonnet", "Sonnet")] {
+            if let node = usage[key] as? [String: Any],
+               let w = window(node, label: title, short: title, duration: 7 * 24 * 60 * 60) {
+                out.append(NamedUsageWindow(id: id, title: title, window: w))
+            }
+        }
+        return out
+    }
+
+    /// 额度线:优先 `extra_usage`(与 CLI 同形状,金额分→元/美元 /100);其次 `spend`(amount_minor÷10^exponent)。
+    /// 两者都无有效数据 → nil(不渲染额度行)。
+    private static func creditLine(_ usage: [String: Any]) -> CreditLine? {
+        if let e = usage["extra_usage"] as? [String: Any] {
+            let enabled = (e["is_enabled"] as? Bool) ?? false
+            let util = number(e["utilization"])
+            let used = number(e["used_credits"]).map { $0 / 100 }
+            let limit = number(e["monthly_limit"]).map { $0 / 100 }
+            if enabled || util != nil || used != nil || limit != nil {
+                return CreditLine(isEnabled: enabled, utilizationPct: util, usedAmount: used, limitAmount: limit)
+            }
+        }
+        if let s = usage["spend"] as? [String: Any] {
+            let enabled = (s["enabled"] as? Bool) ?? false
+            let used = spendAmount(s["used"])
+            if enabled || (used ?? 0) > 0 {
+                return CreditLine(isEnabled: enabled, utilizationPct: number(s["percent"]), usedAmount: used)
+            }
+        }
         return nil
     }
 
-    private static func window(_ node: [String: Any]?, label: String, short: String) -> UsageWindow? {
-        guard let node else { return nil }
-        // utilization 猜测:可能是 0...100 的 "utilization" 或 0...1 的 "utilization_ratio"。
-        var pct: Double?
-        if let u = number(node["utilization"]) { pct = u }
-        else if let r = number(node["utilization_ratio"]) { pct = r * 100 }
-        else if let u = number(node["used_percent"]) { pct = u }
-        guard let utilization = pct else { return nil }
+    /// `spend.used = { amount_minor, currency, exponent }` → 主单位金额。
+    private static func spendAmount(_ any: Any?) -> Double? {
+        guard let node = any as? [String: Any], let minor = number(node["amount_minor"]) else { return nil }
+        let exponent = number(node["exponent"]) ?? 2
+        return minor / pow(10.0, exponent)
+    }
 
+    private static func window(_ node: [String: Any]?, label: String, short: String,
+                               duration: TimeInterval) -> UsageWindow? {
+        guard let node, let utilization = number(node["utilization"]) else { return nil }
         var reset: Date?
         if let s = node["resets_at"] as? String { reset = isoDate(s) }
         else if let n = number(node["resets_at"]) { reset = Date(timeIntervalSince1970: n) }
-
-        return UsageWindow(label: label, utilizationPct: utilization, resetsAt: reset, shortLabel: short)
+        return UsageWindow(label: label, utilizationPct: utilization, resetsAt: reset,
+                           windowDuration: duration, shortLabel: short)
     }
 
     private static func number(_ any: Any?) -> Double? {
-        if let d = any as? Double { return d }
         if let n = any as? NSNumber { return n.doubleValue }
+        if let d = any as? Double { return d }
         if let s = any as? String { return Double(s) }
         return nil
     }
 
+    /// 解析 claude.ai 的 `resets_at`(ISO8601,可能带 6 位小数秒 + 偏移,如 `2026-07-18T16:09:59.774291+00:00`)。
+    /// ISO8601DateFormatter 的 `.withFractionalSeconds` 只稳认 3 位小数,故加「剥小数秒再解析」兜底。
     private static func isoDate(_ s: String) -> Date? {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.date(from: s) ?? {
-            let g = ISO8601DateFormatter(); g.formatOptions = [.withInternetDateTime]
-            return g.date(from: s)
-        }()
+        if let d = f.date(from: s) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        if let d = f.date(from: s) { return d }
+        if let r = s.range(of: #"\.\d+"#, options: .regularExpression) {
+            var stripped = s
+            stripped.removeSubrange(r)
+            return f.date(from: stripped)   // formatOptions 仍为 .withInternetDateTime
+        }
+        return nil
     }
 }
