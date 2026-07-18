@@ -17,16 +17,19 @@
 同步是**自动**的 —— 装好并保持一个 claude.ai 标签页登录后通常无需手动点。popup 显示「上次同步」时间;
 「Sync now」按钮用于强制立即同步一次。
 
-## 安装(开发 / 自用,load unpacked)
+## 安装(load unpacked)
 
 1. 先运行一次 UsageBar.app —— 它会安装 native messaging host manifest 到
    `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.tuzhihao.usagebar.host.json`。
-2. Chrome → `chrome://extensions` → 打开右上角 **Developer mode** → **Load unpacked** → 选本 `extension/` 目录。
-3. 扩展 id 应为 `aaehoepakaalddpmbhljnhlbbigioeid`(由 `manifest.json` 的固定 `key` 决定;host manifest
+2. 拿到扩展目录:从 [latest release](https://github.com/methol-dev/usage-bar/releases/latest) 下载
+   `usage-bar-extension-<version>.zip` 解压;或直接用仓库里的 `extension/` 目录(开发 / 自用)。
+3. Chrome → `chrome://extensions` → 打开右上角 **Developer mode** → **Load unpacked** → 选上一步的目录。
+4. 扩展 id 应为 `aaehoepakaalddpmbhljnhlbbigioeid`(由 `manifest.json` 的固定 `key` 决定;host manifest
    的 `allowed_origins` 已写死该 id)。若不一致,说明 `key` 被改过,需同步更新
    `NativeHostInstaller.extensionID`。
-4. 保持一个 claude.ai 标签页登录状态。点扩展图标 → **Sync now** 可手动触发一次。
-5. UsageBar 里启用 **Claude Web** provider(Settings → Providers),即可看到 tab。
+5. 保持一个 claude.ai 标签页登录状态 —— 同步是自动的;点扩展图标 → **Sync now** 可强制立即同步一次。
+6. UsageBar → **Settings → Providers → Claude → Sources** 启用 **Web** 源(ADR 0010:Claude Web 是
+   Claude 的一个数据源,非独立 tab)。
 
 ## 隐私 / 合规
 

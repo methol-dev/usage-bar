@@ -88,6 +88,22 @@ If you have the [Gemini CLI](https://github.com/google-gemini/gemini-cli) instal
 
 To enable Gemini tracking: install and log in to the Gemini CLI, then relaunch UsageBar.
 
+## Claude Web extension
+
+Claude's subscription usage (5-hour / weekly windows) can be read from **your own signed-in claude.ai browser session** via a companion Chrome extension — a second **data source** for the Claude provider, alongside the CLI/API source. The request is made by your own browser in your real session; **cookies never leave the browser**, and the extension holds no credentials.
+
+**Install:**
+
+1. Download `usage-bar-extension-<version>.zip` from the [latest release](https://github.com/methol-dev/usage-bar/releases/latest) and unzip it.
+2. Open `chrome://extensions`, enable **Developer mode** (top-right), click **Load unpacked**, and select the unzipped folder.
+3. Run UsageBar at least once (it installs the native-messaging host that the extension talks to).
+4. In UsageBar → **Settings → Providers → Claude → Sources**, enable the **Web** source (and set it as preferred if you want it to win over the CLI/API source).
+5. Keep a `claude.ai` tab signed in — the extension syncs automatically (no manual clicking needed).
+
+**How data sources interact:** if you enable both sources, UsageBar fetches from the preferred one first and falls back to the other only when the preferred can't return data. With Web preferred, UsageBar avoids the rate-limited API endpoint entirely; the trade-off is that the CLI-derived usage-trend line and threshold notifications pause while Web is the active source. Prefer the CLI source (or enable only it) if you want those always fresh.
+
+> The claude.ai usage endpoint is an undocumented web API (no stability guarantee). See [ADR 0009](./docs/adr/0009-claude-web-usage-source.md) and [ADR 0010](./docs/adr/0010-claude-multi-source.md). The extension source lives in [`extension/`](./extension/).
+
 ## Data storage
 
 All data is stored locally:

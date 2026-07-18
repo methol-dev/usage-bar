@@ -1,4 +1,4 @@
-.PHONY: build app zip dmg release-artifacts verify-release install clean
+.PHONY: build app zip dmg release-artifacts verify-release install clean extension-zip
 
 build:
 	cd macos && swift build -c release
@@ -22,6 +22,9 @@ release-artifacts:
 verify-release:
 	bash macos/scripts/verify-release.sh macos/UsageBar.zip
 	if [ -f macos/UsageBar.dmg ]; then bash macos/scripts/verify-release.sh macos/UsageBar.dmg; fi
+
+extension-zip:
+	bash scripts/package-extension.sh usage-bar-extension.zip
 
 install: app
 	rm -rf /Applications/UsageBar.app
