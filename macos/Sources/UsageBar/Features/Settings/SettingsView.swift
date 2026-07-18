@@ -67,10 +67,10 @@ struct SettingsWindowContent: View {
                 )
             }
 
-            // Claude Web 源引导（独立 Section，仿 Updates 的「文案 + Button」；不塞进 Providers
+            // Claude Web 数据源引导（独立 Section，仿 Updates 的「文案 + Button」；不塞进 Providers
             // 的 ProviderRow —— 那里高度按行数硬算，塞多步引导会撑破）。
-            Section("Claude Web") {
-                Text("Track your claude.ai subscription usage via a Chrome extension running in your own logged-in session. Cookies never leave the browser.")
+            Section("Claude Web Source") {
+                Text("Track your claude.ai subscription usage via a Chrome extension running in your own logged-in session. It's a data source for Claude — cookies never leave the browser.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Install Chrome Extension…") {
@@ -78,7 +78,7 @@ struct SettingsWindowContent: View {
                         NSWorkspace.shared.open(url)
                     }
                 }
-                Text("After installing, enable the Claude Web provider above and keep a claude.ai tab signed in.")
+                Text("After installing, enable the Web source for Claude above (Claude row → Sources) and keep a claude.ai tab signed in.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -171,6 +171,9 @@ private struct ProviderRow: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            // 数据来源:Claude 有多个源(CLI + Web)→ 可多选 + 调优先级;其余单源 provider 置灰。
+            SourceControl(coordinator: coordinator, id: id)
+                .disabled(!registered)
             Spacer()
             Toggle(isOn: Binding(
                 get: { coordinator.menuBarVisibleProviderIDs.contains(id) },
@@ -193,6 +196,52 @@ private struct ProviderRow: View {
             .disabled(!registered)
         }
         .frame(minHeight: 44)
+    }
+}
+
+/// 数据来源控件（ADR 0010）：Claude 是多源（CLI + Web），给一个 Menu 勾选启用哪些源 + 选优先谁；
+/// 单源 provider（Codex/Gemini/…）只显示置灰占位（当前唯一来源，不可改）。
+@MainActor
+private struct SourceControl: View {
+    let coordinator: ProviderCoordinator
+    let id: ProviderID
+
+    var body: some View {
+        if id == .claude {
+            let group = coordinator.claudeGroup
+            Menu {
+                ForEach(ClaudeDataSource.allCases) { src in
+                    Toggle(src.displayName, isOn: Binding(
+                        get: { group.enabledSources.contains(src) },
+                        set: { group.setSourceEnabled(src, $0) }
+                    ))
+                }
+                Divider()
+                Picker("Prefer", selection: Binding(
+                    get: { group.enabledByPriority.first ?? group.sourcePriority.first ?? .web },
+                    set: { group.setPreferred($0) }
+                )) {
+                    ForEach(ClaudeDataSource.allCases) { Text($0.displayName).tag($0) }
+                }
+            } label: {
+                Label(summary(group), systemImage: "arrow.triangle.branch")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Choose which data sources to use for Claude and their priority")
+        } else {
+            // 单源:置灰占位。
+            Label("Single source", systemImage: "point.forward.to.point.capsulepath")
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.tertiary)
+                .help("This provider has a single data source")
+        }
+    }
+
+    /// 例如「Web › CLI」——按优先级列出已启用的源。
+    private func summary(_ g: ClaudeProvider) -> String {
+        let names = g.enabledByPriority.map { $0 == .web ? "Web" : "CLI" }
+        return names.isEmpty ? "Sources" : names.joined(separator: " › ")
     }
 }
 

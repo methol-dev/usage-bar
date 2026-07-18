@@ -25,7 +25,8 @@ updated: 2026-07-18
 | [0006](./0006-rename-claudeusagebar-to-usagebar.md) | Rename ClaudeUsageBar → UsageBar | accepted | app / 模块 / bundle 去掉 `Claude` 前缀；bundle id → `com.tuzhihao.app.UsageBar`；本地数据目录 → `~/.config/usage-bar/` |
 | [0007](./0007-agent-rules-restructure.md) | AI 开发规则改用 `.agent/rules/` 组织 | accepted | AGENTS.md 收敛为入口 + Rules Index；规则按领域拆分带 `globs` |
 | [0008](./0008-retire-spec-governance.md) | 废弃 spec/superpowers 治理层 | accepted | 工作流改为 plan mode → plan review → 实施测试 → /review + /security-review → /simplify → PR |
-| [0009](./0009-claude-web-usage-source.md) | 新增 Claude Web 用量源（Chrome 扩展 + Native Messaging） | proposed | 扩展在用户 claude.ai 会话取数 → Native Messaging → 文件交接 → 独立 provider |
+| [0009](./0009-claude-web-usage-source.md) | 新增 Claude Web 用量源（Chrome 扩展 + Native Messaging） | proposed（决策 #5 被 0010 amend） | 扩展在用户 claude.ai 会话取数 → Native Messaging → 文件交接 → 独立 provider |
+| [0010](./0010-claude-multi-source.md) | Claude 多数据源（CLI + Web 合并为单 provider，优先级降级） | proposed | amend 0009 #5：一个 Claude、多数据源、命中即停降级；Web 优先规避 429 |
 
 ## 状态机
 

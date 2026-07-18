@@ -6,11 +6,12 @@ struct UsageBarApp: App {
     // v0.2.5 多供应商重构：用 ProviderCoordinator 装配（内部注册 Claude provider = UsageService）。
     // Claude 的 OAuth/refresh/多账号/polling/backoff 等仍在 coordinator.claude（= UsageService）里，
     // v0.2.11：所有 provider 的后台轮询由 coordinator.startBackgroundPolling() 的统一 timer 管（含 Claude）。
+    // v0.3: Claude Web 降为 Claude 的一个数据源（ADR 0010）—— 不再作为独立 provider 装配；
+    // ClaudeWebProvider 由 ProviderCoordinator 内部构造并挂在 Claude 门面 `claudeGroup` 下。
     @State private var coordinator = ProviderCoordinator(claude: UsageService(),
                                                          additionalProviders: [
                                                              CodexProvider(),
-                                                             GeminiProvider(),
-                                                             ClaudeWebProvider()
+                                                             GeminiProvider()
                                                          ])
     @State private var historyService = UsageHistoryService()
     @State private var notificationService = NotificationService()
@@ -54,8 +55,10 @@ struct UsageBarApp: App {
                     // 首次 refresh 本机 JSONL 统计（之后随后台 tick 的 onPollTick 继续更新）
                     await usageStats.refresh()
                     await codexStats.refresh()
-                    // 各 provider 的本机统计刷新随后台 tick 走 onPollTick（Claude 的逻辑原在已退役的 UsageService timer 里）—— 必须在 startBackgroundPolling 之前设好。
-                    coordinator.claude.onPollTick = { Task { await usageStats.refresh() } }
+                    // 各 provider 的本机统计刷新随后台 tick 走 onPollTick —— 必须在 startBackgroundPolling 之前设好。
+                    // Claude 挂在**门面**上（后台 tick 调的是 registry 里注册的 `.claude` = 门面）；本机 JSONL 统计
+                    // 每 tick 都刷（与门面选 cli 还是 web 取数无关，故不受「命中即停」影响）。
+                    coordinator.claudeGroup.onPollTick = { Task { await usageStats.refresh() } }
                     coordinator.provider(.codex)?.onPollTick = { Task { await codexStats.refresh() } }
                     // 起统一后台 timer（覆盖所有 enabled provider，含 Claude；监听 pollingMinutes 变化自动重起）+ 立即各拉一次（这一次就拉了 Claude）。
                     coordinator.startBackgroundPolling()

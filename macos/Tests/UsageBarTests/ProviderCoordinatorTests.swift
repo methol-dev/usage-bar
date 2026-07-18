@@ -3,6 +3,9 @@ import XCTest
 
 @MainActor
 final class ProviderCoordinatorTests: XCTestCase {
+    /// 顶层 provider 集合 —— ADR 0010 起 `.claudeWeb` 降为 Claude 子源，不进 coordinator 的三个持久集合。
+    private let topLevel = ProviderID.allCases.filter { $0 != .claudeWeb }
+
     private func freshDefaults() -> UserDefaults {
         let name = "coord-test-\(UUID().uuidString)"
         let d = UserDefaults(suiteName: name)!
@@ -24,7 +27,7 @@ final class ProviderCoordinatorTests: XCTestCase {
 
     func testDefaultOrderAndEnabled() {
         let c = makeCoordinator(freshDefaults())
-        XCTAssertEqual(c.orderedProviderIDs, ProviderID.allCases)
+        XCTAssertEqual(c.orderedProviderIDs, topLevel)
         XCTAssertTrue(c.enabledProviderIDs.isSuperset(of: [.claude, .codex]))
         XCTAssertEqual(c.availableIDs, [.claude, .codex])
         XCTAssertTrue(Set(c.menuBarVisibleIDs).isSuperset(of: [.claude, .codex]))
@@ -34,7 +37,7 @@ final class ProviderCoordinatorTests: XCTestCase {
         let d = freshDefaults()
         d.set(["codex", "claude", "bogus", "gemini"], forKey: "providerOrder")
         let c = makeCoordinator(d)
-        XCTAssertEqual(Set(c.orderedProviderIDs), Set(ProviderID.allCases))
+        XCTAssertEqual(Set(c.orderedProviderIDs), Set(topLevel))
         XCTAssertEqual(Array(c.orderedProviderIDs.prefix(3)), [.codex, .claude, .gemini])
     }
 
@@ -145,7 +148,7 @@ final class ProviderCoordinatorTests: XCTestCase {
 
     func testMenuBarVisibleDefaultsToAllCases() {
         let c = makeCoordinator(freshDefaults())
-        XCTAssertEqual(c.menuBarVisibleProviderIDs, Set(ProviderID.allCases))
+        XCTAssertEqual(c.menuBarVisibleProviderIDs, Set(topLevel))
     }
 
     func testSetMenuBarVisibleFalseRemovesFromSet() {
@@ -240,8 +243,8 @@ final class ProviderCoordinatorTests: XCTestCase {
         // 空检测结果 → fallback 全启用，防 UI 空白
         let c = ProviderCoordinator(claude: claude, additionalProviders: [], defaults: d,
                                     firstLaunchDetector: { [] })
-        XCTAssertEqual(c.enabledProviderIDs, Set(ProviderID.allCases))
-        XCTAssertEqual(c.menuBarVisibleProviderIDs, Set(ProviderID.allCases))
+        XCTAssertEqual(c.enabledProviderIDs, Set(topLevel))
+        XCTAssertEqual(c.menuBarVisibleProviderIDs, Set(topLevel))
     }
 }
 

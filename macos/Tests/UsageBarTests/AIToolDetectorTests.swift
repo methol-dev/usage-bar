@@ -65,14 +65,15 @@ final class AIToolDetectorTests: XCTestCase {
         XCTAssertTrue(result.contains(.copilot))
     }
 
-    func testDetectsClaudeWebViaSyncedFile() throws {
-        // 扩展成功同步过一次会写 ~/.config/usage-bar/claude-web.json → 自动纳入。
+    func testSyncedFileDoesNotAddClaudeWebTopLevel() throws {
+        // ADR 0010：Claude Web 是 Claude 的**数据源**、不再是顶层 provider —— 即便扩展同步文件存在,
+        // detect() 也不返回 .claudeWeb（web 源是否默认勾选由 ProviderCoordinator/ClaudeProvider 决定）。
         let dir = tmpDir.appendingPathComponent(".config/usage-bar", isDirectory: true)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: dir.appendingPathComponent("claude-web.json"))
         let mockFM = MockHomeFileManager(home: tmpDir, real: fm)
         let result = AIToolDetector.detect(fileManager: mockFM, environment: [:])
-        XCTAssertTrue(result.contains(.claudeWeb))
+        XCTAssertFalse(result.contains(.claudeWeb))
     }
 
     // MARK: - 空结果
