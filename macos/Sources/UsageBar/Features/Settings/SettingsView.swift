@@ -11,6 +11,8 @@ struct SettingsWindowContent: View {
     @AppStorage(MenuBarDisplayMode.storageKey) private var menubarMode: MenuBarDisplayMode = .icon
     // v0.2.2: Sparkle 双通道
     @AppStorage(UpdateChannel.storageKey) private var rawChannel: String = UpdateChannel.defaultChannel.rawValue
+    // 承载本视图的真实 NSWindow（由 WindowAccessor 抓取）—— 用于可靠前置，替代靠猜的旧逻辑。
+    @State private var hostWindow: NSWindow?
 
     var body: some View {
         Form {
@@ -107,11 +109,45 @@ struct SettingsWindowContent: View {
 
         }
         .formStyle(.grouped)
-        .frame(width: 400)
-        .fixedSize(horizontal: false, vertical: true)
+        // 高度可缩放 + 有上限：去掉旧的 .fixedSize(vertical)（它逼窗口长到全部内容高度，叠加
+        // scene 的 .contentSize 就锁死不可调、内容一多占满屏）。改为给 ideal/max 高度让 Form 内部滚动。
+        .frame(width: 400, minHeight: 400, idealHeight: 540, maxHeight: 720)
+        // 抓真实窗口：首次挂载即前置；state 里存起来供后续每次打开复用。
+        .background(WindowAccessor { window in
+            if hostWindow !== window { hostWindow = window }
+            bringSettingsWindowToFront(window)
+        })
+        // 后续再次打开（Settings scene 复用同一窗口，makeNSView 不再触发）靠 onAppear 前置。
         .onAppear {
-            focusSettingsWindow()
+            bringSettingsWindowToFront(hostWindow)
         }
+    }
+}
+
+/// 抓取承载 SwiftUI 视图的真实 NSWindow —— 替代靠「最后一个可见窗口」猜测的旧逻辑。
+/// menu bar app 是 accessory(LSUIElement) 进程，设置窗口默认生成在最前台 app 之后，
+/// 必须拿到窗口本体才能可靠前置。
+private struct WindowAccessor: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window { onWindow(window) }
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+/// 激活并前置设置窗口。accessory app 用 orderFrontRegardless 强制前置，不临时提升 activation
+/// policy（避免 Dock 图标闪现）。Task{@MainActor} 一跳避开与窗口出现的时序竞争，同时让本函数
+/// 保持 nonisolated —— 可从 WindowAccessor 的非隔离回调与 onAppear 两处调用而无隔离报错。
+private func bringSettingsWindowToFront(_ window: NSWindow?) {
+    guard let window else { return }
+    Task { @MainActor in
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 }
 
@@ -155,17 +191,6 @@ private struct ProviderRow: View {
             .disabled(!registered)
         }
         .frame(minHeight: 44)
-    }
-}
-
-@MainActor
-private func focusSettingsWindow() {
-    Task { @MainActor in
-        NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.last(where: { $0.isVisible && $0.canBecomeKey }) {
-            window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
-        }
     }
 }
 
