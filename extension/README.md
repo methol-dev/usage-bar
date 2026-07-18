@@ -6,12 +6,16 @@
 ## 工作原理
 
 ```
-chrome.alarms(每 15min)
+自动触发:周期 alarm(默认 5min)+ 打开/切到 claude.ai 标签页 + 浏览器获焦
+  (全部经 60s 去抖门汇流,手动「Sync now」强制绕过)
   → 在已打开的 claude.ai 标签页上下文里 fetch /api/organizations/{id}/usage(真同源,浏览器自动带 cookie)
   → chrome.runtime.sendNativeMessage 交给 host "com.tuzhihao.usagebar.host"
   → host(UsageBar.app 主 binary,Chrome 以 argv[1]=扩展 origin 拉起进 host 模式)原子写 ~/.config/usage-bar/claude-web.json
   → UsageBar 菜单栏 app 读该文件,显示 Claude Web tab
 ```
+
+同步是**自动**的 —— 装好并保持一个 claude.ai 标签页登录后通常无需手动点。popup 显示「上次同步」时间;
+「Sync now」按钮用于强制立即同步一次。
 
 ## 安装(开发 / 自用,load unpacked)
 
@@ -28,7 +32,8 @@ chrome.alarms(每 15min)
 
 - 扩展**不请求 `cookies` 权限**,不读 `document.cookie`,不导出任何凭证。
 - 请求由用户浏览器在真实登录会话里发出(content-script 注入,真正同源),不冒充任何客户端。
-- 交给 app 的 payload 只含 `{status, ts, usage}` —— 用量数字 + 状态,无凭证。
+- 交给 app 的 payload 仅 `{status, ts, usage?, error?}` —— 用量数字 + 状态(失败时 `error` 是净化过的
+  错误类别,无 URL / 响应体 / 凭证)。全程无凭证。
 - claude.ai 网页用量接口未文档化,属灰区;见 `docs/adr/0009-claude-web-usage-source.md`。
 
 ## 私钥

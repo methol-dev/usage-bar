@@ -9,17 +9,19 @@
       p { color: #666; margin: 0 0 10px; line-height: 1.4; }
       button { font: inherit; padding: 5px 10px; cursor: pointer; }
       #status { margin-top: 10px; color: #444; min-height: 1.2em; }
+      #lastSync { margin-top: 8px; color: #888; font-size: 12px; }
       @media (prefers-color-scheme: dark) {
         body { background: #1e1e1e; color: #ddd; }
-        p { color: #aaa; } #status { color: #bbb; }
+        p { color: #aaa; } #status { color: #bbb; } #lastSync { color: #999; }
       }
     </style>
   </head>
   <body>
     <h1>UsageBar — Claude Web</h1>
-    <p>Reads your claude.ai usage in your own signed-in session. Cookies never leave the browser.</p>
+    <p>Reads your claude.ai usage in your own signed-in session. Cookies never leave the browser. Syncs automatically — this button just forces one now.</p>
     <button id="sync">Sync now</button>
     <div id="status"></div>
+    <div id="lastSync"></div>
     <script src="popup.js"></script>
   </body>
 </html>
