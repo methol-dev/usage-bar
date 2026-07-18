@@ -28,6 +28,7 @@ updated: 2026-07-18
 | [0009](./0009-claude-web-usage-source.md) | 新增 Claude Web 用量源（Chrome 扩展 + Native Messaging） | proposed（决策 #5 被 0010 amend） | 扩展在用户 claude.ai 会话取数 → Native Messaging → 文件交接 → 独立 provider |
 | [0010](./0010-claude-multi-source.md) | Claude 多数据源（CLI + Web 合并为单 provider，优先级降级） | proposed | amend 0009 #5：一个 Claude、多数据源、命中即停降级；Web 优先规避 429 |
 | [0011](./0011-claude-web-control-channel.md) | Claude Web 反向控制通道（扩展轮询主程序拉配置） | proposed | 扩展每 ~1min poll host 拉 control（paused/nonce/interval）；app 反向指挥扩展；拉不到即休眠 |
+| [0012](./0012-codex-web-and-generalized-multi-source.md) | Codex Web 用量源 + 泛化多源门面与每 provider 控制通道 | proposed | Codex 也多源（CLI + Web，Web 优先）；交接文件按 id 分、控制文件升级为多 provider 信封（顶层扁平 = Claude backcompat）；一扩管 claude.ai + chatgpt.com |
 
 ## 状态机
 

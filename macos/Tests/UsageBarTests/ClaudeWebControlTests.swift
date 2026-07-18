@@ -22,6 +22,14 @@ final class ClaudeWebControlTests: XCTestCase {
         XCTAssertFalse(ClaudeWebNativeHost.isPollMessage([:]))
     }
 
+    // ADR 0012：usage payload 按 `provider` 字段分派写入。缺失 / 未知 → claude（向后兼容）。
+    func testStoreProviderDispatch() {
+        XCTAssertEqual(ClaudeWebNativeHost.storeProvider(for: ["provider": "codex"]), .codex)
+        XCTAssertEqual(ClaudeWebNativeHost.storeProvider(for: ["provider": "claude"]), .claude)
+        XCTAssertEqual(ClaudeWebNativeHost.storeProvider(for: ["status": "ok"]), .claude, "缺 provider → claude")
+        XCTAssertEqual(ClaudeWebNativeHost.storeProvider(for: ["provider": "bogus"]), .claude, "未知 → claude")
+    }
+
     // MARK: - host response 始终是合法 JSON
 
     func testResponseBodyWithNullControlIsValidJSON() throws {

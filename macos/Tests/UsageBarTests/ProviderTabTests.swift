@@ -6,7 +6,7 @@ import XCTest
 // 见 `ProviderAbstractionTests.testRegistryClaudeOnly` / `testCoordinator...`。
 final class ProviderTabTests: XCTestCase {
     func testAllCasesOrder() {
-        XCTAssertEqual(ProviderID.allCases, [.claude, .codex, .cursor, .copilot, .gemini, .claudeWeb])
+        XCTAssertEqual(ProviderID.allCases, [.claude, .codex, .cursor, .copilot, .gemini, .claudeWeb, .codexWeb])
     }
 
     func testDisplayNames() {
@@ -16,6 +16,7 @@ final class ProviderTabTests: XCTestCase {
         XCTAssertEqual(ProviderID.copilot.displayName, "Copilot")
         XCTAssertEqual(ProviderID.gemini.displayName, "Gemini")
         XCTAssertEqual(ProviderID.claudeWeb.displayName, "Claude Web")   // 驼峰/连字符需 override
+        XCTAssertEqual(ProviderID.codexWeb.displayName, "Codex Web")
     }
 
     func testIdIsRawValue() {

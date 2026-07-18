@@ -14,6 +14,11 @@ final class ProviderCoordinator {
     let claude: UsageService
     /// Claude 顶层 provider 的门面(CLI + Web 两数据源,ADR 0010)—— Settings 数据源控件 / Claude 区读它。
     let claudeGroup: MultiSourceProvider
+    /// Codex 的 CLI 源（裸 `CodexProvider`）—— history / 登录 UX 直接用它。仅在注入 `codex:` 时存在。
+    /// 注：`.codex` 在 registry 里注册的是**门面** `codexGroup`（ADR 0012），不是这个裸 provider。
+    let codexCLI: CodexProvider?
+    /// Codex 顶层 provider 的门面(CLI + Web 两数据源,ADR 0012)。仅在注入 `codex:` 时存在。
+    let codexGroup: MultiSourceProvider?
     let registry: ProviderRegistry
     private let defaults: UserDefaults
 
@@ -42,47 +47,71 @@ final class ProviderCoordinator {
     private var defaultsObserver: NSObjectProtocol?
     private var lastBackgroundInterval: TimeInterval = 0
 
-    // MARK: - Claude Web 控制通道（ADR 0011）
+    // MARK: - Web 源控制通道（ADR 0011 单源 → ADR 0012 每 provider）
+    /// Claude nonce 的持久化 key —— 与 ADR 0011 一致，向后兼容（`nonceKey(for: .claude)` 即此值）。
     static let webSyncNonceKey = "claude.web.syncNonce"
-    /// 单调自增：app 端「Refresh」时 +1，写进 control 文件；扩展见 nonce 变化即立即取数一次。持久化以跨重启。
-    private var webSyncNonce: Int = 0
+    static func nonceKey(for id: ProviderID) -> String { "\(id.rawValue).web.syncNonce" }
+    /// 每个 web-capable provider 的单调自增 nonce：app 端对该 provider「Refresh」时 +1，写进 control 文件；
+    /// 扩展见对应 provider 的 nonce 变化即立即取数一次。持久化以跨重启。
+    private var webSyncNonces: [ProviderID: Int] = [:]
     /// 独立的控制发布 timer —— 每 ~2min 重写 control 文件刷新 `ts`（liveness），与 pollingMinutes 解耦，
     /// 使「app 关/崩 → 扩展 ~5min 内判定陈旧休眠」而非拖到 2×pollingMinutes。
     private var controlTimer: AnyCancellable?
     static let controlPublishInterval: TimeInterval = 120
     /// 控制文件的实际写入器（可注入，单测置为 no-op 以免写真实 `~/.config`）。
-    var controlWriter: (ClaudeWebControl) -> Void = { ClaudeWebControlStore.write($0) }
+    var controlWriter: (WebControlEnvelope) -> Void = { ClaudeWebControlStore.writeEnvelope($0) }
 
-    /// 监听扩展写入 `claude-web.json` 的快 timer —— 让 app 的「最近更新」紧跟扩展取数，
+    /// 监听扩展写入 `<id>-web.json` 的快 timer —— 让 app 的「最近更新」紧跟扩展取数，
     /// 而非拖到 pollingMinutes 的后台 tick（那会让显示陈旧度最高逼近一个 pollingMinutes）。
     private var webFileTimer: AnyCancellable?
-    private var lastWebFileModified: Date?
+    private var lastWebFileModified: [ProviderID: Date] = [:]
     static let webFileWatchInterval: TimeInterval = 15
 
     /// 每次后台 tick 的「附带副作用」——默认让模型价格目录按 3h 节流自刷新。可注入便于单测。
     var onTickSideEffects: () -> Void = { ModelPricingCatalog.shared.refreshIfStale(now: Date()) }
 
-    init(claude: UsageService, additionalProviders: [UsageProvider] = [], defaults: UserDefaults = .standard,
+    init(claude: UsageService, codex: CodexProvider? = nil, additionalProviders: [UsageProvider] = [],
+         defaults: UserDefaults = .standard,
          firstLaunchDetector: () -> Set<ProviderID> = { AIToolDetector.detect() }) {
         self.claude = claude
         self.defaults = defaults
-        self.webSyncNonce = defaults.integer(forKey: Self.webSyncNonceKey)   // 未写过 → 0
+        // 各 web-capable provider 的 nonce 从持久化恢复（未写过 → 0）。
+        self.webSyncNonces = [
+            .claude: defaults.integer(forKey: Self.nonceKey(for: .claude)),
+            .codex:  defaults.integer(forKey: Self.nonceKey(for: .codex)),
+        ]
 
-        // 顶层 provider 集合:`.claudeWeb` 降为 Claude 的子源(ADR 0010),不再作为顶层 tab/菜单项 ——
-        // 从排序 / 启用 / 菜单栏可见三个持久集合里一律排除(PR#43 存量里的 "claude-web" 读时被过滤掉)。
-        let topLevel = ProviderID.allCases.filter { $0 != .claudeWeb }
+        // 顶层 provider 集合:`.claudeWeb` / `.codexWeb` 降为各自 provider 的子源(ADR 0010/0012),不作为顶层
+        // tab/菜单项 —— 从排序 / 启用 / 菜单栏可见三个持久集合里一律排除(存量里的 web id 读时被过滤掉)。
+        let topLevel = ProviderID.allCases.filter { $0 != .claudeWeb && $0 != .codexWeb }
 
         // Claude 门面:内部持 CLI(= claude)+ Web 两个数据源,按用户选择/优先级取数(命中即停)。
         // web 是否默认勾选:PR#43 曾把 `.claudeWeb` 存进 enabledProviders,或已存在扩展同步文件 → 视为想要 web。
         let legacyWebEnabled = (defaults.stringArray(forKey: Self.enabledProvidersKey) ?? [])
             .contains(ProviderID.claudeWeb.rawValue)
-        let webFilePresent = FileManager.default.fileExists(atPath: ClaudeWebStore.fileURL.path)
+        let claudeWebPresent = FileManager.default.fileExists(atPath: WebSourceStore.fileURL(for: .claude).path)
         let group = MultiSourceProvider(id: .claude, cliSource: claude, webSource: ClaudeWebProvider(),
-                                        defaults: defaults, webAlreadyOn: legacyWebEnabled || webFilePresent)
+                                        defaults: defaults, webAlreadyOn: legacyWebEnabled || claudeWebPresent)
         self.claudeGroup = group
 
-        // 注册表:`.claude` 注册**门面**(非裸 UsageService);web 不作为顶层注册。orderedIDs 用去 claudeWeb 的顶层集。
-        let registry = ProviderRegistry(providers: [group] + additionalProviders, orderedIDs: topLevel)
+        // Codex 门面（ADR 0012，仅在注入 `codex:` 时构建）：镜像 Claude 的多源结构。web 默认勾选仅看
+        // 扩展同步文件是否已存在（Codex Web 是新功能，无 PR#43 那样的存量 enabled 迁移）。
+        var registryProviders: [UsageProvider] = [group]
+        if let codex {
+            let codexWebPresent = FileManager.default.fileExists(atPath: WebSourceStore.fileURL(for: .codex).path)
+            let codexGroup = MultiSourceProvider(id: .codex, cliSource: codex, webSource: CodexWebProvider(),
+                                                 defaults: defaults, webAlreadyOn: codexWebPresent)
+            self.codexCLI = codex
+            self.codexGroup = codexGroup
+            registryProviders.append(codexGroup)
+        } else {
+            self.codexCLI = nil
+            self.codexGroup = nil
+        }
+        registryProviders.append(contentsOf: additionalProviders)
+
+        // 注册表:`.claude`/`.codex` 注册**门面**(非裸 provider);web 不作为顶层注册。orderedIDs 用去 web 的顶层集。
+        let registry = ProviderRegistry(providers: registryProviders, orderedIDs: topLevel)
         self.registry = registry
 
         // 全部算进本地变量，再统一赋给 stored props（Swift：所有 stored props 初始化前不能经 self 读其它 prop）。
@@ -132,8 +161,8 @@ final class ProviderCoordinator {
     // MARK: - mutators（Settings 用）
     func setEnabled(_ id: ProviderID, _ on: Bool) {
         if on { enabledProviderIDs.insert(id) } else { enabledProviderIDs.remove(id) }
-        // Claude 顶层启用态影响扩展的 paused —— 立即重发 control。
-        if id == .claude { publishClaudeWebControl() }
+        // web-capable provider 顶层启用态影响扩展对该 provider 的 paused —— 立即重发 control。
+        if group(for: id) != nil { publishWebControl() }
     }
     func setMenuBarVisible(_ id: ProviderID, _ on: Bool) {
         if on { menuBarVisibleProviderIDs.insert(id) } else { menuBarVisibleProviderIDs.remove(id) }
@@ -162,44 +191,86 @@ final class ProviderCoordinator {
     /// 对 Claude:这是**用户主动**的同步入口,顺带 bump syncNonce → 让扩展 ≤1min 内真去 claude.ai 拉一次
     /// （后台 tick 走 `registry.provider(.claude)?.refreshNow()`，不经此路，故不会每 tick 误 bump）。
     func refreshNow(_ id: ProviderID) async {
-        if id == .claude { publishClaudeWebControl(bumpSyncNonce: true) }
+        // web-capable provider 的用户主动 Refresh → bump 其 nonce，让扩展 ≤1min 内真去对应网页拉一次。
+        if group(for: id) != nil { publishWebControl(bumpFor: id) }
         await registry.provider(id)?.refreshNow()
     }
 
-    // MARK: - Claude Web 控制通道发布（ADR 0011）
-    /// 写 control 文件(paused / intervalSeconds / syncNonce / ts)。`bumpSyncNonce` 用于用户主动同步。
-    /// paused = 「Claude 顶层未启用」或「Web 源未启用」——两者任一都让扩展停掉 claude.ai 取数。
-    func publishClaudeWebControl(bumpSyncNonce: Bool = false) {
-        if bumpSyncNonce {
-            webSyncNonce &+= 1
-            defaults.set(webSyncNonce, forKey: Self.webSyncNonceKey)
+    // MARK: - Web 源控制通道发布（ADR 0011 单源 → ADR 0012 每 provider）
+
+    /// 该 provider 的多源门面（web-capable → 非 nil）。目前 Claude 恒有；Codex 视是否注入 `codex:`。
+    func group(for id: ProviderID) -> MultiSourceProvider? {
+        switch id {
+        case .claude: return claudeGroup
+        case .codex:  return codexGroup
+        default:      return nil
         }
-        controlWriter(currentClaudeWebControl())
     }
 
-    /// claude-web.json 的最后修改时刻（缺失 → nil）。
-    private func webFileModificationDate() -> Date? {
-        (try? FileManager.default.attributesOfItem(atPath: ClaudeWebStore.fileURL.path))?[.modificationDate] as? Date
+    /// 当前有多源门面（= 可被扩展驱动 web 取数）的 provider，按顶层顺序。
+    var webCapableProviders: [ProviderID] {
+        [.claude, .codex].filter { group(for: $0) != nil }
     }
 
-    /// 快 timer 回调:文件 mtime 变了(扩展刚落盘新数据)就经**门面**重读一次 —— 不 bump nonce、不 ping 扩展,
-    /// 只把新数据反映进 runtime / 菜单栏 / 显示。仅在 web 源实际启用时才看。
+    /// 写 control 文件（每 provider 的 paused / intervalSeconds / syncNonce + 顶层 ts）。
+    /// `bumpFor` 指定的 provider nonce +1（用户对该 provider 主动同步）。
+    func publishWebControl(bumpFor id: ProviderID? = nil) {
+        if let id, group(for: id) != nil {
+            webSyncNonces[id, default: 0] &+= 1
+            defaults.set(webSyncNonces[id]!, forKey: Self.nonceKey(for: id))
+        }
+        controlWriter(currentWebControlEnvelope())
+    }
+
+    /// 向后兼容包装（ADR 0011 命名）：等价 `publishWebControl(bumpFor: bumpSyncNonce ? .claude : nil)`。
+    func publishClaudeWebControl(bumpSyncNonce: Bool = false) {
+        publishWebControl(bumpFor: bumpSyncNonce ? .claude : nil)
+    }
+
+    /// 快 timer 回调:某 provider 的交接文件 mtime 变了(扩展刚落盘新数据)就经**门面**重读一次 ——
+    /// 不 bump nonce、不 ping 扩展,只把新数据反映进 runtime / 菜单栏 / 显示。仅在该 provider 的 web 源启用时才看。
     private func pollWebFileFreshness() {
-        guard enabledProviderIDs.contains(.claude), claudeGroup.enabledSources.contains(.web) else { return }
-        guard let mod = webFileModificationDate(), mod != lastWebFileModified else { return }
-        lastWebFileModified = mod
-        Task { await claudeGroup.refreshNow() }
+        for id in webCapableProviders {
+            guard let g = group(for: id),
+                  enabledProviderIDs.contains(id), g.enabledSources.contains(.web) else { continue }
+            guard let mod = WebSourceStore.modificationDate(for: id), mod != lastWebFileModified[id] else { continue }
+            lastWebFileModified[id] = mod
+            Task { await g.refreshNow() }
+        }
     }
 
-    /// 计算当前应发布的控制配置（纯函数，便于单测）。
-    /// paused = 「Claude 顶层未启用」或「Web 源未启用」——两者任一都让扩展停掉 claude.ai 取数。
-    func currentClaudeWebControl() -> ClaudeWebControl {
-        let webActive = enabledProviderIDs.contains(.claude) && claudeGroup.enabledSources.contains(.web)
+    /// 计算某 provider 当前应发布的控制配置。
+    /// paused = 「该 provider 顶层未启用」或「其 Web 源未启用」——两者任一都让扩展停掉对应网页取数。
+    private func currentControl(for id: ProviderID, now: Double) -> ClaudeWebControl {
+        let webActive = enabledProviderIDs.contains(id) && (group(for: id)?.enabledSources.contains(.web) ?? false)
         return ClaudeWebControl(
             paused: !webActive,
             intervalSeconds: Int(backgroundIntervalSeconds),
-            syncNonce: webSyncNonce,
-            ts: Date().timeIntervalSince1970
+            syncNonce: webSyncNonces[id, default: 0],
+            ts: now
+        )
+    }
+
+    /// Claude 的控制（向后兼容命名 + 单测入口）。
+    func currentClaudeWebControl() -> ClaudeWebControl {
+        currentControl(for: .claude, now: Date().timeIntervalSince1970)
+    }
+
+    /// 组装多 provider 控制信封（纯函数，便于单测）：顶层扁平 = Claude（backcompat）；
+    /// `byProvider` 携带每个 web-capable provider 的独立控制。
+    func currentWebControlEnvelope() -> WebControlEnvelope {
+        let now = Date().timeIntervalSince1970
+        let claudeControl = currentControl(for: .claude, now: now)
+        var byProvider: [String: ClaudeWebControl] = [:]
+        for id in webCapableProviders {
+            byProvider[id.rawValue] = currentControl(for: id, now: now)
+        }
+        return WebControlEnvelope(
+            paused: claudeControl.paused,
+            intervalSeconds: claudeControl.intervalSeconds,
+            syncNonce: claudeControl.syncNonce,
+            ts: now,
+            byProvider: byProvider
         )
     }
 
@@ -228,16 +299,18 @@ final class ProviderCoordinator {
     func startBackgroundPolling() {
         rescheduleBackgroundTimer()
         onBackgroundTick()                                 // 立即一次
-        // Claude Web 控制通道:门面源变化(Settings 勾选/优先级)即时重发 control;并起一个 ~2min 的
+        // Web 控制通道:各门面源变化(Settings 勾选/优先级)即时重发 control;并起一个 ~2min 的
         // liveness timer 持续刷新 control.ts(与 pollingMinutes 解耦)。启动即发一次初始 control。
-        claudeGroup.onConfigChanged = { [weak self] in self?.publishClaudeWebControl() }
-        publishClaudeWebControl()
+        for id in webCapableProviders {
+            group(for: id)?.onConfigChanged = { [weak self] in self?.publishWebControl() }
+        }
+        publishWebControl()
         controlTimer = Timer.publish(every: Self.controlPublishInterval, on: .main, in: .common)
             .autoconnect()
-            .sink { [weak self] _ in self?.publishClaudeWebControl() }
-        // 快速文件监听:扩展落盘 claude-web.json 后 ~15s 内 app 就重读并刷新显示(经门面,不 bump nonce)。
+            .sink { [weak self] _ in self?.publishWebControl() }
+        // 快速文件监听:扩展落盘 `<id>-web.json` 后 ~15s 内 app 就重读并刷新显示(经门面,不 bump nonce)。
         // 记初始 mtime,避开启动后一次多余重读(onBackgroundTick 启动时已读过一次)。
-        lastWebFileModified = webFileModificationDate()
+        for id in webCapableProviders { lastWebFileModified[id] = WebSourceStore.modificationDate(for: id) }
         webFileTimer = Timer.publish(every: Self.webFileWatchInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.pollWebFileFreshness() }
@@ -249,7 +322,7 @@ final class ProviderCoordinator {
                 guard let self else { return }
                 if self.backgroundIntervalSeconds != self.lastBackgroundInterval {
                     self.rescheduleBackgroundTimer()
-                    self.publishClaudeWebControl()   // intervalSeconds 变了,即时告知扩展
+                    self.publishWebControl()   // intervalSeconds 变了,即时告知扩展
                 }
             }
         }
@@ -273,7 +346,7 @@ final class ProviderCoordinator {
         }
         onTickSideEffects()
         // 无条件重发 control(刷新 ts + 反映当前 paused/interval)—— 放在 provider 循环外,
-        // 即使 Claude 被禁用 / 在 backoff 也照发(那正是要告诉扩展 paused 的时候)。
-        publishClaudeWebControl()
+        // 即使某 provider 被禁用 / 在 backoff 也照发(那正是要告诉扩展 paused 的时候)。
+        publishWebControl()
     }
 }

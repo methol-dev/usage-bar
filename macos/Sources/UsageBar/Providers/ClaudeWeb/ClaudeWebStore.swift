@@ -10,30 +10,10 @@ import Foundation
 /// 文件是同用户可写的非可信边界,畸形 / 恶意 JSON 绝不能崩溃。
 enum ClaudeWebStore {
     /// `~/.config/usage-bar/claude-web.json`(与 history.json 等同目录)。
-    static var fileURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/usage-bar/claude-web.json")
-    }
+    /// ADR 0012 起统一由 `WebSourceStore` 定义路径 —— 这里委托给它，避免路径字符串两处漂移。
+    static var fileURL: URL { WebSourceStore.fileURL(for: .claude) }
 
-    /// Native host 侧:原子写入扩展送来的原始 JSON(已由 host 校验为合法 JSON 对象)。
-    /// 目录 0700、文件 0600 —— 照抄 `UsageEventStore` / `ScanCursorStore` 写盘范式。
-    @discardableResult
-    static func writeRaw(_ data: Data) -> Bool {
-        let url = fileURL
-        let dir = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(
-            at: dir, withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700])
-        do {
-            try data.write(to: url, options: .atomic)
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    static func readData() -> Data? { try? Data(contentsOf: fileURL) }
+    static func readData() -> Data? { WebSourceStore.readData(for: .claude) }
 }
 
 /// provider 侧读取抽象 —— 单测注入内存 stub,避免依赖真实 `~/.config/`。

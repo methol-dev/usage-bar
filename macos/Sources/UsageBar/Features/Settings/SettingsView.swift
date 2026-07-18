@@ -69,18 +69,18 @@ struct SettingsWindowContent: View {
                 )
             }
 
-            // Claude Web 数据源引导（独立 Section，仿 Updates 的「文案 + Button」；不塞进 Providers
-            // 的 ProviderRow —— 那里高度按行数硬算，塞多步引导会撑破）。
-            Section("Claude Web Source") {
-                Text("Track your claude.ai subscription usage via a Chrome extension running in your own logged-in session. It's a data source for Claude — cookies never leave the browser.")
+            // Web 数据源引导（独立 Section，仿 Updates 的「文案 + Button」；不塞进 Providers
+            // 的 ProviderRow —— 那里高度按行数硬算，塞多步引导会撑破）。一个扩展同时管 Claude / Codex。
+            Section("Web Sources") {
+                Text("Track your claude.ai and chatgpt.com subscription usage via a Chrome extension running in your own logged-in sessions. It's a data source for Claude and Codex — cookies and tokens never leave the browser.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Install Chrome Extension…") {
-                    if let url = URL(string: "https://github.com/methol-dev/usage-bar#claude-web-extension") {
+                    if let url = URL(string: "https://github.com/methol-dev/usage-bar#web-extension") {
                         NSWorkspace.shared.open(url)
                     }
                 }
-                Text("After installing, enable the Web source for Claude above (Claude row → Sources) and keep a claude.ai tab signed in.")
+                Text("After installing, enable the Web source above (a provider row → Sources) and keep a claude.ai / chatgpt.com tab signed in.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -189,7 +189,7 @@ private struct ProviderRow: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            // 数据来源:Claude 有多个源(CLI + Web)→ 可多选 + 调优先级;其余单源 provider 置灰。
+            // 数据来源:多源 provider(Claude / Codex，CLI + Web)→ 可多选 + 调优先级;其余单源 provider 置灰。
             SourceControl(coordinator: coordinator, id: id)
                 .disabled(!registered)
             Spacer()
@@ -217,16 +217,15 @@ private struct ProviderRow: View {
     }
 }
 
-/// 数据来源控件（ADR 0010）：Claude 是多源（CLI + Web），给一个 Menu 勾选启用哪些源 + 选优先谁；
-/// 单源 provider（Codex/Gemini/…）只显示置灰占位（当前唯一来源，不可改）。
+/// 数据来源控件（ADR 0010/0012）：多源 provider（Claude / Codex，CLI + Web）给一个 Menu 勾选启用
+/// 哪些源 + 选优先谁；单源 provider（Gemini/…）只显示置灰占位（当前唯一来源，不可改）。
 @MainActor
 private struct SourceControl: View {
     let coordinator: ProviderCoordinator
     let id: ProviderID
 
     var body: some View {
-        if id == .claude {
-            let group = coordinator.claudeGroup
+        if let group = coordinator.group(for: id) {
             Menu {
                 ForEach(UsageSource.allCases) { src in
                     Toggle(src.displayName, isOn: Binding(
@@ -247,7 +246,7 @@ private struct SourceControl: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Choose which data sources to use for Claude and their priority")
+            .help("Choose which data sources to use for \(id.displayName) and their priority")
         } else {
             // 单源:置灰 chip 占位。
             chip("Single source", interactive: false)

@@ -4,7 +4,7 @@ import Foundation
 
 /// Codex ChatGPT 套餐。已知值映射成 case，未知保留原串（不崩）。
 enum CodexPlan: Equatable {
-    case free, plus, pro, team, business, education, enterprise
+    case free, plus, pro, proLite, team, business, education, enterprise
     case unknown(String)          // 已知列表外的任意串（空串也走这里）
 
     init(rawValue: String?) {
@@ -12,6 +12,7 @@ enum CodexPlan: Equatable {
         case "free", "free_workspace": self = .free
         case "plus":       self = .plus
         case "pro":        self = .pro
+        case "prolite", "pro_lite": self = .proLite
         case "team":       self = .team
         case "business":   self = .business
         case "education", "edu", "k12": self = .education
@@ -25,6 +26,7 @@ enum CodexPlan: Equatable {
         case .free: return "Free"
         case .plus: return "Plus"
         case .pro: return "Pro"
+        case .proLite: return "Pro Lite"
         case .team: return "Team"
         case .business: return "Business"
         case .education: return "Education"

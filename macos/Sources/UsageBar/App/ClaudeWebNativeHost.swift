@@ -30,8 +30,8 @@ enum ClaudeWebNativeHost {
             write(responseBody(ok: false, controlBytes: loadValidControlBytes()))
             return
         }
-        // poll = 只拉配置,不写 usage;否则视为 usage payload → 写 claude-web.json(不变)。
-        let ok = isPollMessage(obj) ? true : ClaudeWebStore.writeRaw(body)
+        // poll = 只拉配置,不写 usage;否则视为 usage payload → 按 `provider` 字段写对应 `<id>-web.json`。
+        let ok = isPollMessage(obj) ? true : WebSourceStore.writeRaw(body, for: storeProvider(for: obj))
         write(responseBody(ok: ok, controlBytes: loadValidControlBytes()))
     }
 
@@ -40,6 +40,15 @@ enum ClaudeWebNativeHost {
     /// 消息是否为「只拉配置」的心跳(不写 usage)。
     static func isPollMessage(_ obj: [String: Any]) -> Bool {
         (obj["type"] as? String) == "poll"
+    }
+
+    /// usage payload 应写入哪个 provider 的交接文件（ADR 0012）。缺失 / 未知 `provider` → `.claude`
+    /// （向后兼容：旧扩展不带 `provider` 字段，一律当 Claude）。
+    static func storeProvider(for obj: [String: Any]) -> ProviderID {
+        switch obj["provider"] as? String {
+        case "codex": return .codex
+        default:      return .claude
+        }
     }
 
     /// 组装出站 body:`{"ok":<bool>,"control":<control-json>|null}`。

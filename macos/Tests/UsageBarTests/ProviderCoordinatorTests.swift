@@ -3,8 +3,8 @@ import XCTest
 
 @MainActor
 final class ProviderCoordinatorTests: XCTestCase {
-    /// 顶层 provider 集合 —— ADR 0010 起 `.claudeWeb` 降为 Claude 子源，不进 coordinator 的三个持久集合。
-    private let topLevel = ProviderID.allCases.filter { $0 != .claudeWeb }
+    /// 顶层 provider 集合 —— ADR 0010/0012 起 `.claudeWeb` / `.codexWeb` 降为子源，不进 coordinator 的三个持久集合。
+    private let topLevel = ProviderID.allCases.filter { $0 != .claudeWeb && $0 != .codexWeb }
 
     private func freshDefaults() -> UserDefaults {
         let name = "coord-test-\(UUID().uuidString)"
@@ -248,6 +248,79 @@ final class ProviderCoordinatorTests: XCTestCase {
                                     firstLaunchDetector: { [] })
         XCTAssertEqual(c.enabledProviderIDs, Set(topLevel))
         XCTAssertEqual(c.menuBarVisibleProviderIDs, Set(topLevel))
+    }
+
+    // MARK: - ADR 0012：Codex 门面注入 + 每 provider 控制通道
+
+    /// 注入 `codex:` → coordinator 内部构造 codexGroup（多源门面），`.codex` 顶层注册的是门面。
+    private func makeWithCodexGroup(_ d: UserDefaults) -> ProviderCoordinator {
+        let claude = UsageService()
+        claude.cliKeychainLoader = { _ in nil }
+        let codex = CodexProvider(environment: ["CODEX_HOME": "/nonexistent-\(UUID().uuidString)"], defaults: d)
+        let c = ProviderCoordinator(claude: claude, codex: codex, additionalProviders: [], defaults: d,
+                                    firstLaunchDetector: { Set(ProviderID.allCases) })
+        c.controlWriter = { _ in }
+        return c
+    }
+
+    func testCodexGroupInjectedAndRegistered() {
+        let c = makeWithCodexGroup(freshDefaults())
+        XCTAssertNotNil(c.codexGroup, "注入 codex → 构建门面")
+        XCTAssertNotNil(c.codexCLI)
+        XCTAssertTrue(c.availableIDs.contains(.codex))
+        XCTAssertNotNil(c.group(for: .codex))
+        XCTAssertNotNil(c.group(for: .claude))
+        XCTAssertNil(c.group(for: .gemini), "单源 provider 无门面")
+        XCTAssertEqual(c.webCapableProviders, [.claude, .codex])
+    }
+
+    func testEnvelopeCarriesPerProviderControl() {
+        let d = freshDefaults()
+        let c = makeWithCodexGroup(d)
+        c.codexGroup?.setSourceEnabled(.web, true)   // 启用 codex web 源 → 不暂停
+        let env = c.currentWebControlEnvelope()
+        XCTAssertNotNil(env.byProvider["claude"])
+        XCTAssertNotNil(env.byProvider["codex"])
+        XCTAssertEqual(env.paused, env.byProvider["claude"]?.paused, "顶层扁平 = Claude（backcompat）")
+        XCTAssertEqual(env.byProvider["codex"]?.paused, false, "codex 顶层启用 + web 源启用 → 不暂停")
+    }
+
+    func testCodexControlPausedWhenWebSourceDisabled() {
+        let d = freshDefaults()
+        d.set(["cli"], forKey: MultiSourceProvider.enabledKey(for: .codex))   // 只启用 codex 的 cli 源
+        let c = makeWithCodexGroup(d)
+        XCTAssertFalse(c.codexGroup?.enabledSources.contains(.web) ?? true)
+        XCTAssertEqual(c.currentWebControlEnvelope().byProvider["codex"]?.paused, true)
+    }
+
+    func testCodexRefreshBumpsOnlyCodexNonce() async {
+        let d = freshDefaults()
+        let c = makeWithCodexGroup(d)
+        XCTAssertEqual(c.currentWebControlEnvelope().byProvider["codex"]?.syncNonce, 0)
+        XCTAssertEqual(c.currentClaudeWebControl().syncNonce, 0)
+
+        await c.refreshNow(.codex)   // 只 bump codex nonce
+        XCTAssertEqual(c.currentWebControlEnvelope().byProvider["codex"]?.syncNonce, 1)
+        XCTAssertEqual(c.currentClaudeWebControl().syncNonce, 0, "Claude nonce 不受影响")
+        XCTAssertEqual(d.integer(forKey: ProviderCoordinator.nonceKey(for: .codex)), 1, "codex nonce 持久化")
+    }
+
+    func testCodexNonceRestoredFromDefaults() {
+        let d = freshDefaults()
+        d.set(4, forKey: ProviderCoordinator.nonceKey(for: .codex))
+        let c = makeWithCodexGroup(d)
+        XCTAssertEqual(c.currentWebControlEnvelope().byProvider["codex"]?.syncNonce, 4)
+    }
+
+    /// 未注入 codex → 无 codexGroup，byProvider 只含 claude（旧行为/单源测试路径）。
+    func testNoCodexGroupWhenNotInjected() {
+        let claude = UsageService()
+        claude.cliKeychainLoader = { _ in nil }
+        let c = ProviderCoordinator(claude: claude, additionalProviders: [], defaults: freshDefaults())
+        c.controlWriter = { _ in }
+        XCTAssertNil(c.codexGroup)
+        XCTAssertEqual(c.webCapableProviders, [.claude])
+        XCTAssertNil(c.currentWebControlEnvelope().byProvider["codex"])
     }
 }
 

@@ -100,6 +100,8 @@ extension ProviderID {
             return "Run `codex` in your terminal, then come back."
         case .claudeWeb:
             return "Install the Claude Web extension and stay signed in to claude.ai."
+        case .codexWeb:
+            return "Install the UsageBar extension and stay signed in to chatgpt.com."
         default:
             return "Sign in via the \(displayName) CLI / app."
         }
