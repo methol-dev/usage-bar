@@ -14,9 +14,17 @@ enum ProviderID: String, Codable, CaseIterable, Identifiable {
     case cursor
     case copilot
     case gemini
+    /// Claude 订阅网页用量源（Chrome 扩展 + Native Messaging）。rawValue 带连字符 →
+    /// 磁盘目录 `claude-web`（本 provider 无本地 JSONL，不实际建目录，仅取名一致）。
+    case claudeWeb = "claude-web"
 
     var id: String { rawValue }
 
-    /// "claude" → "Claude"
-    var displayName: String { rawValue.capitalized }
+    /// "claude" → "Claude"；`.capitalized` 对连字符/驼峰不友好，个别 case 显式给名。
+    var displayName: String {
+        switch self {
+        case .claudeWeb: return "Claude Web"
+        default:         return rawValue.capitalized
+        }
+    }
 }

@@ -65,6 +65,22 @@ struct SettingsWindowContent: View {
                 )
             }
 
+            // Claude Web 源引导（独立 Section，仿 Updates 的「文案 + Button」；不塞进 Providers
+            // 的 ProviderRow —— 那里高度按行数硬算，塞多步引导会撑破）。
+            Section("Claude Web") {
+                Text("Track your claude.ai subscription usage via a Chrome extension running in your own logged-in session. Cookies never leave the browser.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Install Chrome Extension…") {
+                    if let url = URL(string: "https://github.com/methol-dev/usage-bar#claude-web-extension") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                Text("After installing, enable the Claude Web provider above and keep a claude.ai tab signed in.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
             // v0.2.2: 更新通道（G3-N1 位置：Notifications 之后 / Account 之前）
             Section("Updates") {
                 Picker("Channel", selection: $rawChannel) {

@@ -39,3 +39,16 @@ jobs:
         with:
           name: UsageBar.dmg
           path: macos/UsageBar.dmg
+
+  extension:
+    # Chrome 扩展是纯前端，用 Node 做轻量校验（不占 macOS runner 配额）。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate manifest.json
+        run: node -e "JSON.parse(require('fs').readFileSync('extension/manifest.json','utf8'))"
+      - name: Syntax-check extension scripts
+        run: node --check extension/background.js && node --check extension/popup.js

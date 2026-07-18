@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font: 13px -apple-system, system-ui, sans-serif; width: 260px; margin: 0; padding: 12px; }
+      h1 { font-size: 13px; margin: 0 0 6px; }
+      p { color: #666; margin: 0 0 10px; line-height: 1.4; }
+      button { font: inherit; padding: 5px 10px; cursor: pointer; }
+      #status { margin-top: 10px; color: #444; min-height: 1.2em; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #1e1e1e; color: #ddd; }
+        p { color: #aaa; } #status { color: #bbb; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>UsageBar — Claude Web</h1>
+    <p>Reads your claude.ai usage in your own signed-in session. Cookies never leave the browser.</p>
+    <button id="sync">Sync now</button>
+    <div id="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

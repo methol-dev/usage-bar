@@ -116,6 +116,8 @@ build_app_bundle() {
 
     cp "$PROJECT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
     cp "$binary" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+    # 注：Chrome Native Messaging host = 主 binary 本身（argv[1]=扩展 origin 时进 host 模式，见 App/main.swift）；
+    # 不放单独 wrapper —— Contents/MacOS/ 下第二个可执行文件会破坏 ad-hoc codesign。
 
     local app_version="${APP_VERSION:-$($PLIST_BUDDY -c 'Print :CFBundleShortVersionString' "$PROJECT_DIR/Resources/Info.plist")}"
     local app_build="${APP_BUILD:-$(version_to_build_number "$app_version")}"

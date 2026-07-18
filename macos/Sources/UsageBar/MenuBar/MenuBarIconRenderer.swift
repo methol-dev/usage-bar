@@ -181,6 +181,7 @@ private func sfSymbolName(for id: ProviderID) -> String {
     case .cursor:  return "cursorarrow.rays"
     case .copilot: return "chevron.left.forwardslash.chevron.right"
     case .gemini:  return "sparkle"
+    case .claudeWeb: return "globe"             // Claude 订阅网页源
     }
 }
 
