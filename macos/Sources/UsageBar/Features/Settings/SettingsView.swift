@@ -152,18 +152,22 @@ private struct WindowAccessor: NSViewRepresentable {
 private func activateSettingsWindow(_ window: NSWindow?) {
     guard let window else { return }
     Task { @MainActor in
-        if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
+        if NSApp.activationPolicy() != .regular { _ = NSApp.setActivationPolicy(.regular) }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
 }
 
 /// 设置窗关闭 → 恢复 accessory（移除临时 Dock 图标）。observer 只注册一次（窗口被 Settings scene 复用）。
-/// nonisolated：从 WindowAccessor 的非隔离回调调用；NSApp 调用在 queue:.main 上执行、确在主线程。
+/// nonisolated：从 WindowAccessor 的非隔离回调调用。observer 在 queue:.main 上跑（确在主线程），
+/// 故用 MainActor.assumeIsolated 同步桥到 MainActor 调 NSApp（同 ProviderCoordinator 的 defaults observer）。
 private func registerRestorePolicyOnClose(_ window: NSWindow) {
-    NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
-                                           object: window, queue: .main) { _ in
-        NSApp.setActivationPolicy(.accessory)
+    // 不保存 token：observer 随窗口生命周期存活（窗口被 Settings scene 复用、常驻），无需 remove。
+    _ = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
+                                               object: window, queue: .main) { _ in
+        MainActor.assumeIsolated {
+            _ = NSApp.setActivationPolicy(.accessory)
+        }
     }
 }
 
