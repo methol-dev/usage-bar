@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "UsageBar — Claude Web Usage",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Reads your claude.ai subscription usage in your own signed-in session and hands it to the UsageBar menu bar app. Never reads or exports cookies.",
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArqiRVHwkzg8X8oFddhwjGziDsRRA8z/Xmh9wJIFDs1ragtZZwe3VNZw4KdqGro290qPaJAkOqNDKPR9ZXN/fSmiTD751mEV+9LvPpmfoFhsJivsOKO1pwhVDmbGp1FiHf268juWQp1rd3OcOlnTITyg9KSDdv45sfvPJuzw5QZypdmdt7Q6w6lcpg68qFag9fdrNtFkmaDhm3ux09uIhl0oiayppjODCKeIjIv97lFGrUnkPmOqgC1CK/9G3NV9hiPU44XtDOOfww5yk+KoFn+E9fgKVw4TAlM0Z8efRufmN29VPIQLicPPuOM/IPMEJW6WiD9F/iGdklA1/ORkVrwIDAQAB",

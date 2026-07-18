@@ -27,6 +27,7 @@ updated: 2026-07-18
 | [0008](./0008-retire-spec-governance.md) | 废弃 spec/superpowers 治理层 | accepted | 工作流改为 plan mode → plan review → 实施测试 → /review + /security-review → /simplify → PR |
 | [0009](./0009-claude-web-usage-source.md) | 新增 Claude Web 用量源（Chrome 扩展 + Native Messaging） | proposed（决策 #5 被 0010 amend） | 扩展在用户 claude.ai 会话取数 → Native Messaging → 文件交接 → 独立 provider |
 | [0010](./0010-claude-multi-source.md) | Claude 多数据源（CLI + Web 合并为单 provider，优先级降级） | proposed | amend 0009 #5：一个 Claude、多数据源、命中即停降级；Web 优先规避 429 |
+| [0011](./0011-claude-web-control-channel.md) | Claude Web 反向控制通道（扩展轮询主程序拉配置） | proposed | 扩展每 ~1min poll host 拉 control（paused/nonce/interval）；app 反向指挥扩展；拉不到即休眠 |
 
 ## 状态机
 

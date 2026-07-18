@@ -6,16 +6,18 @@
 ## 工作原理
 
 ```
-自动触发:周期 alarm(默认 5min)+ 打开/切到 claude.ai 标签页 + 浏览器获焦
-  (全部经 60s 去抖门汇流,手动「Sync now」强制绕过)
-  → 在已打开的 claude.ai 标签页上下文里 fetch /api/organizations/{id}/usage(真同源,浏览器自动带 cookie)
-  → chrome.runtime.sendNativeMessage 交给 host "com.tuzhihao.usagebar.host"
-  → host(UsageBar.app 主 binary,Chrome 以 argv[1]=扩展 origin 拉起进 host 模式)原子写 ~/.config/usage-bar/claude-web.json
-  → UsageBar 菜单栏 app 读该文件,显示 Claude Web tab
+控制通道(ADR 0011):扩展**主动**每 ~1min 轮询 host 拉配置
+  → sendNativeMessage({type:"poll"}) → host 读 ~/.config/usage-bar/claude-web-control.json 回传
+  → 扩展据配置行动:paused(停)/ syncNonce 变化(立即取数)/ intervalSeconds(节奏)
+  → 拉不到 / 配置陈旧(app 关或崩)→ 退避休眠(心跳周期拉长)
+取数:在已打开的 claude.ai 标签页上下文 fetch /api/organizations/{id}/usage(真同源,浏览器自动带 cookie)
+  → sendNativeMessage(usage) → host 原子写 ~/.config/usage-bar/claude-web.json → 菜单栏 app 读它显示
+自动触发:上面的心跳 + 打开/切到 claude.ai 标签页 + 浏览器获焦(取数经 60s 去抖门,手动「Sync now」绕过)
 ```
 
-同步是**自动**的 —— 装好并保持一个 claude.ai 标签页登录后通常无需手动点。popup 显示「上次同步」时间;
-「Sync now」按钮用于强制立即同步一次。
+同步是**自动**的 —— 装好并保持一个 claude.ai 标签页登录后通常无需手动点。popup 显示「上次同步」时间
+与「控制通道」状态(app 是否在世);「Sync now」按钮强制立即同步一次。app 端(菜单栏 Refresh、关闭
+Claude/Web 源)现在能通过控制通道**反向指挥**扩展(≤1min 生效)。
 
 ## 安装(load unpacked)
 
