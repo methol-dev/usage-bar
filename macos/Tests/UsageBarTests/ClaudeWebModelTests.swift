@@ -46,7 +46,7 @@ final class ClaudeWebModelTests: XCTestCase {
         XCTAssertNil(parse(#"{"status":"ok"}"#)?.timestamp)
     }
 
-    // MARK: ClaudeWebUsageMapper（best-effort 猜测映射，Phase 0 前）
+    // MARK: ClaudeWebUsageMapper（基本形状；真实 schema 定稿断言见 ClaudeWebMapperTests）
 
     func testMapsFiveHourAndSevenDay() {
         let usage: [String: Any] = [
@@ -58,11 +58,6 @@ final class ClaudeWebModelTests: XCTestCase {
         XCTAssertEqual(snap?.primaryWindow?.shortLabel, "5h")
         XCTAssertEqual(snap?.secondaryWindow?.utilizationPct, 88.0)
         XCTAssertNotNil(snap?.primaryWindow?.resetsAt)
-    }
-
-    func testMapsUtilizationRatioToPercent() {
-        let snap = ClaudeWebUsageMapper.snapshot(from: ["session": ["utilization_ratio": 0.5]])
-        XCTAssertEqual(snap?.primaryWindow?.utilizationPct ?? 0, 50.0, accuracy: 0.001)
     }
 
     func testMapsNothingWhenNoWindows() {

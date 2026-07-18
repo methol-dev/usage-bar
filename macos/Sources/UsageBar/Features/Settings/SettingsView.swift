@@ -37,16 +37,18 @@ struct SettingsWindowContent: View {
             }
 
             Section("Providers") {
+                // .plain + 隐藏 List 自带背景 → 行铺满 Section 宽度，不再是 .inset 的浮动窄白卡；
+                // 高度按行数撑满 + 禁 List 内部滚动，避免与外层 Form 的滚动嵌套。拖拽排序（onMove）保留。
                 List {
                     ForEach(coordinator.orderedProviderIDs, id: \.self) { id in
                         ProviderRow(coordinator: coordinator, id: id)
                     }
                     .onMove { from, to in coordinator.moveProvider(from: from, to: to) }
                 }
-                .listStyle(.inset(alternatesRowBackgrounds: false))
-                // 行实际高度 ~52pt（registered 单行 ~48 + List inset；unregistered 双行 ~56），
-                // 之前用 44 算最后一行（Gemini）会被截掉（issue: gemini 开关看不到）。
-                .frame(height: CGFloat(coordinator.orderedProviderIDs.count) * 60 + 16)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .scrollDisabled(true)
+                .frame(height: CGFloat(coordinator.orderedProviderIDs.count) * 56 + 8)
             }
 
             Section("Notifications") {
@@ -109,19 +111,21 @@ struct SettingsWindowContent: View {
 
         }
         .formStyle(.grouped)
-        // 高度可缩放 + 有上限：去掉旧的 .fixedSize(vertical)（它逼窗口长到全部内容高度，叠加
-        // scene 的 .contentSize 就锁死不可调、内容一多占满屏）。改为给 ideal/max 高度让 Form 内部滚动。
-        // 注：SwiftUI 的固定 width 与弹性 height 分属两个不同 frame overload，不能写在一个调用里，需链式两段。
-        .frame(width: 400)
-        .frame(minHeight: 400, idealHeight: 540, maxHeight: 720)
-        // 抓真实窗口：首次挂载即前置；state 里存起来供后续每次打开复用。
+        // 固定宽度 480（scene 用 .contentSize 让窗口紧贴内容，不再比内容宽一大截、内容浮在灰底里）。
+        // 高度 min/ideal/max 有上限 + Form 内部滚动，避免占满屏。width 与 height 分属两个 frame overload，链式两段。
+        .frame(width: 480)
+        .frame(minHeight: 440, idealHeight: 620, maxHeight: 780)
+        // 抓真实窗口：首次挂载即激活前置；关窗恢复 accessory（observer 只注册一次）。
         .background(WindowAccessor { window in
-            if hostWindow !== window { hostWindow = window }
-            bringSettingsWindowToFront(window)
+            if hostWindow !== window {
+                hostWindow = window
+                registerRestorePolicyOnClose(window)
+            }
+            activateSettingsWindow(window)
         })
-        // 后续再次打开（Settings scene 复用同一窗口，makeNSView 不再触发）靠 onAppear 前置。
+        // 后续再次打开（Settings scene 复用同一窗口，makeNSView 不再触发）靠 onAppear 激活。
         .onAppear {
-            bringSettingsWindowToFront(hostWindow)
+            activateSettingsWindow(hostWindow)
         }
     }
 }
@@ -141,15 +145,29 @@ private struct WindowAccessor: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-/// 激活并前置设置窗口。accessory app 用 orderFrontRegardless 强制前置，不临时提升 activation
-/// policy（避免 Dock 图标闪现）。Task{@MainActor} 一跳避开与窗口出现的时序竞争，同时让本函数
-/// 保持 nonisolated —— 可从 WindowAccessor 的非隔离回调与 onAppear 两处调用而无隔离报错。
-private func bringSettingsWindowToFront(_ window: NSWindow?) {
+/// 打开设置时把 app 临时提为前台（.regular）—— accessory(LSUIElement) app 不这么做，窗口成不了 key，
+/// 所有控件（开关 / 交通灯）会渲染成非活跃灰、accent 蓝不显示（这正是「选中没蓝」的根因）。
+/// 关窗时恢复 .accessory（见 registerRestorePolicyOnClose）。代价：设置开着时 Dock 临时出现一个图标
+/// —— 菜单栏 app 的标准做法，远好于灰死的控件。Task{@MainActor} 一跳避开与窗口出现的时序竞争。
+private func activateSettingsWindow(_ window: NSWindow?) {
     guard let window else { return }
     Task { @MainActor in
+        if NSApp.activationPolicy() != .regular { _ = NSApp.setActivationPolicy(.regular) }
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        window.orderFrontRegardless()
+    }
+}
+
+/// 设置窗关闭 → 恢复 accessory（移除临时 Dock 图标）。observer 只注册一次（窗口被 Settings scene 复用）。
+/// nonisolated：从 WindowAccessor 的非隔离回调调用。observer 在 queue:.main 上跑（确在主线程），
+/// 故用 MainActor.assumeIsolated 同步桥到 MainActor 调 NSApp（同 ProviderCoordinator 的 defaults observer）。
+private func registerRestorePolicyOnClose(_ window: NSWindow) {
+    // 不保存 token：observer 随窗口生命周期存活（窗口被 Settings scene 复用、常驻），无需 remove。
+    _ = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification,
+                                               object: window, queue: .main) { _ in
+        MainActor.assumeIsolated {
+            _ = NSApp.setActivationPolicy(.accessory)
+        }
     }
 }
 
@@ -224,18 +242,34 @@ private struct SourceControl: View {
                     ForEach(ClaudeDataSource.allCases) { Text($0.displayName).tag($0) }
                 }
             } label: {
-                Label(summary(group), systemImage: "arrow.triangle.branch")
+                chip(summary(group), interactive: true)
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
             .help("Choose which data sources to use for Claude and their priority")
         } else {
-            // 单源:置灰占位。
-            Label("Single source", systemImage: "point.forward.to.point.capsulepath")
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.tertiary)
+            // 单源:置灰 chip 占位。
+            chip("Single source", interactive: false)
                 .help("This provider has a single data source")
         }
+    }
+
+    /// 数据来源 chip —— 带边框的胶囊,读起来像可点控件(取代原先飘忽的纯文字 Label)。
+    @ViewBuilder
+    private func chip(_ text: String, interactive: Bool) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "arrow.triangle.branch").font(.system(size: 9, weight: .semibold))
+            Text(text).font(.caption)
+            if interactive {
+                Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).opacity(0.6)
+            }
+        }
+        .foregroundStyle(interactive ? Color.primary : Color.secondary)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2.5)
+        .background(Capsule().fill(Color.secondary.opacity(0.12)))
+        .overlay(Capsule().stroke(Color.secondary.opacity(0.25), lineWidth: 0.5))
     }
 
     /// 例如「Web › CLI」——按优先级列出已启用的源。
