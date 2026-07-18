@@ -6,8 +6,8 @@ import Foundation
 /// 绝对路径、并在 `allowed_origins` 列出允许调用的扩展 id。app 每次正常启动幂等重写(路径随 .app 位置
 /// 变化,幂等能自愈)。写盘照抄 `UsageEventStore` / `ScanCursorStore` 范式。
 ///
-/// host 可执行文件是 bundle 内 wrapper `Contents/MacOS/usagebar-native-host`(shell 脚本,`exec` 主
-/// binary 补 `--native-host`;因 Chrome 无法给 manifest path 注入自定义 flag)。
+/// host 可执行文件 = 主 binary 本身(`Contents/MacOS/UsageBar`)。Chrome 拉起时 argv[1] = 扩展 origin,
+/// `main.swift` 据此进入 stdio host 模式(不放单独 wrapper —— bundle 内第二个可执行文件会破坏 ad-hoc codesign)。
 enum NativeHostInstaller {
     static let hostName = "com.tuzhihao.usagebar.host"
     /// 固定扩展 id —— 由 `extension/manifest.json` 的 `key`(固定公钥)决定,跨机器稳定。
@@ -15,11 +15,11 @@ enum NativeHostInstaller {
     static let extensionID = "aaehoepakaalddpmbhljnhlbbigioeid"
 
     static func install(fileManager: FileManager = .default) {
-        guard let wrapper = wrapperURL() else { return }
+        guard let host = hostExecutableURL() else { return }
         let manifest: [String: Any] = [
             "name": hostName,
             "description": "UsageBar Claude Web usage bridge",
-            "path": wrapper.path,
+            "path": host.path,
             "type": "stdio",
             "allowed_origins": ["chrome-extension://\(extensionID)/"]
         ]
@@ -33,11 +33,10 @@ enum NativeHostInstaller {
         }
     }
 
-    /// bundle 内 wrapper 的运行时绝对路径:与主 binary 并列在 `Contents/MacOS/`。
-    /// 必须运行时解析(.app 可能被拖到任意目录),且保持原位(勿拷出 bundle,否则主 binary rpath 断裂)。
-    static func wrapperURL() -> URL? {
-        guard let exe = Bundle.main.executableURL else { return nil }
-        return exe.deletingLastPathComponent().appendingPathComponent("usagebar-native-host")
+    /// host 可执行文件 = 主 binary 的运行时绝对路径(`Contents/MacOS/UsageBar`)。
+    /// 必须运行时解析(.app 可能被拖到任意目录),且保持原位(勿拷出 bundle,否则 rpath 断裂)。
+    static func hostExecutableURL() -> URL? {
+        Bundle.main.executableURL
     }
 
     /// v1 仅 Chrome(Chrome 级目录,跨 profile 共享)。Chromium / Brave / Edge 各有独立目录,列 follow-up。

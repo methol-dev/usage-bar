@@ -38,9 +38,10 @@ Chrome 扩展（MV3）在已登录 claude.ai 标签页上下文取用量（conte
 1. **cookie 全程留浏览器**：扩展不请求 `cookies` 权限、不读 `document.cookie`，只转发 `{status, ts, usage}`。
 2. **文件交接而非长驻 IPC**：Chrome 短暂拉起 host 写文件即退出，主 app 只读文件——避开仓库无先例的
    子进程生命周期管理，完全复用现有「read-only 源 + 统一 timer + runtime」范式。
-3. **复用主 binary + wrapper 触发**：host 逻辑在主 binary 的 `--native-host` 模式；因 Chrome 无法给
-   manifest path 注入自定义 flag，由 bundle 内 shell wrapper `usagebar-native-host` 补 flag。不新增
-   SwiftPM target、不新增需单独签名的 binary。
+3. **复用主 binary，argv 检测触发**：manifest `path` 直接指向主 binary；Chrome 拉起 host 时 argv[1] =
+   扩展 origin（`chrome-extension://<id>/`），`main.swift` 据此进入 stdio host 模式。不新增 SwiftPM target、
+   不放单独 wrapper —— bundle 内 `Contents/MacOS/` 第二个可执行文件会破坏 ad-hoc codesign（要求每个可执行
+   都被签名）。
 4. **分发**：先 load-unpacked + manifest 固定 `key`（扩展 id 跨机器稳定），Web Store 作为后续。
 5. **CLI 源与 Web 源并存**：与打 oauth/usage 的 Claude CLI 源是两个 provider / 两个额度视图，不合并。
 

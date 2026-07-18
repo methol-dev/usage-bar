@@ -1,7 +1,7 @@
 import Foundation
 
-/// Chrome Native Messaging host —— 由 bundle 内 wrapper `usagebar-native-host` 以 `--native-host`
-/// 拉起(见 `main.swift`)。协议:stdin 先 4-byte 长度(平台字节序,macOS = little-endian)+ JSON body;
+/// Chrome Native Messaging host —— Chrome 以 argv[1]=扩展 origin 拉起主 binary,`main.swift` 据此
+/// 进入本模式(见 `main.swift`)。协议:stdin 先 4-byte 长度(平台字节序,macOS = little-endian)+ JSON body;
 /// 回一条同格式的 ack。本 host **只做**:校验消息是合法 JSON 对象 → 原子写交接文件 → ack → 退出。
 /// 不解析业务、不发网络、不起 AppKit。
 ///

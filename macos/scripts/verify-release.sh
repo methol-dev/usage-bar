@@ -47,10 +47,6 @@ verify_app_bundle() {
     [[ -f "$resource_bundle/THIRD_PARTY_LICENSES.txt" ]] || { echo "Error: missing bundled THIRD_PARTY_LICENSES.txt"; exit 1; }
     [[ -d "$sparkle_framework" ]] || { echo "Error: missing Sparkle.framework"; exit 1; }
 
-    local native_host="$app_bundle/Contents/MacOS/usagebar-native-host"
-    [[ -f "$native_host" ]] || { echo "Error: missing native messaging host wrapper"; exit 1; }
-    [[ -x "$native_host" ]] || { echo "Error: native messaging host wrapper not executable"; exit 1; }
-
     echo "==> Verifying app signature..."
     codesign -v "$app_bundle"
 

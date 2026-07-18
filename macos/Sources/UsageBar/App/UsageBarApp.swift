@@ -42,8 +42,8 @@ struct UsageBarApp: App {
                     if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
                         try? FileManager.default.removeItem(at: caches.appendingPathComponent("usage-bar/cost-usage", isDirectory: true))
                     }
-                    // Claude Web 源:幂等重写 Chrome native messaging host manifest（指向当前 .app 内 wrapper）。
-                    // 仅正常启动路径走到这里（--native-host 模式在 main.swift 已 exit）。
+                    // Claude Web 源:幂等重写 Chrome native messaging host manifest（指向当前 .app 主 binary）。
+                    // 仅正常启动路径走到这里（native-host 模式在 main.swift 已 exit）。
                     NativeHostInstaller.install()
                     historyService.loadHistory()
                     coordinator.claude.historyService = historyService

@@ -9,7 +9,7 @@
 chrome.alarms(每 15min)
   → 在已打开的 claude.ai 标签页上下文里 fetch /api/organizations/{id}/usage(真同源,浏览器自动带 cookie)
   → chrome.runtime.sendNativeMessage 交给 host "com.tuzhihao.usagebar.host"
-  → host(UsageBar.app 内 wrapper)原子写 ~/.config/usage-bar/claude-web.json
+  → host(UsageBar.app 主 binary,Chrome 以 argv[1]=扩展 origin 拉起进 host 模式)原子写 ~/.config/usage-bar/claude-web.json
   → UsageBar 菜单栏 app 读该文件,显示 Claude Web tab
 ```
 
