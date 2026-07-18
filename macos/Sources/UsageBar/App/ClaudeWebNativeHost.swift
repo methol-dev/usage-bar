@@ -8,7 +8,8 @@ import Foundation
 /// SC7:解析失败绝不记录原始 stdin 字节(只可记错误类别)。
 enum ClaudeWebNativeHost {
     /// Chrome 单条 native message 上限 ~1MB;拒绝异常长度,防内存滥用。
-    static let maxMessageBytes = 1_048_576
+    /// 显式 UInt32 —— 与 `decodeLength` 返回的 UInt32 同类型,避免异构比较。
+    static let maxMessageBytes: UInt32 = 1_048_576
 
     static func run() {
         let stdin = FileHandle.standardInput
