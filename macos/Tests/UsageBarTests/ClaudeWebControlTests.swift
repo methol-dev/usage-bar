@@ -53,8 +53,10 @@ final class ClaudeWebControlTests: XCTestCase {
     private func makeCoordinator(_ d: UserDefaults) -> ProviderCoordinator {
         let claude = UsageService()
         claude.cliKeychainLoader = { _ in nil }
-        return ProviderCoordinator(claude: claude, additionalProviders: [], defaults: d,
-                                   firstLaunchDetector: { Set(ProviderID.allCases) })
+        let c = ProviderCoordinator(claude: claude, additionalProviders: [], defaults: d,
+                                    firstLaunchDetector: { Set(ProviderID.allCases) })
+        c.controlWriter = { _ in }   // 单测不写真实 ~/.config
+        return c
     }
 
     private func freshDefaults() -> UserDefaults {
@@ -67,8 +69,8 @@ final class ClaudeWebControlTests: XCTestCase {
     @MainActor
     func testControlPausedWhenWebSourceDisabled() {
         let d = freshDefaults()
+        d.set(["cli"], forKey: ClaudeProvider.enabledKey)   // 显式只启用 cli，避免依赖真实 claude-web.json 足迹
         let c = makeCoordinator(d)
-        // 默认 seed 只启用 cli 源 → web 未启用 → paused。
         XCTAssertFalse(c.claudeGroup.enabledSources.contains(.web))
         XCTAssertTrue(c.currentClaudeWebControl().paused)
 

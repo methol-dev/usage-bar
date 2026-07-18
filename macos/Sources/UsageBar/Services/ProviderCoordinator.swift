@@ -50,6 +50,8 @@ final class ProviderCoordinator {
     /// 使「app 关/崩 → 扩展 ~5min 内判定陈旧休眠」而非拖到 2×pollingMinutes。
     private var controlTimer: AnyCancellable?
     static let controlPublishInterval: TimeInterval = 120
+    /// 控制文件的实际写入器（可注入，单测置为 no-op 以免写真实 `~/.config`）。
+    var controlWriter: (ClaudeWebControl) -> Void = { ClaudeWebControlStore.write($0) }
 
     /// 每次后台 tick 的「附带副作用」——默认让模型价格目录按 3h 节流自刷新。可注入便于单测。
     var onTickSideEffects: () -> Void = { ModelPricingCatalog.shared.refreshIfStale(now: Date()) }
@@ -166,7 +168,7 @@ final class ProviderCoordinator {
             webSyncNonce &+= 1
             defaults.set(webSyncNonce, forKey: Self.webSyncNonceKey)
         }
-        ClaudeWebControlStore.write(currentClaudeWebControl())
+        controlWriter(currentClaudeWebControl())
     }
 
     /// 计算当前应发布的控制配置（纯函数，便于单测）。

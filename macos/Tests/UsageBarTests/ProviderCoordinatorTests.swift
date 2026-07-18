@@ -21,8 +21,10 @@ final class ProviderCoordinatorTests: XCTestCase {
         let extras: [UsageProvider] = withCodex
             ? [CodexProvider(environment: ["CODEX_HOME": "/nonexistent-\(UUID().uuidString)"], defaults: d)]
             : []
-        return ProviderCoordinator(claude: claude, additionalProviders: extras, defaults: d,
-                                   firstLaunchDetector: { Set(ProviderID.allCases) })
+        let c = ProviderCoordinator(claude: claude, additionalProviders: extras, defaults: d,
+                                    firstLaunchDetector: { Set(ProviderID.allCases) })
+        c.controlWriter = { _ in }   // 单测不写真实 ~/.config/usage-bar/claude-web-control.json
+        return c
     }
 
     func testDefaultOrderAndEnabled() {
@@ -105,6 +107,7 @@ final class ProviderCoordinatorTests: XCTestCase {
         let stub = StubProviderForCoordTest(id: .cursor)   // cursor 默认 enabled、注册进去
         let c = ProviderCoordinator(claude: claude, additionalProviders: [stub], defaults: d,
                                     firstLaunchDetector: { Set(ProviderID.allCases) })
+        c.controlWriter = { _ in }
         XCTAssertTrue(c.availableIDs.contains(.cursor))
 
         stub.nextEligibleRefreshOverride = Date().addingTimeInterval(3600)   // 还在 backoff 窗口

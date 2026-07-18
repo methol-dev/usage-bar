@@ -102,10 +102,11 @@ async function pollControl() {
 
 // 应用 control。eventForce=true 时（用户刚访问 claude.ai）即使未到 interval 也取数一次。
 async function applyControl(control, { eventForce }) {
-  await chrome.storage.local.set({ [K.control]: Date.now() }); // 正向信号：确实收到过 control
-  // 陈旧：app 已关/崩（不再刷新 ts）→ 休眠。
+  // 陈旧：app 已关/崩（不再刷新 ts）→ 休眠。**先判陈旧**：host 仍会返回旧文件,只有「新鲜」control
+  // 才算 app 在世 —— 故 lastControlAt 只在非陈旧分支盖章,否则 popup 的「app 在世」判据永远为真。
   const ageMs = Date.now() - (Number(control.ts) || 0) * 1000;
   if (ageMs > CONTROL_STALE_MS) return backoff();
+  await chrome.storage.local.set({ [K.control]: Date.now() }); // 正向信号：收到**新鲜** control = app 在世
   // 有效反馈 → 回 active。
   await setHeartbeat(ACTIVE_MIN);
   if (control.paused) return; // app 要求暂停 → 不取数（心跳继续，等 unpause）
@@ -129,7 +130,8 @@ async function backoff() {
   await setHeartbeat(next);
 }
 
-// 取数（唯一取数入口，天然经 applyControl/wake 的 paused 判断，不会在 paused 下被调）。
+// 取数入口。自动路径（心跳/事件）经 applyControl/wake 已判 paused，不会在 paused 下取数；
+// 手动「Sync now」(force) 是用户显式操作，即使 app 暂停也放行（app 未启用 web 源时忽略这次写入，无害）。
 // 自动触发受 MIN_SYNC_GAP_MS 去抖；force=true（手动 / nonce 变化）放行。
 async function syncUsage({ force = false } = {}) {
   if (!force) {
@@ -148,7 +150,9 @@ async function syncUsage({ force = false } = {}) {
     const ack = await chrome.runtime.sendNativeMessage(HOST_NAME, payload);
     const c = ack && ack.control;
     if (c && typeof c === "object") {
-      const patch = { [K.control]: Date.now() };
+      const patch = {};
+      // 只在 control 新鲜时盖 lastControlAt（同 applyControl 的 liveness 语义）。
+      if (Date.now() - (Number(c.ts) || 0) * 1000 <= CONTROL_STALE_MS) patch[K.control] = Date.now();
       if (c.syncNonce !== undefined) patch[K.nonce] = c.syncNonce; // 对齐 nonce，避免下拍重复取数
       await chrome.storage.local.set(patch);
     }
