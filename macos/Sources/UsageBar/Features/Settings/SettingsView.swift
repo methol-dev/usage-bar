@@ -111,7 +111,9 @@ struct SettingsWindowContent: View {
         .formStyle(.grouped)
         // 高度可缩放 + 有上限：去掉旧的 .fixedSize(vertical)（它逼窗口长到全部内容高度，叠加
         // scene 的 .contentSize 就锁死不可调、内容一多占满屏）。改为给 ideal/max 高度让 Form 内部滚动。
-        .frame(width: 400, minHeight: 400, idealHeight: 540, maxHeight: 720)
+        // 注：SwiftUI 的固定 width 与弹性 height 分属两个不同 frame overload，不能写在一个调用里，需链式两段。
+        .frame(width: 400)
+        .frame(minHeight: 400, idealHeight: 540, maxHeight: 720)
         // 抓真实窗口：首次挂载即前置；state 里存起来供后续每次打开复用。
         .background(WindowAccessor { window in
             if hostWindow !== window { hostWindow = window }
