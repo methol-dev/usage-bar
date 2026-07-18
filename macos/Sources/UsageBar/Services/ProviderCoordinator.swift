@@ -53,6 +53,12 @@ final class ProviderCoordinator {
     /// 控制文件的实际写入器（可注入，单测置为 no-op 以免写真实 `~/.config`）。
     var controlWriter: (ClaudeWebControl) -> Void = { ClaudeWebControlStore.write($0) }
 
+    /// 监听扩展写入 `claude-web.json` 的快 timer —— 让 app 的「最近更新」紧跟扩展取数，
+    /// 而非拖到 pollingMinutes 的后台 tick（那会让显示陈旧度最高逼近一个 pollingMinutes）。
+    private var webFileTimer: AnyCancellable?
+    private var lastWebFileModified: Date?
+    static let webFileWatchInterval: TimeInterval = 15
+
     /// 每次后台 tick 的「附带副作用」——默认让模型价格目录按 3h 节流自刷新。可注入便于单测。
     var onTickSideEffects: () -> Void = { ModelPricingCatalog.shared.refreshIfStale(now: Date()) }
 
@@ -171,6 +177,20 @@ final class ProviderCoordinator {
         controlWriter(currentClaudeWebControl())
     }
 
+    /// claude-web.json 的最后修改时刻（缺失 → nil）。
+    private func webFileModificationDate() -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: ClaudeWebStore.fileURL.path))?[.modificationDate] as? Date
+    }
+
+    /// 快 timer 回调:文件 mtime 变了(扩展刚落盘新数据)就经**门面**重读一次 —— 不 bump nonce、不 ping 扩展,
+    /// 只把新数据反映进 runtime / 菜单栏 / 显示。仅在 web 源实际启用时才看。
+    private func pollWebFileFreshness() {
+        guard enabledProviderIDs.contains(.claude), claudeGroup.enabledSources.contains(.web) else { return }
+        guard let mod = webFileModificationDate(), mod != lastWebFileModified else { return }
+        lastWebFileModified = mod
+        Task { await claudeGroup.refreshNow() }
+    }
+
     /// 计算当前应发布的控制配置（纯函数，便于单测）。
     /// paused = 「Claude 顶层未启用」或「Web 源未启用」——两者任一都让扩展停掉 claude.ai 取数。
     func currentClaudeWebControl() -> ClaudeWebControl {
@@ -215,6 +235,12 @@ final class ProviderCoordinator {
         controlTimer = Timer.publish(every: Self.controlPublishInterval, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.publishClaudeWebControl() }
+        // 快速文件监听:扩展落盘 claude-web.json 后 ~15s 内 app 就重读并刷新显示(经门面,不 bump nonce)。
+        // 记初始 mtime,避开启动后一次多余重读(onBackgroundTick 启动时已读过一次)。
+        lastWebFileModified = webFileModificationDate()
+        webFileTimer = Timer.publish(every: Self.webFileWatchInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.pollWebFileFreshness() }
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
         ) { [weak self] _ in
