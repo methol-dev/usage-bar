@@ -71,7 +71,8 @@ struct UsageBarApp: App {
                 appUpdater: appUpdater
             )
         }
-        .windowResizability(.contentSize)
+        // .contentSize 会锁死窗口尺寸不可手动缩放；改 .contentMinSize：内容尺寸作为下限，允许放大。
+        .windowResizability(.contentMinSize)
         .windowStyle(.titleBar)
     }
 }
