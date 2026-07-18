@@ -117,6 +117,15 @@ build_app_bundle() {
     cp "$PROJECT_DIR/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
     cp "$binary" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
+    # Native Messaging host wrapper —— Chrome 拉起 manifest path 时只追加 argv[1]=扩展 origin，
+    # 无法注入自定义 flag；由 wrapper exec 主 binary 并补 --native-host（见 App/main.swift）。
+    # 与主 binary 并列在 Contents/MacOS/（保持原位，勿拷出 bundle，否则主 binary rpath 断裂）。
+    cat > "$APP_BUNDLE/Contents/MacOS/usagebar-native-host" <<'NATIVE_HOST_WRAPPER'
+#!/bin/sh
+exec "$(dirname "$0")/UsageBar" --native-host
+NATIVE_HOST_WRAPPER
+    chmod +x "$APP_BUNDLE/Contents/MacOS/usagebar-native-host"
+
     local app_version="${APP_VERSION:-$($PLIST_BUDDY -c 'Print :CFBundleShortVersionString' "$PROJECT_DIR/Resources/Info.plist")}"
     local app_build="${APP_BUILD:-$(version_to_build_number "$app_version")}"
 

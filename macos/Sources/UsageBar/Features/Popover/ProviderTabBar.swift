@@ -98,6 +98,8 @@ extension ProviderID {
         switch self {
         case .codex:
             return "Run `codex` in your terminal, then come back."
+        case .claudeWeb:
+            return "Install the Claude Web extension and stay signed in to claude.ai."
         default:
             return "Sign in via the \(displayName) CLI / app."
         }

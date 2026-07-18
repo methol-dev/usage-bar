@@ -1,6 +1,6 @@
 import SwiftUI
 
-@main
+// 注:入口不再用 `@main` —— 由 `App/main.swift` 顶层代码分流(正常启动 vs `--native-host`)。
 @MainActor
 struct UsageBarApp: App {
     // v0.2.5 多供应商重构：用 ProviderCoordinator 装配（内部注册 Claude provider = UsageService）。
@@ -9,7 +9,8 @@ struct UsageBarApp: App {
     @State private var coordinator = ProviderCoordinator(claude: UsageService(),
                                                          additionalProviders: [
                                                              CodexProvider(),
-                                                             GeminiProvider()
+                                                             GeminiProvider(),
+                                                             ClaudeWebProvider()
                                                          ])
     @State private var historyService = UsageHistoryService()
     @State private var notificationService = NotificationService()
@@ -41,6 +42,9 @@ struct UsageBarApp: App {
                     if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
                         try? FileManager.default.removeItem(at: caches.appendingPathComponent("usage-bar/cost-usage", isDirectory: true))
                     }
+                    // Claude Web 源:幂等重写 Chrome native messaging host manifest（指向当前 .app 内 wrapper）。
+                    // 仅正常启动路径走到这里（--native-host 模式在 main.swift 已 exit）。
+                    NativeHostInstaller.install()
                     historyService.loadHistory()
                     coordinator.claude.historyService = historyService
                     coordinator.claude.notificationService = notificationService
