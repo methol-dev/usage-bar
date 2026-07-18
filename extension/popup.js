@@ -1,7 +1,8 @@
-// popup：显示上次同步时间 + 手动触发一次同步（不显示用量数字本身 —— 那在菜单栏 app 里看）。
-// 自动同步由 background 的 alarm + 事件触发负责，用户通常无需点这个按钮。
+// popup：显示上次同步时间 + 控制通道状态 + 手动触发一次同步（不显示用量数字本身 —— 那在菜单栏 app 里看）。
+// 同步与配置由 background 的心跳/事件负责，用户通常无需点这个按钮。
 const statusEl = document.getElementById("status");
 const lastSyncEl = document.getElementById("lastSync");
+const channelEl = document.getElementById("channel");
 const button = document.getElementById("sync");
 
 const LABELS = {
@@ -12,24 +13,31 @@ const LABELS = {
   skipped: "Just synced a moment ago.",
 };
 
-const LAST_SYNC_KEY = "lastSyncAt";
+const CHANNEL_FRESH_MS = 5 * 60 * 1000; // 与 background 的 CONTROL_STALE_MS 一致。
 
-function formatAgo(ms) {
-  if (!ms) return "Last synced: never";
+function ago(ms) {
   const secs = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (secs < 60) return "Last synced: just now";
+  if (secs < 60) return "just now";
   const mins = Math.round(secs / 60);
-  if (mins < 60) return "Last synced: " + mins + " min ago";
-  const hours = Math.round(mins / 60);
-  return "Last synced: " + hours + "h ago";
+  if (mins < 60) return mins + " min ago";
+  return Math.round(mins / 60) + "h ago";
 }
 
-async function refreshLastSync() {
-  const stored = await chrome.storage.local.get(LAST_SYNC_KEY);
-  lastSyncEl.textContent = formatAgo(stored[LAST_SYNC_KEY]);
+async function refreshStatus() {
+  // 走 background 的 get-status（拿到 lastSyncAt + lastControlAt + heartbeatMin）。
+  chrome.runtime.sendMessage({ type: "get-status" }, (st) => {
+    if (chrome.runtime.lastError || !st) return;
+    lastSyncEl.textContent = st.lastSyncAt ? "Last synced: " + ago(st.lastSyncAt) : "Last synced: never";
+    // 控制通道：近期收到过 control = app 在世；否则休眠中。
+    if (st.lastControlAt && Date.now() - st.lastControlAt < CHANNEL_FRESH_MS) {
+      channelEl.textContent = "App connected · config synced " + ago(st.lastControlAt);
+    } else {
+      channelEl.textContent = "App not responding — sleeping" + (st.heartbeatMin ? " (retry every " + st.heartbeatMin + "m)" : "");
+    }
+  });
 }
 
-refreshLastSync();
+refreshStatus();
 
 button.addEventListener("click", () => {
   statusEl.textContent = "Syncing…";
@@ -40,7 +48,7 @@ button.addEventListener("click", () => {
       statusEl.textContent = "Could not reach the extension worker.";
       return;
     }
-    statusEl.textContent = LABELS[payload.status] || ("Status: " + payload.status);
-    refreshLastSync();
+    statusEl.textContent = LABELS[payload.status] || "Status: " + payload.status;
+    refreshStatus();
   });
 });

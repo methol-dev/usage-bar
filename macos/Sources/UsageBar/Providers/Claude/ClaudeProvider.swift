@@ -18,6 +18,8 @@ final class ClaudeProvider: UsageProvider {
     let id: ProviderID = .claude
     let runtime = ProviderRuntime()
     var onPollTick: (@MainActor () -> Void)?
+    /// 源选择 / 优先级变化时回调（coordinator 用来即时重发 Claude Web 控制配置，ADR 0011）。
+    var onConfigChanged: (@MainActor () -> Void)?
 
     private let cliSource: any UsageProvider
     private let webSource: any UsageProvider
@@ -129,6 +131,7 @@ final class ClaudeProvider: UsageProvider {
         }
         enabledSources = set
         defaults.set(Self.order(set, by: sourcePriority).map(\.rawValue), forKey: Self.enabledKey)
+        onConfigChanged?()
     }
 
     /// 把某个源提到优先级最前(2 源场景下即「Prefer X first」)。
@@ -137,6 +140,7 @@ final class ClaudeProvider: UsageProvider {
         order.insert(s, at: 0)
         sourcePriority = order
         defaults.set(order.map(\.rawValue), forKey: Self.priorityKey)
+        onConfigChanged?()
     }
 
     // MARK: - internals

@@ -1,73 +1,142 @@
 // UsageBar — Claude Web Usage 扩展的 service worker（编排层）。
 //
 // 职责：在**用户已登录的 claude.ai 页面上下文**里取订阅用量（真正同源、浏览器自动带 cookie），
-// 把结果经 Native Messaging 交给 UsageBar 的 host。SW 本身不 fetch claude.ai（SW 对 claude.ai
-// 是跨源，SameSite cookie 可能带不上），也不读取 / 导出任何 cookie。
+// 把结果经 Native Messaging 交给 UsageBar 的 host。SW 本身不 fetch claude.ai，也不读/导出任何 cookie。
 //
-// 合规原则：请求由用户浏览器在真实会话里发出；扩展只转发用量数字。
-//
-// 自动同步：不需要用户手动点。多路触发 —— 周期 alarm + 打开/切到 claude.ai 标签页 + 浏览器获焦，
-// 全部经一个去抖门（MIN_SYNC_GAP_MS）汇流，避免频繁触发时反复拉起 host。手动「Sync now」强制绕过去抖。
+// 控制通道（ADR 0011）：本扩展**主动**每 ~1min 轮询 host 拉「控制配置」（poll），据此决定行为 ——
+//   • paused          → 停止 claude.ai 取数（app 里 Claude 或 Web 源被关）
+//   • syncNonce 变化  → 立即取数一次（app 端点了 Refresh）
+//   • intervalSeconds → 自主取数节奏
+//   • ts 陈旧 / 拉不到 → app 不在世 / host 不可达 → 退避「休眠」（拉长心跳周期）
+// 取数仍走原路：在 claude.ai 页面上下文 fetch → sendNativeMessage(usage) → host 写 claude-web.json。
+// 合规不变：poll 不 fetch claude.ai；取数由用户浏览器在真实会话里发出；无 cookie 权限。
 
 const HOST_NAME = "com.tuzhihao.usagebar.host";
-const ALARM_NAME = "usagebar-sync";
-const DEFAULT_PERIOD_MINUTES = 5; // alarm 是同步下限（兜底）；事件触发覆盖绝大多数场景。MV3 alarms 最小 1min。
-const MIN_SYNC_GAP_MS = 60 * 1000; // 去抖：自动触发最多每分钟一次（跨所有触发源共享），手动不受限。
-const LAST_SYNC_KEY = "lastSyncAt"; // chrome.storage.local，供去抖判断 + popup 显示「上次同步」。
+const ALARM_NAME = "usagebar-heartbeat";
+const ACTIVE_MIN = 1; // active 心跳周期（分钟）。MV3 alarms 最小 1min。
+const BACKOFF_STEPS = [1, 2, 5, 10]; // 拉不到配置时心跳周期沿此阶梯退避（封顶 10min）= 休眠。
+const CONTROL_STALE_MS = 5 * 60 * 1000; // control.ts 超过此龄 → app 视为不在世 → 休眠。
+const MIN_SYNC_GAP_MS = 60 * 1000; // 取数去抖：自动触发最多每分钟一次（手动 force 不受限）。
+const DEFAULT_INTERVAL_MS = 30 * 60 * 1000; // control 缺 intervalSeconds 时的兜底取数间隔。
 
-// onAlarm 监听器必须在顶层同步注册 —— MV3 SW 会被杀，alarm 唤醒后重跑本脚本，顶层注册才能重新挂上。
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM_NAME) syncUsage({ reason: "alarm" });
+const K = {
+  lastSync: "lastSyncAt", // 上次取数尝试时刻
+  heartbeat: "heartbeatMin", // 当前心跳周期（退避状态，持久化以跨 SW 重启）
+  nonce: "lastNonce", // 上次应用过的 syncNonce
+  control: "lastControlAt", // 上次成功收到 control 的时刻（正向信号：通道是活的）
+};
+
+// —— 顶层同步注册监听器（MV3 SW 会被杀，唤醒后重跑本脚本，顶层注册才能重新挂上）——
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === ALARM_NAME) heartbeat();
 });
-
 chrome.runtime.onInstalled.addListener(() => {
   ensureAlarm();
-  syncUsage({ reason: "installed" });
+  heartbeat();
 });
 chrome.runtime.onStartup.addListener(() => {
   ensureAlarm();
-  syncUsage({ reason: "startup" });
+  heartbeat();
 });
-
-// 一个 claude.ai 标签页加载 / 导航完成 —— 会话正热，是同步的好时机。
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && tab.url && tab.url.startsWith("https://claude.ai/")) {
-    syncUsage({ reason: "tab" });
-  }
+// claude.ai 标签页加载/导航完成、或浏览器窗口获焦 —— 会话正热，唤醒并顺带取数。
+chrome.tabs.onUpdated.addListener((_id, ci, tab) => {
+  if (ci.status === "complete" && tab.url && tab.url.startsWith("https://claude.ai/")) wake();
 });
-
-// 用户把焦点切回某个浏览器窗口 —— 去抖窗口外则顺带刷新一次。
-chrome.windows.onFocusChanged.addListener((windowId) => {
-  if (windowId !== chrome.windows.WINDOW_ID_NONE) syncUsage({ reason: "focus" });
+chrome.windows.onFocusChanged.addListener((wid) => {
+  if (wid !== chrome.windows.WINDOW_ID_NONE) wake();
 });
-
-// popup 的「Sync now」按钮 —— 强制同步（绕过去抖）。
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+// popup：手动「Sync now」强制取数；「get-status」给 popup 显示通道状态。
+chrome.runtime.onMessage.addListener((msg, _s, reply) => {
   if (msg && msg.type === "sync-now") {
-    syncUsage({ reason: "manual", force: true }).then(sendResponse);
-    return true; // 异步 sendResponse
+    syncUsage({ force: true }).then(reply);
+    return true;
+  }
+  if (msg && msg.type === "get-status") {
+    chrome.storage.local.get([K.lastSync, K.control, K.heartbeat]).then(reply);
+    return true;
   }
   return false;
 });
 
 async function ensureAlarm() {
-  // Chrome alarm 跨扩展更新 / 浏览器重启持久 —— 老版本装过 15min alarm 的用户升级后不会自动变。
-  // 所以周期不符也要重建（create 同名即替换），确保 DEFAULT_PERIOD_MINUTES 的调整对存量安装生效。
-  const existing = await chrome.alarms.get(ALARM_NAME);
-  if (!existing || existing.periodInMinutes !== DEFAULT_PERIOD_MINUTES) {
-    await chrome.alarms.create(ALARM_NAME, { periodInMinutes: DEFAULT_PERIOD_MINUTES });
+  // 恢复**持久化**的心跳周期（退避可能已把它拉长）——不强制回 active，否则与退避打架。
+  const st = await chrome.storage.local.get(K.heartbeat);
+  const min = st[K.heartbeat] || ACTIVE_MIN;
+  const ex = await chrome.alarms.get(ALARM_NAME);
+  if (!ex || ex.periodInMinutes !== min) {
+    await chrome.alarms.create(ALARM_NAME, { periodInMinutes: min });
   }
 }
 
-// 去抖同步。自动触发受 MIN_SYNC_GAP_MS 限制；force=true（手动）直接放行。
-// 无论成功失败都记录尝试时刻 —— 坏会话不会在每次 focus 变化时反复拉起 host。
-async function syncUsage({ reason, force = false } = {}) {
+async function setHeartbeat(min) {
+  await chrome.storage.local.set({ [K.heartbeat]: min });
+  await chrome.alarms.create(ALARM_NAME, { periodInMinutes: min }); // 同名即替换
+}
+
+// 一次心跳：拉配置。拉不到 → 退避休眠；拉到 → 应用。
+async function heartbeat() {
+  const control = await pollControl();
+  if (!control) return backoff();
+  await applyControl(control, { eventForce: false });
+}
+
+// 事件唤醒：回 active，拉配置，会话热时顺带取数（仍受 paused / 去抖约束）。
+async function wake() {
+  await setHeartbeat(ACTIVE_MIN);
+  const control = await pollControl();
+  if (!control) return backoff();
+  await applyControl(control, { eventForce: true });
+}
+
+// 向 host 要 control。host 不可达 / 无 control → null（= 主程序没反馈）。
+async function pollControl() {
+  let resp;
+  try {
+    resp = await chrome.runtime.sendNativeMessage(HOST_NAME, { type: "poll" });
+  } catch (_e) {
+    return null; // host 未装 / 不可达
+  }
+  const c = resp && resp.control;
+  return c && typeof c === "object" ? c : null;
+}
+
+// 应用 control。eventForce=true 时（用户刚访问 claude.ai）即使未到 interval 也取数一次。
+async function applyControl(control, { eventForce }) {
+  // 陈旧：app 已关/崩（不再刷新 ts）→ 休眠。**先判陈旧**：host 仍会返回旧文件,只有「新鲜」control
+  // 才算 app 在世 —— 故 lastControlAt 只在非陈旧分支盖章,否则 popup 的「app 在世」判据永远为真。
+  const ageMs = Date.now() - (Number(control.ts) || 0) * 1000;
+  if (ageMs > CONTROL_STALE_MS) return backoff();
+  await chrome.storage.local.set({ [K.control]: Date.now() }); // 正向信号：收到**新鲜** control = app 在世
+  // 有效反馈 → 回 active。
+  await setHeartbeat(ACTIVE_MIN);
+  if (control.paused) return; // app 要求暂停 → 不取数（心跳继续，等 unpause）
+  const st = await chrome.storage.local.get([K.nonce, K.lastSync]);
+  const secs = Number(control.intervalSeconds);
+  const interval = secs > 0 ? Math.max(60, secs) * 1000 : DEFAULT_INTERVAL_MS; // 缺/非法 → 30min 兜底
+  if (control.syncNonce !== st[K.nonce]) {
+    // app 端主动 Refresh → 立即取数。先记 nonce，避免重复触发。
+    await chrome.storage.local.set({ [K.nonce]: control.syncNonce });
+    await syncUsage({ force: true });
+  } else if (eventForce || Date.now() - (st[K.lastSync] || 0) >= interval) {
+    await syncUsage({});
+  }
+}
+
+// 退避：心跳周期沿阶梯增长（封顶），持久化 = 「休眠」。
+async function backoff() {
+  const st = await chrome.storage.local.get(K.heartbeat);
+  const cur = st[K.heartbeat] || ACTIVE_MIN;
+  const next = BACKOFF_STEPS.find((m) => m > cur) || BACKOFF_STEPS[BACKOFF_STEPS.length - 1];
+  await setHeartbeat(next);
+}
+
+// 取数入口。自动路径（心跳/事件）经 applyControl/wake 已判 paused，不会在 paused 下取数；
+// 手动「Sync now」(force) 是用户显式操作，即使 app 暂停也放行（app 未启用 web 源时忽略这次写入，无害）。
+// 自动触发受 MIN_SYNC_GAP_MS 去抖；force=true（手动 / nonce 变化）放行。
+async function syncUsage({ force = false } = {}) {
   if (!force) {
-    const stored = await chrome.storage.local.get(LAST_SYNC_KEY);
-    const last = stored[LAST_SYNC_KEY] || 0;
-    if (Date.now() - last < MIN_SYNC_GAP_MS) {
-      return { status: "skipped", ts: Date.now() };
-    }
+    const st = await chrome.storage.local.get(K.lastSync);
+    if (Date.now() - (st[K.lastSync] || 0) < MIN_SYNC_GAP_MS) return { status: "skipped", ts: Date.now() };
   }
   let payload;
   try {
@@ -75,13 +144,20 @@ async function syncUsage({ reason, force = false } = {}) {
   } catch (e) {
     payload = { status: "error", error: categorize(e), ts: Date.now() };
   }
-  await chrome.storage.local.set({ [LAST_SYNC_KEY]: Date.now() });
+  await chrome.storage.local.set({ [K.lastSync]: Date.now() });
   try {
-    // sendNativeMessage（一次性）：Chrome 拉起短命 host，host 写文件后 exit。
-    await chrome.runtime.sendNativeMessage(HOST_NAME, payload);
+    // usage 的 ack 也带回最新 control → 搭便车更新元信息（但**不**从这里触发同步，避免与刚做的同步成环）。
+    const ack = await chrome.runtime.sendNativeMessage(HOST_NAME, payload);
+    const c = ack && ack.control;
+    if (c && typeof c === "object") {
+      const patch = {};
+      // 只在 control 新鲜时盖 lastControlAt（同 applyControl 的 liveness 语义）。
+      if (Date.now() - (Number(c.ts) || 0) * 1000 <= CONTROL_STALE_MS) patch[K.control] = Date.now();
+      if (c.syncNonce !== undefined) patch[K.nonce] = c.syncNonce; // 对齐 nonce，避免下拍重复取数
+      await chrome.storage.local.set(patch);
+    }
   } catch (_e) {
-    // host 写完文件即退出，扩展侧会收到 "Native host has exited" —— 属预期，忽略。
-    // （host 未安装 / manifest 缺失也会落到这里；用量已尽力送达，无需上报。）
+    // host 写完文件即退出，扩展侧可能收到 "Native host has exited" —— 属预期，忽略。
   }
   return payload;
 }

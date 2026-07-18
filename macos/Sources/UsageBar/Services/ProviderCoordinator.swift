@@ -42,6 +42,17 @@ final class ProviderCoordinator {
     private var defaultsObserver: NSObjectProtocol?
     private var lastBackgroundInterval: TimeInterval = 0
 
+    // MARK: - Claude Web 控制通道（ADR 0011）
+    static let webSyncNonceKey = "claude.web.syncNonce"
+    /// 单调自增：app 端「Refresh」时 +1，写进 control 文件；扩展见 nonce 变化即立即取数一次。持久化以跨重启。
+    private var webSyncNonce: Int = 0
+    /// 独立的控制发布 timer —— 每 ~2min 重写 control 文件刷新 `ts`（liveness），与 pollingMinutes 解耦，
+    /// 使「app 关/崩 → 扩展 ~5min 内判定陈旧休眠」而非拖到 2×pollingMinutes。
+    private var controlTimer: AnyCancellable?
+    static let controlPublishInterval: TimeInterval = 120
+    /// 控制文件的实际写入器（可注入，单测置为 no-op 以免写真实 `~/.config`）。
+    var controlWriter: (ClaudeWebControl) -> Void = { ClaudeWebControlStore.write($0) }
+
     /// 每次后台 tick 的「附带副作用」——默认让模型价格目录按 3h 节流自刷新。可注入便于单测。
     var onTickSideEffects: () -> Void = { ModelPricingCatalog.shared.refreshIfStale(now: Date()) }
 
@@ -49,6 +60,7 @@ final class ProviderCoordinator {
          firstLaunchDetector: () -> Set<ProviderID> = { AIToolDetector.detect() }) {
         self.claude = claude
         self.defaults = defaults
+        self.webSyncNonce = defaults.integer(forKey: Self.webSyncNonceKey)   // 未写过 → 0
 
         // 顶层 provider 集合:`.claudeWeb` 降为 Claude 的子源(ADR 0010),不再作为顶层 tab/菜单项 ——
         // 从排序 / 启用 / 菜单栏可见三个持久集合里一律排除(PR#43 存量里的 "claude-web" 读时被过滤掉)。
@@ -114,6 +126,8 @@ final class ProviderCoordinator {
     // MARK: - mutators（Settings 用）
     func setEnabled(_ id: ProviderID, _ on: Bool) {
         if on { enabledProviderIDs.insert(id) } else { enabledProviderIDs.remove(id) }
+        // Claude 顶层启用态影响扩展的 paused —— 立即重发 control。
+        if id == .claude { publishClaudeWebControl() }
     }
     func setMenuBarVisible(_ id: ProviderID, _ on: Bool) {
         if on { menuBarVisibleProviderIDs.insert(id) } else { menuBarVisibleProviderIDs.remove(id) }
@@ -138,8 +152,36 @@ final class ProviderCoordinator {
         }
     }
 
-    /// 拉一次某 provider 的用量（popover Refresh 按钮用）。
-    func refreshNow(_ id: ProviderID) async { await registry.provider(id)?.refreshNow() }
+    /// 拉一次某 provider 的用量（popover Refresh 按钮用 —— 唯一调用点，见 PopoverView 底栏）。
+    /// 对 Claude:这是**用户主动**的同步入口,顺带 bump syncNonce → 让扩展 ≤1min 内真去 claude.ai 拉一次
+    /// （后台 tick 走 `registry.provider(.claude)?.refreshNow()`，不经此路，故不会每 tick 误 bump）。
+    func refreshNow(_ id: ProviderID) async {
+        if id == .claude { publishClaudeWebControl(bumpSyncNonce: true) }
+        await registry.provider(id)?.refreshNow()
+    }
+
+    // MARK: - Claude Web 控制通道发布（ADR 0011）
+    /// 写 control 文件(paused / intervalSeconds / syncNonce / ts)。`bumpSyncNonce` 用于用户主动同步。
+    /// paused = 「Claude 顶层未启用」或「Web 源未启用」——两者任一都让扩展停掉 claude.ai 取数。
+    func publishClaudeWebControl(bumpSyncNonce: Bool = false) {
+        if bumpSyncNonce {
+            webSyncNonce &+= 1
+            defaults.set(webSyncNonce, forKey: Self.webSyncNonceKey)
+        }
+        controlWriter(currentClaudeWebControl())
+    }
+
+    /// 计算当前应发布的控制配置（纯函数，便于单测）。
+    /// paused = 「Claude 顶层未启用」或「Web 源未启用」——两者任一都让扩展停掉 claude.ai 取数。
+    func currentClaudeWebControl() -> ClaudeWebControl {
+        let webActive = enabledProviderIDs.contains(.claude) && claudeGroup.enabledSources.contains(.web)
+        return ClaudeWebControl(
+            paused: !webActive,
+            intervalSeconds: Int(backgroundIntervalSeconds),
+            syncNonce: webSyncNonce,
+            ts: Date().timeIntervalSince1970
+        )
+    }
 
     // MARK: - 刷新纪律
     /// popover 打开（content 视图 appear）触发一次：对每个 enabled provider，仅在尚无数据（snapshot == nil）时才拉，
@@ -166,13 +208,23 @@ final class ProviderCoordinator {
     func startBackgroundPolling() {
         rescheduleBackgroundTimer()
         onBackgroundTick()                                 // 立即一次
+        // Claude Web 控制通道:门面源变化(Settings 勾选/优先级)即时重发 control;并起一个 ~2min 的
+        // liveness timer 持续刷新 control.ts(与 pollingMinutes 解耦)。启动即发一次初始 control。
+        claudeGroup.onConfigChanged = { [weak self] in self?.publishClaudeWebControl() }
+        publishClaudeWebControl()
+        controlTimer = Timer.publish(every: Self.controlPublishInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.publishClaudeWebControl() }
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
         ) { [weak self] _ in
             // `queue: .main` 保证在主线程，但不在 MainActor 隔离上下文 —— assumeIsolated 桥过去（safe：确在主线程）。
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if self.backgroundIntervalSeconds != self.lastBackgroundInterval { self.rescheduleBackgroundTimer() }
+                if self.backgroundIntervalSeconds != self.lastBackgroundInterval {
+                    self.rescheduleBackgroundTimer()
+                    self.publishClaudeWebControl()   // intervalSeconds 变了,即时告知扩展
+                }
             }
         }
     }
@@ -194,5 +246,8 @@ final class ProviderCoordinator {
             p.onPollTick?()
         }
         onTickSideEffects()
+        // 无条件重发 control(刷新 ts + 反映当前 paused/interval)—— 放在 provider 循环外,
+        // 即使 Claude 被禁用 / 在 backoff 也照发(那正是要告诉扩展 paused 的时候)。
+        publishClaudeWebControl()
     }
 }
