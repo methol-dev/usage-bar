@@ -13,7 +13,7 @@ final class ProviderCoordinator {
     /// 注:`.claude` 在 registry 里注册的是**门面** `claudeGroup`(多数据源),不是这个裸 service。
     let claude: UsageService
     /// Claude 顶层 provider 的门面(CLI + Web 两数据源,ADR 0010)—— Settings 数据源控件 / Claude 区读它。
-    let claudeGroup: ClaudeProvider
+    let claudeGroup: MultiSourceProvider
     let registry: ProviderRegistry
     private let defaults: UserDefaults
 
@@ -77,8 +77,8 @@ final class ProviderCoordinator {
         let legacyWebEnabled = (defaults.stringArray(forKey: Self.enabledProvidersKey) ?? [])
             .contains(ProviderID.claudeWeb.rawValue)
         let webFilePresent = FileManager.default.fileExists(atPath: ClaudeWebStore.fileURL.path)
-        let group = ClaudeProvider(cli: claude, web: ClaudeWebProvider(), defaults: defaults,
-                                   webAlreadyOn: legacyWebEnabled || webFilePresent)
+        let group = MultiSourceProvider(id: .claude, cliSource: claude, webSource: ClaudeWebProvider(),
+                                        defaults: defaults, webAlreadyOn: legacyWebEnabled || webFilePresent)
         self.claudeGroup = group
 
         // 注册表:`.claude` 注册**门面**(非裸 UsageService);web 不作为顶层注册。orderedIDs 用去 claudeWeb 的顶层集。

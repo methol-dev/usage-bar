@@ -17,8 +17,8 @@ final class ClaudeProviderTests: XCTestCase {
 
     /// 预置 enabled + priority，避免依赖 seed。
     private func withSources(_ d: UserDefaults, enabled: [String], priority: [String]) {
-        d.set(enabled, forKey: ClaudeProvider.enabledKey)
-        d.set(priority, forKey: ClaudeProvider.priorityKey)
+        d.set(enabled, forKey: MultiSourceProvider.enabledKey(for: .claude))
+        d.set(priority, forKey: MultiSourceProvider.priorityKey(for: .claude))
     }
 
     // MARK: - 优先级 / 降级 / 命中即停
@@ -28,7 +28,7 @@ final class ClaudeProviderTests: XCTestCase {
         withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
         let web = StubSource(id: .claudeWeb, configured: true); web.runtime.setSuccess(snapshot: snap(20))
         let cli = StubSource(id: .claude, configured: true); cli.runtime.setSuccess(snapshot: snap(80))
-        let g = ClaudeProvider(cliSource: cli, webSource: web, defaults: d)
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
 
         await g.refreshNow()
 
@@ -43,7 +43,7 @@ final class ClaudeProviderTests: XCTestCase {
         withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
         let web = StubSource(id: .claudeWeb, configured: false)         // web 未配置 → 无快照
         let cli = StubSource(id: .claude, configured: true); cli.runtime.setSuccess(snapshot: snap(55))
-        let g = ClaudeProvider(cliSource: cli, webSource: web, defaults: d)
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
 
         await g.refreshNow()
 
@@ -60,7 +60,7 @@ final class ClaudeProviderTests: XCTestCase {
         let web = StubSource(id: .claudeWeb, configured: false)                 // web 失败
         let cli = StubSource(id: .claude, configured: true); cli.runtime.setSuccess(snapshot: snap(42))
         cli.nextEligibleRefreshOverride = Date().addingTimeInterval(3600)       // cli 还在 429 backoff
-        let g = ClaudeProvider(cliSource: cli, webSource: web, defaults: d)
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
 
         await g.refreshNow()
 
@@ -78,13 +78,13 @@ final class ClaudeProviderTests: XCTestCase {
 
         // 只选 cli → 透传 backoff
         withSources(d, enabled: ["cli"], priority: ["cli", "web"])
-        let onlyCLI = ClaudeProvider(cliSource: cli, webSource: web, defaults: d)
+        let onlyCLI = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
         XCTAssertEqual(onlyCLI.nextEligibleRefresh, backoff)
 
         // 选了 web（无 backoff）→ 恒可 tick
         let d2 = freshDefaults()
         withSources(d2, enabled: ["web", "cli"], priority: ["web", "cli"])
-        let both = ClaudeProvider(cliSource: cli, webSource: web, defaults: d2)
+        let both = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d2)
         XCTAssertNil(both.nextEligibleRefresh)
     }
 
@@ -93,7 +93,7 @@ final class ClaudeProviderTests: XCTestCase {
         withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
         let web = StubSource(id: .claudeWeb, configured: false)
         let cli = StubSource(id: .claude, configured: false)
-        let g = ClaudeProvider(cliSource: cli, webSource: web, defaults: d)
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
 
         await g.refreshNow()
 
@@ -106,7 +106,7 @@ final class ClaudeProviderTests: XCTestCase {
         withSources(d, enabled: ["cli"], priority: ["web", "cli"])   // 只启用 cli
         let web = StubSource(id: .claudeWeb, configured: true)        // web 配置了但没启用
         let cli = StubSource(id: .claude, configured: false)
-        let g = ClaudeProvider(cliSource: cli, webSource: web, defaults: d)
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
         XCTAssertFalse(g.isConfigured, "web 已配置但未启用 → 不算数")
 
         g.setSourceEnabled(.web, true)
@@ -117,17 +117,17 @@ final class ClaudeProviderTests: XCTestCase {
 
     func testSeedWebOnWhenWebAlreadyOn() {
         let d = freshDefaults()
-        let g = ClaudeProvider(cliSource: StubSource(id: .claude, configured: false),
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: false),
                                webSource: StubSource(id: .claudeWeb, configured: false),
                                defaults: d, webAlreadyOn: true)
         XCTAssertEqual(g.enabledSources, [.cli, .web])
-        XCTAssertEqual(d.stringArray(forKey: ClaudeProvider.enabledKey).map(Set.init),
+        XCTAssertEqual(d.stringArray(forKey: MultiSourceProvider.enabledKey(for: .claude)).map(Set.init),
                        Set(["cli", "web"]))
     }
 
     func testSeedDefaultsToCLIOnlyWhenWebOff() {
         let d = freshDefaults()
-        let g = ClaudeProvider(cliSource: StubSource(id: .claude, configured: false),
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: false),
                                webSource: StubSource(id: .claudeWeb, configured: false),
                                defaults: d, webAlreadyOn: false)
         XCTAssertEqual(g.enabledSources, [.cli])
@@ -135,8 +135,8 @@ final class ClaudeProviderTests: XCTestCase {
 
     func testStoredEnabledSourcesSkipsSeed() {
         let d = freshDefaults()
-        d.set(["web"], forKey: ClaudeProvider.enabledKey)
-        let g = ClaudeProvider(cliSource: StubSource(id: .claude, configured: false),
+        d.set(["web"], forKey: MultiSourceProvider.enabledKey(for: .claude))
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: false),
                                webSource: StubSource(id: .claudeWeb, configured: false),
                                defaults: d, webAlreadyOn: false)   // webAlreadyOn 被忽略（已有 key）
         XCTAssertEqual(g.enabledSources, [.web])
@@ -147,7 +147,7 @@ final class ClaudeProviderTests: XCTestCase {
     func testSetSourceEnabledCannotEmptyToZero() {
         let d = freshDefaults()
         withSources(d, enabled: ["cli"], priority: ["cli", "web"])
-        let g = ClaudeProvider(cliSource: StubSource(id: .claude, configured: true),
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: true),
                                webSource: StubSource(id: .claudeWeb, configured: false), defaults: d)
         g.setSourceEnabled(.cli, false)   // 取消最后一个 → 忽略
         XCTAssertEqual(g.enabledSources, [.cli])
@@ -156,20 +156,20 @@ final class ClaudeProviderTests: XCTestCase {
     func testSetPreferredMovesToFront() {
         let d = freshDefaults()
         withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
-        let g = ClaudeProvider(cliSource: StubSource(id: .claude, configured: true),
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: true),
                                webSource: StubSource(id: .claudeWeb, configured: true), defaults: d)
         g.setPreferred(.cli)
         XCTAssertEqual(g.sourcePriority.first, .cli)
         XCTAssertEqual(g.enabledByPriority, [.cli, .web])
-        XCTAssertEqual(d.stringArray(forKey: ClaudeProvider.priorityKey)?.first, "cli")
+        XCTAssertEqual(d.stringArray(forKey: MultiSourceProvider.priorityKey(for: .claude))?.first, "cli")
     }
 
     // MARK: - config 净化
 
     func testSanitizePriorityDropsUnknownDedupAndFills() {
-        XCTAssertEqual(ClaudeProvider.sanitizePriority(nil), [.web, .cli])                 // 缺 → 默认
-        XCTAssertEqual(ClaudeProvider.sanitizePriority(["cli", "bogus", "cli"]), [.cli, .web]) // 去未知/去重/补漏
-        XCTAssertEqual(ClaudeProvider.sanitizePriority(["web"]), [.web, .cli])             // 补漏 cli
+        XCTAssertEqual(MultiSourceProvider.sanitizePriority(nil), [.web, .cli])                 // 缺 → 默认
+        XCTAssertEqual(MultiSourceProvider.sanitizePriority(["cli", "bogus", "cli"]), [.cli, .web]) // 去未知/去重/补漏
+        XCTAssertEqual(MultiSourceProvider.sanitizePriority(["web"]), [.web, .cli])             // 补漏 cli
     }
 }
 
