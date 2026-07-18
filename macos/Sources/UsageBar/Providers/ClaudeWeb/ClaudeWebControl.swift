@@ -28,6 +28,25 @@ struct WebControlEnvelope: Codable, Equatable {
     var syncNonce: Int
     var ts: Double
     var byProvider: [String: ClaudeWebControl]
+
+    init(paused: Bool, intervalSeconds: Int, syncNonce: Int, ts: Double, byProvider: [String: ClaudeWebControl]) {
+        self.paused = paused
+        self.intervalSeconds = intervalSeconds
+        self.syncNonce = syncNonce
+        self.ts = ts
+        self.byProvider = byProvider
+    }
+
+    /// `byProvider` 缺省容忍 —— 旧版本（ADR 0011）写的扁平 control 文件（无 `byProvider`）解码为空 map，
+    /// 不 throw（否则读旧文件会得 nil，是个潜在陷阱）。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        paused = try c.decode(Bool.self, forKey: .paused)
+        intervalSeconds = try c.decode(Int.self, forKey: .intervalSeconds)
+        syncNonce = try c.decode(Int.self, forKey: .syncNonce)
+        ts = try c.decode(Double.self, forKey: .ts)
+        byProvider = try c.decodeIfPresent([String: ClaudeWebControl].self, forKey: .byProvider) ?? [:]
+    }
 }
 
 /// `~/.config/usage-bar/claude-web-control.json` 的读写(照抄 `ClaudeWebStore` 原子 0600 范式)。

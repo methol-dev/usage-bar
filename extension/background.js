@@ -59,7 +59,7 @@ chrome.windows.onFocusChanged.addListener((wid) => {
 // popup：手动「Sync now」强制取所有 provider；「get-status」给 popup 显示通道状态。
 chrome.runtime.onMessage.addListener((msg, _s, reply) => {
   if (msg && msg.type === "sync-now") {
-    Promise.all(PROVIDERS.map((p) => syncUsage(p, { force: true }))).then((rs) => reply(pickStatus(rs)));
+    syncOpenProviders().then((rs) => reply(pickStatus(rs)));
     return true;
   }
   if (msg && msg.type === "get-status") {
@@ -70,6 +70,17 @@ chrome.runtime.onMessage.addListener((msg, _s, reply) => {
   }
   return false;
 });
+
+// 手动「Sync now」：只强制**有打开标签页**的 provider，避免给没开标签页的 provider 写 no_session
+// （否则会把它的 web 源短暂翻成未配置）。都没开 → 返回 no_session 供 popup 提示。
+async function syncOpenProviders() {
+  const results = [];
+  for (const p of PROVIDERS) {
+    const tabs = await chrome.tabs.query({ url: PROVIDER_QUERY[p] });
+    if (tabs.some((t) => typeof t.id === "number")) results.push(await syncUsage(p, { force: true }));
+  }
+  return results.length ? results : [{ status: "no_session", ts: Date.now() }];
+}
 
 // popup 状态整形：把每 provider 的 lastSync 汇成「最近一次」，附控制通道 liveness。
 function shapeStatus(st) {
