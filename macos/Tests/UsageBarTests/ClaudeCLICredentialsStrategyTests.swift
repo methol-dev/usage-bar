@@ -59,6 +59,93 @@ final class ClaudeCLICredentialsStrategyTests: XCTestCase {
         XCTAssertEqual(actual!.timeIntervalSince1970, expectedSeconds, accuracy: 0.001)
     }
 
+    // MARK: mcpOAuth-only 检测（Claude Code 2.1.x 起 Keychain 项可能只剩 mcpOAuth）
+
+    func testMcpOAuthOnlyPayloadDetected() {
+        let json = #"{"mcpOAuth":{"someServer":{"accessToken":"mock-mcp-1"}}}"#
+        XCTAssertTrue(ClaudeCLICredentialsStrategy.isMcpOAuthOnlyPayload(Data(json.utf8)))
+    }
+
+    func testFullPayloadNotMcpOAuthOnly() {
+        let json = #"{"claudeAiOauth":{"accessToken":"mock-access-4"},"mcpOAuth":{}}"#
+        XCTAssertFalse(ClaudeCLICredentialsStrategy.isMcpOAuthOnlyPayload(Data(json.utf8)))
+    }
+
+    func testGarbagePayloadNotMcpOAuthOnly() {
+        XCTAssertFalse(ClaudeCLICredentialsStrategy.isMcpOAuthOnlyPayload(Data("not json".utf8)))
+    }
+
+    // MARK: 文件回退（`~/.claude/.credentials.json` 与 Keychain payload 同 schema）
+
+    func testLoadFromFileParsesCredentials() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usage-bar-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent(".credentials.json")
+        // expiresAt 必须取未来时刻：loadFromFile 会丢弃过期 token（见 testLoadFromFileExpiredTokenIgnored）。
+        let futureMs = Int64((Date().timeIntervalSince1970 + 3600) * 1000)
+        let json = #"""
+        {"claudeAiOauth":{"accessToken":"mock-access-5","refreshToken":"mock-refresh-5","expiresAt":\#(futureMs),"scopes":["user:profile"]}}
+        """#
+        try Data(json.utf8).write(to: file)
+
+        let creds = ClaudeCLICredentialsStrategy.loadFromFile(file)
+        XCTAssertNotNil(creds)
+        XCTAssertTrue(creds?.accessToken.hasPrefix("mock-") ?? false)
+        XCTAssertEqual(creds?.scopes, ["user:profile"])
+        // 不强制解包 —— 断言失败就该只失败本 case，不能 fatal error 带崩整个测试进程。
+        XCTAssertEqual(creds?.expiresAt?.timeIntervalSince1970 ?? 0,
+                       TimeInterval(futureMs) / 1000.0, accuracy: 0.001)
+    }
+
+    func testLoadFromFileMissingReturnsNil() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usage-bar-tests-missing-\(UUID().uuidString).json")
+        XCTAssertNil(ClaudeCLICredentialsStrategy.loadFromFile(missing))
+    }
+
+    func testLoadFromFileExpiredTokenIgnored() throws {
+        // 文件回退没有 refresh 能力：过期 token 必须丢弃，不能拿去反复打 401。
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usage-bar-tests-expired-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let expiredMs = Int64((Date().timeIntervalSince1970 - 60) * 1000)
+        let json = #"{"claudeAiOauth":{"accessToken":"mock-access-6","expiresAt":\#(expiredMs)}}"#
+        try Data(json.utf8).write(to: file)
+
+        XCTAssertNil(ClaudeCLICredentialsStrategy.loadFromFile(file))
+    }
+
+    /// 端到端回退：CI 环境 Keychain 无 `Claude Code-credentials` 项（notFound/interactionNotAllowed
+    /// 均属可回退类），loadCredentials 应落到注入的临时文件并成功返回。
+    func testLoadCredentialsFallsBackToInjectedFile() async throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usage-bar-tests-fallback-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let futureMs = Int64((Date().timeIntervalSince1970 + 3600) * 1000)
+        let json = #"{"claudeAiOauth":{"accessToken":"mock-access-7","expiresAt":\#(futureMs),"scopes":["user:profile"]}}"#
+        try Data(json.utf8).write(to: file)
+
+        let strategy = ClaudeCLICredentialsStrategy(credentialsFileURL: file)
+        let creds = try await strategy.loadCredentials(allowInteraction: false)
+        XCTAssertNotNil(creds)
+        XCTAssertTrue(creds?.accessToken.hasPrefix("mock-") ?? false)
+    }
+
+    // MARK: CLAUDE_CONFIG_DIR 环境变量覆盖（同 CodexCredentialStore.authFileURL 模式）
+
+    func testDefaultCredentialsFileURLHonorsClaudeConfigDir() {
+        let url = ClaudeCLICredentialsStrategy.defaultCredentialsFileURL(
+            environment: ["CLAUDE_CONFIG_DIR": "/custom/claude-config"])
+        XCTAssertEqual(url.path, "/custom/claude-config/.credentials.json")
+    }
+
+    func testDefaultCredentialsFileURLDefaultsToHomeDotClaude() {
+        let url = ClaudeCLICredentialsStrategy.defaultCredentialsFileURL(environment: [:])
+        XCTAssertTrue(url.path.hasSuffix("/.claude/.credentials.json"))
+    }
+
     func testLoadErrorDescriptionDoesNotLeakRawValue() {
         // SC7 验证：LoadError 的 description 只输出 case 名，不带 OSStatus 数值
         XCTAssertEqual("\(ClaudeCLICredentialsStrategy.LoadError.keychainQueryFailed)", "keychainQueryFailed")

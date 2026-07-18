@@ -29,7 +29,7 @@ enum CodexUsageClient {
             req.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
         }
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("usage-bar", forHTTPHeaderField: "User-Agent")
+        req.setValue(AppHTTP.userAgent, forHTTPHeaderField: "User-Agent")
 
         let data: Data
         let response: URLResponse

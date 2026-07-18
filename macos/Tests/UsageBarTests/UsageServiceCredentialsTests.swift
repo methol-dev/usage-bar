@@ -132,6 +132,29 @@ final class UsageServiceCredentialsTests: XCTestCase {
         XCTAssertFalse(service.runtime.isConfigured)
     }
 
+    /// 上游按 User-Agent 分桶限流（无 UA 落激进桶 → 持续 429），回归保护：请求必须带 UA + beta header。
+    func testFetchUsageSendsUserAgentAndBetaHeaders() async throws {
+        let session = makeStubSession()
+        let service = UsageService(session: session,
+                                   usageEndpoint: URL(string: "https://example.invalid/usage")!)
+        service.cliKeychainLoader = { _ in
+            StoredCredentials(accessToken: "t-ua", refreshToken: nil,
+                              expiresAt: Date().addingTimeInterval(3600),
+                              scopes: ["user:profile"])
+        }
+        var capturedRequest: URLRequest?
+        StubProtocol.responseProvider = { request in
+            capturedRequest = request
+            let body = #"{"fiveHour":null,"sevenDay":null,"extraUsage":null}"#
+            return (Data(body.utf8), HTTPURLResponse(url: URL(string: "x")!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+
+        await service.fetchUsage()
+        // value(forHTTPHeaderField:) 大小写不敏感 —— CFNetwork 可能规范化 header 名，不能用字典下标断言。
+        XCTAssertEqual(capturedRequest?.value(forHTTPHeaderField: "User-Agent"), AppHTTP.userAgent)
+        XCTAssertEqual(capturedRequest?.value(forHTTPHeaderField: "anthropic-beta"), "oauth-2025-04-20")
+    }
+
     private func makeStubSession() -> URLSession {
         StubProtocol.responseProvider = nil
         let config = URLSessionConfiguration.ephemeral

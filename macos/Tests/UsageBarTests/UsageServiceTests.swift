@@ -25,6 +25,16 @@ final class UsageServiceTests: XCTestCase {
         )
     }
 
+    /// Retry-After 是服务端/代理可控输入：`Double("inf")`/`Double("nan")`/负值不得污染 backoff
+    /// （NaN 穿透 min/max 后，下游 `Int(...)` 会 trap）。非有限或负值按缺失处理。
+    func testBackoffIntervalSanitizesNonFiniteRetryAfter() {
+        for bad in [Double.nan, .infinity, -1] {
+            let result = UsageService.backoffInterval(retryAfter: bad, currentInterval: 5 * 60)
+            XCTAssertTrue(result.isFinite)
+            XCTAssertEqual(result, 10 * 60, "非法 Retry-After 应等同于缺失（当前间隔翻倍）")
+        }
+    }
+
     /// v0.2.11：429 进 backoff → 下一次成功 fetch 清掉 backoff（nextEligibleRefresh 回到 nil）。
     /// v0.5.1：改造走新 fetchUsage —— cliKeychainLoader 注入有效 token + StubProtocol 模拟 429-then-200。
     func testFetchUsageSuccessClearsBackoff() async throws {

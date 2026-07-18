@@ -5,6 +5,23 @@ import LocalAuthentication
 struct ClaudeCLICredentialsStrategy: ClaudeUsageStrategy {
     static let serviceName = "Claude Code-credentials"
 
+    /// Claude CLI 的文件凭证（`claude` 在部分环境/版本不写 Keychain 而写这个文件；
+    /// schema 与 Keychain payload 相同）。Keychain 读不到或 decode 失败时作为回退源。
+    /// `CLAUDE_CONFIG_DIR` 设了就用 `$CLAUDE_CONFIG_DIR/.credentials.json`（与 Claude CLI 一致；
+    /// `environment` 注入以便测试 —— 同 `CodexCredentialStore.authFileURL` 模式）。
+    static func defaultCredentialsFileURL(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
+        let dir: URL
+        if let configDir = environment["CLAUDE_CONFIG_DIR"], !configDir.isEmpty {
+            dir = URL(fileURLWithPath: configDir, isDirectory: true)
+        } else {
+            dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude", isDirectory: true)
+        }
+        return dir.appendingPathComponent(".credentials.json")
+    }
+
+    /// `internal` + 可注入 —— 单测用临时文件替换，避免依赖真实 `~/.claude/`。
+    var credentialsFileURL: URL = ClaudeCLICredentialsStrategy.defaultCredentialsFileURL()
+
     /// Keychain JSON 顶层 schema (实测自 macOS 14 Claude CLI)：
     /// { "claudeAiOauth": { accessToken, refreshToken?, expiresAt(ms), scopes? },
     ///   "mcpOAuth": { ... } }  // mcpOAuth 不读
@@ -67,23 +84,55 @@ struct ClaudeCLICredentialsStrategy: ClaudeUsageStrategy {
             return (status, item)
         }.value
 
+        // Keychain 读取结果分类，除「成功且可解析」与「用户明确拒绝」外都尝试文件回退：
+        // Claude Code 2.1.x 起该 Keychain 项可能只剩 `mcpOAuth`（订阅 OAuth 移出，
+        // 见 steipete/CodexBar#1844），文件 `~/.claude/.credentials.json` 是等价凭证源。
+        // 文件也读不到时抛出/返回值与回退前语义一致（deferredError）。
+        var deferredError: LoadError?
         switch queryResult.status {
         case errSecSuccess:
-            break
+            if let data = queryResult.item as? Data {
+                if let creds = Self.parseCredentials(data) {
+                    DiagnosticLog.claudeCredentials.info("keychain: ok")
+                    return creds
+                }
+                if Self.isMcpOAuthOnlyPayload(data) {
+                    DiagnosticLog.claudeCredentials.warning("keychain: mcpOAuth-only payload (Claude Code >= 2.1.x storage change), trying file fallback")
+                } else {
+                    deferredError = .payloadDecodeFailed
+                    DiagnosticLog.claudeCredentials.error("keychain: payloadDecodeFailed, trying file fallback")
+                }
+            } else {
+                DiagnosticLog.claudeCredentials.error("keychain: item present but no data, trying file fallback")
+            }
+        case errSecUserCanceled:          // -128 用户在 ACL prompt 上点取消
+            // 用户对「读 Claude 凭证」明确说了不 —— 不能再从文件把同一份凭证捞回来，直接降级。
+            DiagnosticLog.claudeCredentials.notice("keychain: user canceled ACL prompt, skipping file fallback")
+            return nil
         case errSecItemNotFound,         // -25300 未装 Claude CLI 或无该 account 项
              errSecAuthFailed,            // -25293 ACL 验证失败
-             errSecInteractionNotAllowed, // -25308 后台进程无法弹 ACL prompt
-             errSecUserCanceled:          // -128 用户在 ACL prompt 上点取消
-            return nil  // G2 F 修订：四种"权限/不存在"OSStatus 都静默降级
+             errSecInteractionNotAllowed: // -25308 后台进程无法弹 ACL prompt
+            // G2 F 修订："权限/不存在"OSStatus 静默降级（现在先走文件回退再降级）
+            DiagnosticLog.claudeCredentials.info("keychain: unavailable (notFound/auth category), trying file fallback")
         default:
-            throw LoadError.keychainQueryFailed
+            deferredError = .keychainQueryFailed
+            DiagnosticLog.claudeCredentials.error("keychain: keychainQueryFailed, trying file fallback")
         }
 
-        guard let data = queryResult.item as? Data else { return nil }
-        guard let payload = try? JSONDecoder().decode(KeychainPayload.self, from: data) else {
-            throw LoadError.payloadDecodeFailed
+        if let creds = Self.loadFromFile(credentialsFileURL) {
+            DiagnosticLog.claudeCredentials.info("file fallback: ok")
+            return creds
         }
+        DiagnosticLog.claudeCredentials.info("file fallback: unavailable")
+        if let deferredError { throw deferredError }
+        return nil
+    }
 
+    // MARK: - Payload helpers（`internal` static，单测直接覆盖，无需 Keychain / 文件系统实测）
+
+    /// Keychain payload / `~/.claude/.credentials.json` 共用同一 schema。
+    static func parseCredentials(_ data: Data) -> StoredCredentials? {
+        guard let payload = try? JSONDecoder().decode(KeychainPayload.self, from: data) else { return nil }
         let oauth = payload.claudeAiOauth
         let expiry: Date? = oauth.expiresAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000.0) }
         return StoredCredentials(
@@ -92,5 +141,24 @@ struct ClaudeCLICredentialsStrategy: ClaudeUsageStrategy {
             expiresAt: expiry,
             scopes: oauth.scopes ?? []
         )
+    }
+
+    /// Claude Code 2.1.x 已知形态：顶层只有 `mcpOAuth`、没有 `claudeAiOauth`。
+    /// 区分它与「schema 真坏了」，日志里给出可行动的根因。
+    static func isMcpOAuthOnlyPayload(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return object["claudeAiOauth"] == nil && object["mcpOAuth"] != nil
+    }
+
+    static func loadFromFile(_ url: URL) -> StoredCredentials? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let creds = parseCredentials(data) else { return nil }
+        // 文件可能是老 CLI 安装的陈年残留，而我们没有它的 refresh 能力：过期 token 直接丢弃，
+        // 否则会以已知过期的 bearer 反复打 401，并把用户引向修不好它的 `claude` 重登录提示。
+        guard !creds.isExpired() else {
+            DiagnosticLog.claudeCredentials.notice("file fallback: credentials expired, ignoring file")
+            return nil
+        }
+        return creds
     }
 }

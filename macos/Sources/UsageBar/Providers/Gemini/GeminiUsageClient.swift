@@ -67,7 +67,7 @@ enum GeminiUsageClient {
         req.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("usage-bar", forHTTPHeaderField: "User-Agent")
+        req.setValue(AppHTTP.userAgent, forHTTPHeaderField: "User-Agent")
         do {
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
         } catch {
