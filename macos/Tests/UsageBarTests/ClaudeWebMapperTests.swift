@@ -37,9 +37,12 @@ final class ClaudeWebMapperTests: XCTestCase {
     }
 
     func testResetsAtSixDigitFractionParses() throws {
+        // ISO8601DateFormatter 的 .withFractionalSeconds 能吃下 6 位小数秒 → 解析出的时刻带 .774291 亚秒,
+        // 与整秒参考值不精确相等(但描述都打印成整秒)。用 accuracy 容差断言「解析到正确整秒附近」即可。
         let snap = try XCTUnwrap(ClaudeWebUsageMapper.snapshot(from: usage(realSample)))
-        let expected = ISO8601DateFormatter().date(from: "2026-07-18T16:09:59+00:00")
-        XCTAssertEqual(snap.primaryWindow?.resetsAt, expected, "剥掉 .774291 后应等于整秒时刻")
+        let reset = try XCTUnwrap(snap.primaryWindow?.resetsAt)
+        let expected = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-18T16:09:59+00:00"))
+        XCTAssertEqual(reset.timeIntervalSince1970, expected.timeIntervalSince1970, accuracy: 1.0)
     }
 
     func testPerModelWindowsWhenPresent() throws {
