@@ -99,12 +99,18 @@ jobs:
               fh.write(html)
           PY
 
+      - name: Package Chrome extension
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          bash scripts/package-extension.sh "dist/usage-bar-extension-${version}.zip"
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             macos/UsageBar.zip
             macos/UsageBar.dmg
+            dist/usage-bar-extension-*.zip
           body_path: dist/release-notes.md
 
       - name: Generate Sparkle appcast
