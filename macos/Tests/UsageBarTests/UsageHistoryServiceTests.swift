@@ -68,7 +68,9 @@ final class UsageHistoryServiceTests: XCTestCase {
 
     func testTimestampFlooredToWholeSecondSurvivesReload() throws {
         let h = UsageHistoryService(filename: "history.json", directory: tmpDir)
-        let ts = Date(timeIntervalSince1970: 1_752_900_000.7)
+        // 相对当前时间取值（固定 epoch 会随时间滑出 30 天保留期，flush 剪枝后测试空转）
+        let whole = Date().timeIntervalSince1970.rounded(.down) - 100
+        let ts = Date(timeIntervalSince1970: whole + 0.7)
         h.recordDataPoint(pct5h: 0.5, pct7d: 0.5, timestamp: ts)
         h.flushToDisk()
         let h2 = UsageHistoryService(filename: "history.json", directory: tmpDir)
@@ -76,7 +78,7 @@ final class UsageHistoryServiceTests: XCTestCase {
         // ISO8601 编码丢亚秒——记点时已取整，重放同一 payload 时同刻判定跨重启依然命中
         h2.recordDataPoint(pct5h: 0.5, pct7d: 0.5, timestamp: ts)
         XCTAssertEqual(h2.history.dataPoints.count, 1)
-        XCTAssertEqual(h2.history.dataPoints.first?.timestamp, Date(timeIntervalSince1970: 1_752_900_000))
+        XCTAssertEqual(h2.history.dataPoints.first?.timestamp, Date(timeIntervalSince1970: whole))
     }
 
     func testEarlierTimestampInsertedInOrder() {
