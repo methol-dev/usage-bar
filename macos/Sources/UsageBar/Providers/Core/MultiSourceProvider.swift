@@ -8,8 +8,9 @@ import Observation
 /// - `registry` 里以 `id` 注册的是本门面；对应的裸 CLI provider（`UsageService` / `CodexProvider`）仍被
 ///   coordinator 单独持有（登录 UX / history / notifications / polling 直连它，零改动）。
 /// - 门面自己的 `runtime` 是「当前生效源」的镜像 —— 菜单栏 label 与 popover 用量区都读它。
-/// - **命中即停**：web 优先且拿到数据时不调 cli 取数（避开限流端点），代价是此时 cli 派生的 API 趋势线 /
-///   阈值通知暂停更新（本机 JSONL 统计仍随 tick 更新）。见 ADR 0010。
+/// - **命中即停**：web 优先且拿到数据时不调 cli 取数（避开限流端点）。带错误的源（陈旧 / 同步失败）
+///   不算命中 —— 继续试下一源（stale web 自动回退 cli，图表不断线）。web 命中时 cli 内部的历史采样 /
+///   阈值通知不会跑，由门面经 `onWebSnapshot` 回推给装配处补记（见 ADR 0010；原「趋势线暂停」的代价已消除）。
 ///
 /// read-only + 统一 timer + runtime 范式不变；门面本身不发网络，只编排两个源。
 @MainActor
@@ -20,6 +21,9 @@ final class MultiSourceProvider: UsageProvider {
     var onPollTick: (@MainActor () -> Void)?
     /// 源选择 / 优先级变化时回调（coordinator 用来即时重发该 provider 的 Web 控制配置，ADR 0011）。
     var onConfigChanged: (@MainActor () -> Void)?
+    /// Web 源命中且数据比上次新（payload 同步时间戳变化）时回调，携带快照 + payload 时刻 ——
+    /// 装配处挂历史采样 / 阈值通知副作用（CLI 命中时其内部已自记，不经此路，避免双记）。
+    var onWebSnapshot: (@MainActor (ProviderUsageSnapshot, Date) -> Void)?
 
     private let cliSource: any UsageProvider
     private let webSource: any UsageProvider
@@ -33,11 +37,16 @@ final class MultiSourceProvider: UsageProvider {
 
     private let defaults: UserDefaults
     private var isRefreshing = false
+    /// 最近一次经 `onWebSnapshot` 回推的 payload 时间戳（epoch 秒）。持久化到 UserDefaults：
+    /// 重启后同一份未变化的落盘数据不重复记点（`UsageDataPoint.id == timestamp`，重复记会撞身份）。
+    /// 存 / 比较都用 `timeIntervalSince1970` 原始 Double，不经 Date 往返，避免精度损失导致去重失效。
+    private var lastWebSampleTs: TimeInterval?
 
     /// 持久化 key 按 provider 分隔（`claude.enabledSources` / `codex.enabledSources`）——
     /// Claude 的 rawValue == "claude" → 与旧静态 key 一致，零迁移。
     static func enabledKey(for id: ProviderID) -> String { "\(id.rawValue).enabledSources" }
     static func priorityKey(for id: ProviderID) -> String { "\(id.rawValue).sourcePriority" }
+    static func lastWebSampleKey(for id: ProviderID) -> String { "\(id.rawValue).web.lastSampleTs" }
     /// 默认优先级：Web 优先（避开限流端点），拿不到再退 CLI。
     static let defaultPriority: [UsageSource] = [.web, .cli]
 
@@ -51,6 +60,7 @@ final class MultiSourceProvider: UsageProvider {
         self.webSource = webSource
         self.defaults = defaults
         self.sourcePriority = Self.sanitizePriority(defaults.stringArray(forKey: Self.priorityKey(for: id)))
+        self.lastWebSampleTs = defaults.object(forKey: Self.lastWebSampleKey(for: id)) as? Double
 
         if let raw = defaults.stringArray(forKey: Self.enabledKey(for: id)) {
             let parsed = Set(raw.compactMap(UsageSource.init(rawValue:)))
@@ -96,9 +106,12 @@ final class MultiSourceProvider: UsageProvider {
                 continue
             }
             await p.refreshNow()
-            if p.isConfigured, p.runtime.snapshot != nil {
+            // 命中 = 已配置 + 有快照 + **无错误**。带错的源（web 陈旧 >1h / 同步失败，snapshot 被保留）
+            // 不算命中 —— 继续试下一源，stale web 不再无限占住门面、饿死 cli（图表随之断线）。
+            if p.isConfigured, p.runtime.snapshot != nil, p.runtime.lastError == nil {
                 activeSource = s
                 mirror(from: p.runtime, configured: true)
+                pushWebSampleIfFresh(s, p)
                 return
             }
             if firstConfigured == nil, p.isConfigured { firstConfigured = s }
@@ -152,6 +165,18 @@ final class MultiSourceProvider: UsageProvider {
         case .cli: return cliSource
         case .web: return webSource
         }
+    }
+
+    /// Web 源命中后回推快照（历史采样 / 阈值通知副作用在装配处）。按 payload 时间戳去重：
+    /// 后台 tick / 文件监听重读**未变化**的落盘数据不重复触发；时间戳持久化，跨重启同样不重复。
+    private func pushWebSampleIfFresh(_ s: UsageSource, _ p: any UsageProvider) {
+        guard s == .web,
+              let snap = p.runtime.snapshot,
+              let ts = p.runtime.lastUpdated,
+              ts.timeIntervalSince1970 != lastWebSampleTs else { return }
+        lastWebSampleTs = ts.timeIntervalSince1970
+        defaults.set(ts.timeIntervalSince1970, forKey: Self.lastWebSampleKey(for: id))
+        onWebSnapshot?(snap, ts)
     }
 
     /// 把某个源 runtime 的效果忠实重放进门面 runtime（复制「效果」而非裸字段，保持 clearSnapshot 语义）。

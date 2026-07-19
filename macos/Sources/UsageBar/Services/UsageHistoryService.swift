@@ -76,8 +76,10 @@ class UsageHistoryService {
 
     // MARK: - Record
 
-    func recordDataPoint(pct5h: Double, pct7d: Double) {
-        let point = UsageDataPoint(pct5h: pct5h, pct7d: pct7d)
+    /// `timestamp` 默认「现在」（CLI 源拉取完成即数据时刻）；web 源传扩展落盘的 payload 同步时刻，
+    /// 让折线点落在数据真实产生的位置（payload 可能已滞后至多 1h）。
+    func recordDataPoint(pct5h: Double, pct7d: Double, timestamp: Date = Date()) {
+        let point = UsageDataPoint(timestamp: timestamp, pct5h: pct5h, pct7d: pct7d)
         history.dataPoints.append(point)
         isDirty = true
         startFlushTimerIfNeeded()

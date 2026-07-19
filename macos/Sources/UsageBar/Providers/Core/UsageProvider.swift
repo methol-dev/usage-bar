@@ -35,7 +35,7 @@ extension UsageProvider {
 
 @MainActor
 protocol HistoryRecording: AnyObject {
-    func recordDataPoint(pct5h: Double, pct7d: Double)
+    func recordDataPoint(pct5h: Double, pct7d: Double, timestamp: Date)
 }
 
 @MainActor

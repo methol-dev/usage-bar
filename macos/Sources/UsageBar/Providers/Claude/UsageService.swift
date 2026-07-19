@@ -230,7 +230,7 @@ extension UsageService {
         let now = Date()
         lastUpdated = now
         runtime.setSuccess(snapshot: reconciled.asProviderSnapshot(), at: now)
-        historyService?.recordDataPoint(pct5h: pct5h, pct7d: pct7d)
+        historyService?.recordDataPoint(pct5h: pct5h, pct7d: pct7d, timestamp: now)
         notificationService?.checkAndNotify(pct5h: pct5h, pct7d: pct7d, pctExtra: pctExtra)
         currentBackoffSeconds = 0
         backoffUntil = nil

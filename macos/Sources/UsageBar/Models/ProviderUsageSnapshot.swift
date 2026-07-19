@@ -92,3 +92,18 @@ struct ProviderUsageSnapshot: Equatable {
         self.planLabel = planLabel
     }
 }
+
+// MARK: - 历史采样映射
+
+extension ProviderUsageSnapshot {
+    /// 历史采样点：主 / 次窗口的已用比例（0...1，clamp 防范范围外值污染折线）。
+    /// 缺失的窗口按 0 记（如 Free 计划只有 weekly）；两个都缺 → nil（不记点）。
+    /// 字段名沿用 `UsageDataPoint` 的 pct5h/pct7d —— 本质是「主/次窗口已用比例」。
+    var historySample: (pct5h: Double, pct7d: Double)? {
+        let p = primaryWindow?.utilizationPct
+        let s = secondaryWindow?.utilizationPct
+        guard p != nil || s != nil else { return nil }
+        func unit(_ pct: Double?) -> Double { min(max((pct ?? 0) / 100.0, 0), 1) }
+        return (unit(p), unit(s))
+    }
+}
