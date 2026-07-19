@@ -193,6 +193,7 @@ CI workflow 若使用 generate-appcast 工具需根据 tag 后缀注入 `--chann
 | 2026-05-14 | v0.5.3 | tag-pushed | claude-sonnet-4-6 | tag v0.5.3；PR #33 observable-migration；277 tests pass |
 | 2026-05-15 | v0.6.0 | tag-pushed | claude-sonnet-4-6 | tag v0.6.0；Gemini provider + AIToolDetector；290 tests pass；G7 PASS |
 | 2026-05-15 | v0.7.0 | tag-pushed | claude-sonnet-4-6 | tag v0.7.0；更新按钮位置 + 版本号展示；290 tests pass；G7 PASS |
+| 2026-07-19 | v0.8.0 | tag-pushed | claude-code | Claude/Codex 网页用量源 + 多数据源 + 扩展控制通道（#42–#52）；独立 review PASS + CI 绿 |
 
 ## 引用
 
