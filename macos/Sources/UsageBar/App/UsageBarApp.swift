@@ -66,16 +66,16 @@ struct UsageBarApp: App {
                     // Web 源命中即停时 CLI 不跑，其内部的历史采样 / 阈值通知随之停摆——门面在 web 快照
                     // 落地（payload ts 变化）时回推，浏览器渠道与 CLI 渠道一样驱动主程序记录，图表不断线。
                     coordinator.claudeGroup.onWebSnapshot = { snapshot, timestamp in
-                        guard let s = snapshot.historySample else { return }
-                        historyService.recordDataPoint(pct5h: s.pct5h, pct7d: s.pct7d, timestamp: timestamp)
-                        let extra = min(max((snapshot.creditLine?.utilizationPct ?? 0) / 100.0, 0), 1)
-                        notificationService.checkAndNotify(pct5h: s.pct5h, pct7d: s.pct7d, pctExtra: extra)
+                        historyService.record(snapshot, timestamp: timestamp)
+                        if let s = snapshot.historySample {
+                            notificationService.checkAndNotify(pct5h: s.pct5h, pct7d: s.pct7d,
+                                                              pctExtra: snapshot.extraFraction)
+                        }
                     }
                     // Codex 同理（无阈值通知，与其 CLI 路径一致）；历史落到 codexCLI 自持的 history-codex.json。
                     if let codexHistory = coordinator.codexCLI?.history {
                         coordinator.codexGroup?.onWebSnapshot = { snapshot, timestamp in
-                            guard let s = snapshot.historySample else { return }
-                            codexHistory.recordDataPoint(pct5h: s.pct5h, pct7d: s.pct7d, timestamp: timestamp)
+                            codexHistory.record(snapshot, timestamp: timestamp)
                         }
                     }
                     // 起统一后台 timer（覆盖所有 enabled provider，含 Claude；监听 pollingMinutes 变化自动重起）+ 立即各拉一次（这一次就拉了 Claude）。

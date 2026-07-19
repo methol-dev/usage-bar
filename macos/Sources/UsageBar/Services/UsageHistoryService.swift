@@ -77,10 +77,21 @@ class UsageHistoryService {
     // MARK: - Record
 
     /// `timestamp` 默认「现在」（CLI 源拉取完成即数据时刻）；web 源传扩展落盘的 payload 同步时刻，
-    /// 让折线点落在数据真实产生的位置（payload 可能已滞后至多 1h）。
+    /// 让折线点落在数据真实产生的位置（payload 可能已滞后至多 1h）。三条防线：
+    /// - 时刻取整到秒：history.json 用 ISO8601 编码，亚秒精度落盘即丢——取整让同刻判定跨重启稳定；
+    /// - 同时间戳已有点即跳过：`UsageDataPoint.id == timestamp`，重复点会撞 Charts 身份
+    ///   （web 源重启后重放同一份落盘数据、payload 时间戳回退等场景都靠这里兜底）；
+    /// - 比末尾早的点按时序插入：web 的 payload 时刻可能早于已记的 CLI 点，图表按数组序连线。
     func recordDataPoint(pct5h: Double, pct7d: Double, timestamp: Date = Date()) {
-        let point = UsageDataPoint(timestamp: timestamp, pct5h: pct5h, pct7d: pct7d)
-        history.dataPoints.append(point)
+        let ts = Date(timeIntervalSince1970: timestamp.timeIntervalSince1970.rounded(.down))
+        guard !history.dataPoints.contains(where: { $0.timestamp == ts }) else { return }
+        let point = UsageDataPoint(timestamp: ts, pct5h: pct5h, pct7d: pct7d)
+        if let last = history.dataPoints.last, last.timestamp > ts,
+           let idx = history.dataPoints.firstIndex(where: { $0.timestamp > ts }) {
+            history.dataPoints.insert(point, at: idx)
+        } else {
+            history.dataPoints.append(point)
+        }
         isDirty = true
         startFlushTimerIfNeeded()
     }

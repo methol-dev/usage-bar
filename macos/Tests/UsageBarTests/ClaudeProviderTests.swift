@@ -190,26 +190,58 @@ final class ClaudeProviderTests: XCTestCase {
         XCTAssertEqual(received.last?.pct, 25)
     }
 
-    func testWebSampleDedupSurvivesRestart() async {
+    func testWebSampleNotConsumedBeforeCallbackWired() async {
         let d = freshDefaults()
         withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
         let ts = Date(timeIntervalSince1970: 1_752_900_000.5)
         let web = StubSource(id: .claudeWeb, configured: true)
         web.runtime.setSuccess(snapshot: snap(20), at: ts)
-        let cli = StubSource(id: .claude, configured: true)
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: true),
+                                    webSource: web, defaults: d)
 
-        let g1 = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
-        var count1 = 0
-        g1.onWebSnapshot = { _, _ in count1 += 1 }
-        await g1.refreshNow()
-        XCTAssertEqual(count1, 1)
+        await g.refreshNow()   // 启动期装配回调还没挂上（如 popover 提前打开）——不消耗样本
 
-        // 模拟 app 重启：同一 defaults 新建门面，同一份落盘数据不重复记点
-        let g2 = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
-        var count2 = 0
-        g2.onWebSnapshot = { _, _ in count2 += 1 }
-        await g2.refreshNow()
-        XCTAssertEqual(count2, 0, "去重时间戳已持久化，重启后同 payload ts 不重复回推")
+        var fired = 0
+        g.onWebSnapshot = { _, _ in fired += 1 }
+        await g.refreshNow()
+        XCTAssertEqual(fired, 1, "回调挂上后同一份 payload 仍应被回推（早期 refresh 不推进去重态）")
+    }
+
+    func testEmptyWebSnapshotDoesNotFireOrConsumeTimestamp() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
+        let ts = Date(timeIntervalSince1970: 1_752_900_000.5)
+        let web = StubSource(id: .claudeWeb, configured: true)
+        web.runtime.setSuccess(snapshot: ProviderUsageSnapshot(), at: ts)   // 骨架快照：映射未定 / 无窗口
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: true),
+                                    webSource: web, defaults: d)
+        var fired = 0
+        g.onWebSnapshot = { _, _ in fired += 1 }
+
+        await g.refreshNow()
+        XCTAssertEqual(fired, 0, "无可记数据不回推")
+
+        web.runtime.setSuccess(snapshot: snap(20), at: ts)   // 同 ts 补上真数据
+        await g.refreshNow()
+        XCTAssertEqual(fired, 1, "空快照不应提前消耗该 payload 时间戳")
+    }
+
+    func testOlderPayloadTimestampDoesNotRefire() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
+        let ts = Date(timeIntervalSince1970: 1_752_900_000.5)
+        let web = StubSource(id: .claudeWeb, configured: true)
+        web.runtime.setSuccess(snapshot: snap(20), at: ts)
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: true),
+                                    webSource: web, defaults: d)
+        var fired = 0
+        g.onWebSnapshot = { _, _ in fired += 1 }
+
+        await g.refreshNow()
+        web.runtime.setSuccess(snapshot: snap(15), at: ts.addingTimeInterval(-600))   // 落盘数据时间戳回退
+        await g.refreshNow()
+
+        XCTAssertEqual(fired, 1, "去重按单调时间戳：回退的 payload 不重复回推")
     }
 
     func testCLIHitDoesNotFireOnWebSnapshot() async {

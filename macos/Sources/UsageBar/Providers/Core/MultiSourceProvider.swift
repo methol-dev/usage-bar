@@ -21,7 +21,7 @@ final class MultiSourceProvider: UsageProvider {
     var onPollTick: (@MainActor () -> Void)?
     /// 源选择 / 优先级变化时回调（coordinator 用来即时重发该 provider 的 Web 控制配置，ADR 0011）。
     var onConfigChanged: (@MainActor () -> Void)?
-    /// Web 源命中且数据比上次新（payload 同步时间戳变化）时回调，携带快照 + payload 时刻 ——
+    /// Web 源命中且数据比上次新（payload 同步时间戳前进）时回调，携带快照 + payload 时刻 ——
     /// 装配处挂历史采样 / 阈值通知副作用（CLI 命中时其内部已自记，不经此路，避免双记）。
     var onWebSnapshot: (@MainActor (ProviderUsageSnapshot, Date) -> Void)?
 
@@ -37,16 +37,16 @@ final class MultiSourceProvider: UsageProvider {
 
     private let defaults: UserDefaults
     private var isRefreshing = false
-    /// 最近一次经 `onWebSnapshot` 回推的 payload 时间戳（epoch 秒）。持久化到 UserDefaults：
-    /// 重启后同一份未变化的落盘数据不重复记点（`UsageDataPoint.id == timestamp`，重复记会撞身份）。
-    /// 存 / 比较都用 `timeIntervalSince1970` 原始 Double，不经 Date 往返，避免精度损失导致去重失效。
-    private var lastWebSampleTs: TimeInterval?
+    /// 最近一次经 `onWebSnapshot` 回推的 payload 时间戳（内存态，只在真正回推后前进）。
+    /// 会话内去重靠它（单调比较，重读未变化 / 时间戳回退的落盘数据不触发）；
+    /// 跨重启的重复由 `UsageHistoryService.recordDataPoint` 的同时间戳去重兜底（单一存储，
+    /// 不引入与 history 文件可能失步的第二份持久化状态）。
+    private var lastWebSampleTs: Date?
 
     /// 持久化 key 按 provider 分隔（`claude.enabledSources` / `codex.enabledSources`）——
     /// Claude 的 rawValue == "claude" → 与旧静态 key 一致，零迁移。
     static func enabledKey(for id: ProviderID) -> String { "\(id.rawValue).enabledSources" }
     static func priorityKey(for id: ProviderID) -> String { "\(id.rawValue).sourcePriority" }
-    static func lastWebSampleKey(for id: ProviderID) -> String { "\(id.rawValue).web.lastSampleTs" }
     /// 默认优先级：Web 优先（避开限流端点），拿不到再退 CLI。
     static let defaultPriority: [UsageSource] = [.web, .cli]
 
@@ -60,7 +60,6 @@ final class MultiSourceProvider: UsageProvider {
         self.webSource = webSource
         self.defaults = defaults
         self.sourcePriority = Self.sanitizePriority(defaults.stringArray(forKey: Self.priorityKey(for: id)))
-        self.lastWebSampleTs = defaults.object(forKey: Self.lastWebSampleKey(for: id)) as? Double
 
         if let raw = defaults.stringArray(forKey: Self.enabledKey(for: id)) {
             let parsed = Set(raw.compactMap(UsageSource.init(rawValue:)))
@@ -111,7 +110,7 @@ final class MultiSourceProvider: UsageProvider {
             if p.isConfigured, p.runtime.snapshot != nil, p.runtime.lastError == nil {
                 activeSource = s
                 mirror(from: p.runtime, configured: true)
-                pushWebSampleIfFresh(s, p)
+                if s == .web { pushWebSampleIfFresh() }
                 return
             }
             if firstConfigured == nil, p.isConfigured { firstConfigured = s }
@@ -167,16 +166,16 @@ final class MultiSourceProvider: UsageProvider {
         }
     }
 
-    /// Web 源命中后回推快照（历史采样 / 阈值通知副作用在装配处）。按 payload 时间戳去重：
-    /// 后台 tick / 文件监听重读**未变化**的落盘数据不重复触发；时间戳持久化，跨重启同样不重复。
-    private func pushWebSampleIfFresh(_ s: UsageSource, _ p: any UsageProvider) {
-        guard s == .web,
-              let snap = p.runtime.snapshot,
-              let ts = p.runtime.lastUpdated,
-              ts.timeIntervalSince1970 != lastWebSampleTs else { return }
-        lastWebSampleTs = ts.timeIntervalSince1970
-        defaults.set(ts.timeIntervalSince1970, forKey: Self.lastWebSampleKey(for: id))
-        onWebSnapshot?(snap, ts)
+    /// Web 源命中后回推快照（历史采样 / 阈值通知副作用在装配处）。仅在装配处已挂回调、快照有可记数据、
+    /// payload 时间戳比上次**新**（单调；重读未变化 / 回退的落盘数据不触发）时回推。去重态只在真正回推后
+    /// 前进 —— 装配回调挂上前的早期 refresh（如启动期 popover 打开）不消耗样本。
+    private func pushWebSampleIfFresh() {
+        guard let onWebSnapshot,
+              let snap = webSource.runtime.snapshot, snap.historySample != nil,
+              let ts = webSource.runtime.lastUpdated else { return }
+        if let last = lastWebSampleTs, ts <= last { return }
+        lastWebSampleTs = ts
+        onWebSnapshot(snap, ts)
     }
 
     /// 把某个源 runtime 的效果忠实重放进门面 runtime（复制「效果」而非裸字段，保持 clearSnapshot 语义）。

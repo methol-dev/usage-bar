@@ -106,4 +106,9 @@ extension ProviderUsageSnapshot {
         func unit(_ pct: Double?) -> Double { min(max((pct ?? 0) / 100.0, 0), 1) }
         return (unit(p), unit(s))
     }
+
+    /// 「按量计费 / 额外用量」已用比例（0...1，clamp；无 creditLine → 0）——阈值通知的 pctExtra 输入。
+    var extraFraction: Double {
+        min(max((creditLine?.utilizationPct ?? 0) / 100.0, 0), 1)
+    }
 }

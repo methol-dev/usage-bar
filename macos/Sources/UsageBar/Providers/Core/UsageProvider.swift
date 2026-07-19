@@ -38,6 +38,15 @@ protocol HistoryRecording: AnyObject {
     func recordDataPoint(pct5h: Double, pct7d: Double, timestamp: Date)
 }
 
+extension HistoryRecording {
+    /// 统一入口：从快照取 `historySample`（缺窗口按 0、双缺不记）落一个历史点。
+    /// CLI 自记（Claude / Codex / Gemini）与 web 源回推共用；新 provider 一行接入。
+    func record(_ snapshot: ProviderUsageSnapshot, timestamp: Date = Date()) {
+        guard let s = snapshot.historySample else { return }
+        recordDataPoint(pct5h: s.pct5h, pct7d: s.pct7d, timestamp: timestamp)
+    }
+}
+
 @MainActor
 protocol UsageNotifying: AnyObject {
     func checkAndNotify(pct5h: Double, pct7d: Double, pctExtra: Double)

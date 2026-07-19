@@ -75,18 +75,12 @@ final class CodexProvider: UsageProvider {
             let response = try await CodexUsageClient.fetchUsage(credentials: creds, session: session)
             let snapshot = response.asProviderSnapshot()
             runtime.setSuccess(snapshot: snapshot)
-            recordHistorySample(from: snapshot)
+            // (session%, weekly%) 落进历史:pct5h↔session、pct7d↔weekly(换算见 HistoryRecording.record)。
+            history.record(snapshot)
         } catch CodexUsageError.unauthorized {
             runtime.setError("Codex credentials expired. Run `codex` to sign in again.", clearSnapshot: true)
         } catch {
             runtime.setError("Could not fetch Codex usage. Will retry.", clearSnapshot: false)
         }
-    }
-
-    /// 把一次成功拉取的 (session%, weekly%) 落进历史：`pct5h↔session`、`pct7d↔weekly`。
-    /// 换算 / 缺窗口语义统一在 `ProviderUsageSnapshot.historySample`（与 web 源回推共用）。
-    private func recordHistorySample(from snap: ProviderUsageSnapshot) {
-        guard let s = snap.historySample else { return }
-        history.recordDataPoint(pct5h: s.pct5h, pct7d: s.pct7d)
     }
 }
