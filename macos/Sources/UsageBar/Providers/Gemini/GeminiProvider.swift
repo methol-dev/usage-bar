@@ -120,17 +120,7 @@ final class GeminiProvider: UsageProvider {
         var snapshot = response.asProviderSnapshot()
         if let tier = info.tier { snapshot.planLabel = tier.capitalized }
         runtime.setSuccess(snapshot: snapshot)
-        recordHistorySample(from: snapshot)
-    }
-
-    /// 把一次成功拉取的 (Pro%, Flash%) 落进历史：沿用 `UsageDataPoint` 既有字段名
-    /// （pct5h ← Pro 主窗口、pct7d ← Flash 次窗口）。缺失的窗口按 0 记；两个都缺则不记。
-    /// utilizationPct 是 0...100，clamp 后除 100 → 0...1。
-    private func recordHistorySample(from snap: ProviderUsageSnapshot) {
-        let p = snap.primaryWindow?.utilizationPct
-        let s = snap.secondaryWindow?.utilizationPct
-        guard p != nil || s != nil else { return }
-        func unit(_ pct: Double?) -> Double { min(max((pct ?? 0) / 100.0, 0), 1) }
-        history.recordDataPoint(pct5h: unit(p), pct7d: unit(s))
+        // (Pro%, Flash%) 落进历史:pct5h↔Pro 主窗口、pct7d↔Flash 次窗口(换算见 HistoryRecording.record)。
+        history.record(snapshot)
     }
 }

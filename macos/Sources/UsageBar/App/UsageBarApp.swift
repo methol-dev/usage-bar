@@ -63,6 +63,21 @@ struct UsageBarApp: App {
                     coordinator.claudeGroup.onPollTick = { Task { await usageStats.refresh() } }
                     // Codex 门面（若注入）每 tick 刷本机 JSONL 统计；与门面选 cli/web 取数无关（同 Claude）。
                     coordinator.codexGroup?.onPollTick = { Task { await codexStats.refresh() } }
+                    // Web 源命中即停时 CLI 不跑，其内部的历史采样 / 阈值通知随之停摆——门面在 web 快照
+                    // 落地（payload ts 变化）时回推，浏览器渠道与 CLI 渠道一样驱动主程序记录，图表不断线。
+                    coordinator.claudeGroup.onWebSnapshot = { snapshot, timestamp in
+                        historyService.record(snapshot, timestamp: timestamp)
+                        if let s = snapshot.historySample {
+                            notificationService.checkAndNotify(pct5h: s.pct5h, pct7d: s.pct7d,
+                                                              pctExtra: snapshot.extraFraction)
+                        }
+                    }
+                    // Codex 同理（无阈值通知，与其 CLI 路径一致）；历史落到 codexCLI 自持的 history-codex.json。
+                    if let codexHistory = coordinator.codexCLI?.history {
+                        coordinator.codexGroup?.onWebSnapshot = { snapshot, timestamp in
+                            codexHistory.record(snapshot, timestamp: timestamp)
+                        }
+                    }
                     // 起统一后台 timer（覆盖所有 enabled provider，含 Claude；监听 pollingMinutes 变化自动重起）+ 立即各拉一次（这一次就拉了 Claude）。
                     coordinator.startBackgroundPolling()
                 }

@@ -55,6 +55,42 @@ final class UsageHistoryServiceTests: XCTestCase {
         XCTAssertEqual((attrs[.posixPermissions] as? NSNumber)?.intValue, 0o600)
     }
 
+    // MARK: - 记点三防线（取整到秒 / 同刻去重 / 时序插入）—— web 源 payload 时刻落点的配套
+
+    func testDuplicateTimestampIsSkipped() {
+        let h = UsageHistoryService(filename: "history.json", directory: tmpDir)
+        let ts = Date(timeIntervalSince1970: 1_752_900_000)
+        h.recordDataPoint(pct5h: 0.2, pct7d: 0.3, timestamp: ts)
+        h.recordDataPoint(pct5h: 0.9, pct7d: 0.9, timestamp: ts)   // 重启后重放同一 payload
+        XCTAssertEqual(h.history.dataPoints.count, 1, "同时间戳不重复记（UsageDataPoint.id == timestamp）")
+        XCTAssertEqual(h.history.dataPoints.first?.pct5h, 0.2, "保留先到的点")
+    }
+
+    func testTimestampFlooredToWholeSecondSurvivesReload() throws {
+        let h = UsageHistoryService(filename: "history.json", directory: tmpDir)
+        // 相对当前时间取值（固定 epoch 会随时间滑出 30 天保留期，flush 剪枝后测试空转）
+        let whole = Date().timeIntervalSince1970.rounded(.down) - 100
+        let ts = Date(timeIntervalSince1970: whole + 0.7)
+        h.recordDataPoint(pct5h: 0.5, pct7d: 0.5, timestamp: ts)
+        h.flushToDisk()
+        let h2 = UsageHistoryService(filename: "history.json", directory: tmpDir)
+        h2.loadHistory()
+        // ISO8601 编码丢亚秒——记点时已取整，重放同一 payload 时同刻判定跨重启依然命中
+        h2.recordDataPoint(pct5h: 0.5, pct7d: 0.5, timestamp: ts)
+        XCTAssertEqual(h2.history.dataPoints.count, 1)
+        XCTAssertEqual(h2.history.dataPoints.first?.timestamp, Date(timeIntervalSince1970: whole))
+    }
+
+    func testEarlierTimestampInsertedInOrder() {
+        let h = UsageHistoryService(filename: "history.json", directory: tmpDir)
+        let base = Date(timeIntervalSince1970: 1_752_900_000)
+        h.recordDataPoint(pct5h: 0.1, pct7d: 0.1, timestamp: base)
+        h.recordDataPoint(pct5h: 0.3, pct7d: 0.3, timestamp: base.addingTimeInterval(600))
+        // web 源的 payload 时刻可能早于已记的 CLI 点——插入后仍按时序（图表按数组序连线）
+        h.recordDataPoint(pct5h: 0.2, pct7d: 0.2, timestamp: base.addingTimeInterval(300))
+        XCTAssertEqual(h.history.dataPoints.map(\.pct5h), [0.1, 0.2, 0.3])
+    }
+
     func testLoadCorruptFileMovesToBak() throws {
         try Data("{ not json".utf8).write(to: tmpDir.appendingPathComponent("history-codex.json"))
         let h = UsageHistoryService(filename: "history-codex.json", directory: tmpDir)

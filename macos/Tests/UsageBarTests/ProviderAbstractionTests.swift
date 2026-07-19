@@ -245,7 +245,7 @@ private final class StubProvider: UsageProvider {
 @MainActor
 private final class HistorySpy: HistoryRecording {
     private(set) var recordCount = 0
-    func recordDataPoint(pct5h: Double, pct7d: Double) { recordCount += 1 }
+    func recordDataPoint(pct5h: Double, pct7d: Double, timestamp: Date) { recordCount += 1 }
 }
 
 @MainActor

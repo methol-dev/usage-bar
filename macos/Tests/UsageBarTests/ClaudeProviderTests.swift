@@ -164,6 +164,137 @@ final class ClaudeProviderTests: XCTestCase {
         XCTAssertEqual(d.stringArray(forKey: MultiSourceProvider.priorityKey(for: .claude))?.first, "cli")
     }
 
+    // MARK: - Web 快照回推（历史采样 / 阈值通知副作用挂钩）
+
+    func testWebHitFiresOnWebSnapshotOncePerPayloadTimestamp() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
+        let ts = Date(timeIntervalSince1970: 1_752_900_000.5)
+        let web = StubSource(id: .claudeWeb, configured: true)
+        web.runtime.setSuccess(snapshot: snap(20), at: ts)
+        let cli = StubSource(id: .claude, configured: true)
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
+        var received: [(pct: Double?, ts: Date)] = []
+        g.onWebSnapshot = { s, t in received.append((s.primaryWindow?.utilizationPct, t)) }
+
+        await g.refreshNow()
+        await g.refreshNow()   // 重读未变化的落盘数据（同 payload ts）→ 不重复回推
+
+        XCTAssertEqual(received.count, 1)
+        XCTAssertEqual(received.first?.pct, 20)
+        XCTAssertEqual(received.first?.ts, ts, "回推携带 payload 时刻，记点落在数据真实产生的位置")
+
+        web.runtime.setSuccess(snapshot: snap(25), at: ts.addingTimeInterval(900))   // 扩展新同步
+        await g.refreshNow()
+        XCTAssertEqual(received.count, 2)
+        XCTAssertEqual(received.last?.pct, 25)
+    }
+
+    func testWebSampleNotConsumedBeforeCallbackWired() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
+        let ts = Date(timeIntervalSince1970: 1_752_900_000.5)
+        let web = StubSource(id: .claudeWeb, configured: true)
+        web.runtime.setSuccess(snapshot: snap(20), at: ts)
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: true),
+                                    webSource: web, defaults: d)
+
+        await g.refreshNow()   // 启动期装配回调还没挂上（如 popover 提前打开）——不消耗样本
+
+        var fired = 0
+        g.onWebSnapshot = { _, _ in fired += 1 }
+        await g.refreshNow()
+        XCTAssertEqual(fired, 1, "回调挂上后同一份 payload 仍应被回推（早期 refresh 不推进去重态）")
+    }
+
+    func testEmptyWebSnapshotDoesNotFireOrConsumeTimestamp() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
+        let ts = Date(timeIntervalSince1970: 1_752_900_000.5)
+        let web = StubSource(id: .claudeWeb, configured: true)
+        web.runtime.setSuccess(snapshot: ProviderUsageSnapshot(), at: ts)   // 骨架快照：映射未定 / 无窗口
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: true),
+                                    webSource: web, defaults: d)
+        var fired = 0
+        g.onWebSnapshot = { _, _ in fired += 1 }
+
+        await g.refreshNow()
+        XCTAssertEqual(fired, 0, "无可记数据不回推")
+
+        web.runtime.setSuccess(snapshot: snap(20), at: ts)   // 同 ts 补上真数据
+        await g.refreshNow()
+        XCTAssertEqual(fired, 1, "空快照不应提前消耗该 payload 时间戳")
+    }
+
+    func testOlderPayloadTimestampDoesNotRefire() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
+        let ts = Date(timeIntervalSince1970: 1_752_900_000.5)
+        let web = StubSource(id: .claudeWeb, configured: true)
+        web.runtime.setSuccess(snapshot: snap(20), at: ts)
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: true),
+                                    webSource: web, defaults: d)
+        var fired = 0
+        g.onWebSnapshot = { _, _ in fired += 1 }
+
+        await g.refreshNow()
+        web.runtime.setSuccess(snapshot: snap(15), at: ts.addingTimeInterval(-600))   // 落盘数据时间戳回退
+        await g.refreshNow()
+
+        XCTAssertEqual(fired, 1, "去重按单调时间戳：回退的 payload 不重复回推")
+    }
+
+    func testCLIHitDoesNotFireOnWebSnapshot() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["cli"], priority: ["cli", "web"])
+        let web = StubSource(id: .claudeWeb, configured: false)
+        let cli = StubSource(id: .claude, configured: true)
+        cli.runtime.setSuccess(snapshot: snap(60))
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
+        var fired = 0
+        g.onWebSnapshot = { _, _ in fired += 1 }
+
+        await g.refreshNow()
+
+        XCTAssertEqual(g.activeSource, .cli)
+        XCTAssertEqual(fired, 0, "cli 命中时其内部已自记历史，不回推（避免双记）")
+    }
+
+    func testStaleWebFallsBackToCLIWithoutFiring() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
+        let web = StubSource(id: .claudeWeb, configured: true)
+        web.runtime.setSuccess(snapshot: snap(20))
+        web.runtime.setError("Claude Web data is stale — is the extension still running?", clearSnapshot: false)
+        let cli = StubSource(id: .claude, configured: true)
+        cli.runtime.setSuccess(snapshot: snap(70))
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
+        var fired = 0
+        g.onWebSnapshot = { _, _ in fired += 1 }
+
+        await g.refreshNow()
+
+        XCTAssertEqual(cli.refreshNowCallCount, 1, "stale web 不算命中 → 回退 cli 取数，图表不断线")
+        XCTAssertEqual(g.activeSource, .cli)
+        XCTAssertEqual(g.runtime.snapshot?.primaryWindow?.utilizationPct, 70)
+        XCTAssertEqual(fired, 0, "带错误的 web 快照不回推")
+    }
+
+    // MARK: - historySample 映射（web 回推与 Codex CLI 自记共用）
+
+    func testHistorySampleMapping() {
+        XCTAssertNil(ProviderUsageSnapshot().historySample, "两个窗口都缺 → 不记点")
+
+        let both = ProviderUsageSnapshot(primaryWindow: UsageWindow(utilizationPct: 33),
+                                         secondaryWindow: UsageWindow(utilizationPct: 44))
+        XCTAssertEqual(both.historySample?.pct5h, 0.33)
+        XCTAssertEqual(both.historySample?.pct7d, 0.44)
+
+        let onlySecondary = ProviderUsageSnapshot(secondaryWindow: UsageWindow(utilizationPct: 150))
+        XCTAssertEqual(onlySecondary.historySample?.pct5h, 0, "缺失窗口按 0 记")
+        XCTAssertEqual(onlySecondary.historySample?.pct7d, 1.0, "范围外值 clamp 到 0...1")
+    }
+
     // MARK: - config 净化
 
     func testSanitizePriorityDropsUnknownDedupAndFills() {

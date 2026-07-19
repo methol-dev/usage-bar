@@ -75,22 +75,12 @@ final class CodexProvider: UsageProvider {
             let response = try await CodexUsageClient.fetchUsage(credentials: creds, session: session)
             let snapshot = response.asProviderSnapshot()
             runtime.setSuccess(snapshot: snapshot)
-            recordHistorySample(from: snapshot)
+            // (session%, weekly%) 落进历史:pct5h↔session、pct7d↔weekly(换算见 HistoryRecording.record)。
+            history.record(snapshot)
         } catch CodexUsageError.unauthorized {
             runtime.setError("Codex credentials expired. Run `codex` to sign in again.", clearSnapshot: true)
         } catch {
             runtime.setError("Could not fetch Codex usage. Will retry.", clearSnapshot: false)
         }
-    }
-
-    /// 把一次成功拉取的 (session%, weekly%) 落进历史：`pct5h↔session`、`pct7d↔weekly`
-    /// （沿用 `UsageDataPoint` 既有字段名 —— 它的 pct5h/pct7d 本质就是「主/次窗口已用比例」）。
-    /// 缺失的窗口按 0 记（如 Free 计划只有 weekly）；两个都缺则不记。百分比 0...100 → 0...1。
-    private func recordHistorySample(from snap: ProviderUsageSnapshot) {
-        let p = snap.primaryWindow?.utilizationPct
-        let s = snap.secondaryWindow?.utilizationPct
-        guard p != nil || s != nil else { return }
-        func unit(_ pct: Double?) -> Double { min(max((pct ?? 0) / 100.0, 0), 1) }   // 防服务端给出范围外值污染折线
-        history.recordDataPoint(pct5h: unit(p), pct7d: unit(s))
     }
 }

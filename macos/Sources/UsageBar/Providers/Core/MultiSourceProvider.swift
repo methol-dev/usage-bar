@@ -8,8 +8,9 @@ import Observation
 /// - `registry` 里以 `id` 注册的是本门面；对应的裸 CLI provider（`UsageService` / `CodexProvider`）仍被
 ///   coordinator 单独持有（登录 UX / history / notifications / polling 直连它，零改动）。
 /// - 门面自己的 `runtime` 是「当前生效源」的镜像 —— 菜单栏 label 与 popover 用量区都读它。
-/// - **命中即停**：web 优先且拿到数据时不调 cli 取数（避开限流端点），代价是此时 cli 派生的 API 趋势线 /
-///   阈值通知暂停更新（本机 JSONL 统计仍随 tick 更新）。见 ADR 0010。
+/// - **命中即停**：web 优先且拿到数据时不调 cli 取数（避开限流端点）。带错误的源（陈旧 / 同步失败）
+///   不算命中 —— 继续试下一源（stale web 自动回退 cli，图表不断线）。web 命中时 cli 内部的历史采样 /
+///   阈值通知不会跑，由门面经 `onWebSnapshot` 回推给装配处补记（见 ADR 0010；原「趋势线暂停」的代价已消除）。
 ///
 /// read-only + 统一 timer + runtime 范式不变；门面本身不发网络，只编排两个源。
 @MainActor
@@ -20,6 +21,9 @@ final class MultiSourceProvider: UsageProvider {
     var onPollTick: (@MainActor () -> Void)?
     /// 源选择 / 优先级变化时回调（coordinator 用来即时重发该 provider 的 Web 控制配置，ADR 0011）。
     var onConfigChanged: (@MainActor () -> Void)?
+    /// Web 源命中且数据比上次新（payload 同步时间戳前进）时回调，携带快照 + payload 时刻 ——
+    /// 装配处挂历史采样 / 阈值通知副作用（CLI 命中时其内部已自记，不经此路，避免双记）。
+    var onWebSnapshot: (@MainActor (ProviderUsageSnapshot, Date) -> Void)?
 
     private let cliSource: any UsageProvider
     private let webSource: any UsageProvider
@@ -33,6 +37,11 @@ final class MultiSourceProvider: UsageProvider {
 
     private let defaults: UserDefaults
     private var isRefreshing = false
+    /// 最近一次经 `onWebSnapshot` 回推的 payload 时间戳（内存态，只在真正回推后前进）。
+    /// 会话内去重靠它（单调比较，重读未变化 / 时间戳回退的落盘数据不触发）；
+    /// 跨重启的重复由 `UsageHistoryService.recordDataPoint` 的同时间戳去重兜底（单一存储，
+    /// 不引入与 history 文件可能失步的第二份持久化状态）。
+    private var lastWebSampleTs: Date?
 
     /// 持久化 key 按 provider 分隔（`claude.enabledSources` / `codex.enabledSources`）——
     /// Claude 的 rawValue == "claude" → 与旧静态 key 一致，零迁移。
@@ -96,9 +105,12 @@ final class MultiSourceProvider: UsageProvider {
                 continue
             }
             await p.refreshNow()
-            if p.isConfigured, p.runtime.snapshot != nil {
+            // 命中 = 已配置 + 有快照 + **无错误**。带错的源（web 陈旧 >1h / 同步失败，snapshot 被保留）
+            // 不算命中 —— 继续试下一源，stale web 不再无限占住门面、饿死 cli（图表随之断线）。
+            if p.isConfigured, p.runtime.snapshot != nil, p.runtime.lastError == nil {
                 activeSource = s
                 mirror(from: p.runtime, configured: true)
+                if s == .web { pushWebSampleIfFresh() }
                 return
             }
             if firstConfigured == nil, p.isConfigured { firstConfigured = s }
@@ -152,6 +164,18 @@ final class MultiSourceProvider: UsageProvider {
         case .cli: return cliSource
         case .web: return webSource
         }
+    }
+
+    /// Web 源命中后回推快照（历史采样 / 阈值通知副作用在装配处）。仅在装配处已挂回调、快照有可记数据、
+    /// payload 时间戳比上次**新**（单调；重读未变化 / 回退的落盘数据不触发）时回推。去重态只在真正回推后
+    /// 前进 —— 装配回调挂上前的早期 refresh（如启动期 popover 打开）不消耗样本。
+    private func pushWebSampleIfFresh() {
+        guard let onWebSnapshot,
+              let snap = webSource.runtime.snapshot, snap.historySample != nil,
+              let ts = webSource.runtime.lastUpdated else { return }
+        if let last = lastWebSampleTs, ts <= last { return }
+        lastWebSampleTs = ts
+        onWebSnapshot(snap, ts)
     }
 
     /// 把某个源 runtime 的效果忠实重放进门面 runtime（复制「效果」而非裸字段，保持 clearSnapshot 语义）。
