@@ -13,6 +13,20 @@ final class ClaudeWebControlTests: XCTestCase {
         XCTAssertEqual(control, back)
     }
 
+    // ADR 0012：信封编解码 + 对旧版扁平文件（无 byProvider）解码容忍（空 map，不 throw）。
+    func testEnvelopeRoundTripAndLegacyFlatTolerant() throws {
+        let env = WebControlEnvelope(paused: false, intervalSeconds: 300, syncNonce: 2, ts: 1_700_000_000,
+                                     byProvider: ["claude": ClaudeWebControl(paused: false, intervalSeconds: 300, syncNonce: 2, ts: 1)])
+        let back = try JSONDecoder().decode(WebControlEnvelope.self, from: JSONEncoder().encode(env))
+        XCTAssertEqual(env, back)
+
+        // 旧版扁平 control 文件（ADR 0011，无 byProvider）→ byProvider 为空，不 throw。
+        let legacy = Data(#"{"paused":true,"intervalSeconds":300,"syncNonce":9,"ts":1700000000}"#.utf8)
+        let decoded = try JSONDecoder().decode(WebControlEnvelope.self, from: legacy)
+        XCTAssertTrue(decoded.byProvider.isEmpty)
+        XCTAssertEqual(decoded.syncNonce, 9)
+    }
+
     // MARK: - host 分派
 
     func testIsPollMessage() {
@@ -20,6 +34,14 @@ final class ClaudeWebControlTests: XCTestCase {
         XCTAssertFalse(ClaudeWebNativeHost.isPollMessage(["status": "ok"]))
         XCTAssertFalse(ClaudeWebNativeHost.isPollMessage(["type": "sync"]))
         XCTAssertFalse(ClaudeWebNativeHost.isPollMessage([:]))
+    }
+
+    // ADR 0012：usage payload 按 `provider` 字段分派写入。缺失 / 未知 → claude（向后兼容）。
+    func testStoreProviderDispatch() {
+        XCTAssertEqual(ClaudeWebNativeHost.storeProvider(for: ["provider": "codex"]), .codex)
+        XCTAssertEqual(ClaudeWebNativeHost.storeProvider(for: ["provider": "claude"]), .claude)
+        XCTAssertEqual(ClaudeWebNativeHost.storeProvider(for: ["status": "ok"]), .claude, "缺 provider → claude")
+        XCTAssertEqual(ClaudeWebNativeHost.storeProvider(for: ["provider": "bogus"]), .claude, "未知 → claude")
     }
 
     // MARK: - host response 始终是合法 JSON

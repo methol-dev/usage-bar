@@ -182,6 +182,7 @@ private func sfSymbolName(for id: ProviderID) -> String {
     case .copilot: return "chevron.left.forwardslash.chevron.right"
     case .gemini:  return "sparkle"
     case .claudeWeb: return "globe"             // Claude 订阅网页源
+    case .codexWeb:  return "globe"             // Codex 订阅网页源（子源，不会实际上菜单栏）
     }
 }
 

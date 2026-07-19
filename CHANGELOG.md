@@ -9,6 +9,40 @@
 
 ---
 
+## [v0.8.0] — 2026-07-19
+
+> 版本: `v0.8.0`
+
+### 新增（Added）
+
+- **Claude 订阅网页用量源**：通过配套 Chrome 扩展，用你自己已登录的 claude.ai 浏览器会话读取订阅 5h / 周窗口用量——请求由你的浏览器在真实会话里发出，**cookie 全程不出浏览器**。（[#43](https://github.com/methol-dev/usage-bar/pull/43)，[ADR 0009](./docs/adr/0009-claude-web-usage-source.md)）
+- **Codex 订阅网页用量源**：同样机制支持 chatgpt.com，登录会话的 token 只在浏览器页面上下文里用于取数、**绝不外传**。（[#52](https://github.com/methol-dev/usage-bar/pull/52)，[ADR 0012](./docs/adr/0012-codex-web-and-generalized-multi-source.md)）
+- **Claude / Codex 多数据源**：每个 provider 可同时启用 CLI 与 Web 两个来源，支持多选 + 拖优先级、命中即停降级（默认 Web 优先以规避 API 限流）。（[#46](https://github.com/methol-dev/usage-bar/pull/46)、[#51](https://github.com/methol-dev/usage-bar/pull/51)，[ADR 0010](./docs/adr/0010-claude-multi-source.md)/[0012](./docs/adr/0012-codex-web-and-generalized-multi-source.md)）
+- **Chrome 扩展作为正式 Release 产物**：每次发版附带 `usage-bar-extension-<version>.zip`，下载解压后 Load unpacked 即用。（[#47](https://github.com/methol-dev/usage-bar/pull/47)）
+- **扩展自动同步 + 反向控制通道**：扩展自动定期同步（无需手动点按钮）；app 通过控制通道反向指挥扩展（暂停 / 立即刷新 / 调整节奏），扩展每 ~1min 轮询、拉不到即休眠。（[#45](https://github.com/methol-dev/usage-bar/pull/45)、[#48](https://github.com/methol-dev/usage-bar/pull/48)，[ADR 0011](./docs/adr/0011-claude-web-control-channel.md)）
+
+### 改进（Changed）
+
+- **设置面板重设计**：选中项恢复正常的蓝色高亮（此前 accessory 进程下控件渲染成灰色）；窗口宽度贴合内容；Provider 行铺满并支持拖拽排序；数据来源改用带边框 chip 展示。（[#49](https://github.com/methol-dev/usage-bar/pull/49)）
+- **设置窗口可靠前置**：打开设置不再跑到后台；高度可缩放但有上限、不再占满屏。（[#44](https://github.com/methol-dev/usage-bar/pull/44)）
+
+### 修复（Fixed）
+
+- **Claude 用量查询失败可诊断化**：新增统一诊断日志；凭证读取增加文件回退（识别 mcpOAuth-only payload、回退 `~/.claude/.credentials.json`）；请求补发 User-Agent；对非法 `Retry-After` 消毒防崩溃。（[#42](https://github.com/methol-dev/usage-bar/pull/42)）
+- **Claude Web「最近更新」不再陈旧**：扩展取数落盘后 app ≤15s 跟上，不再需要手动点 Refresh 才即时。（[#50](https://github.com/methol-dev/usage-bar/pull/50)）
+
+### 安全 / 隐私（Security）
+
+- 网页用量源全程 **cookie / token 不出浏览器**：扩展在你自己已登录的页面上下文取数，不请求 `cookies` 权限、不读 `document.cookie`、不冒充任何客户端；app 与扩展之间只传用量数字，Native Messaging host 不发网络、不起 GUI。（ADR 0009 / 0011 / 0012）
+
+### 内部（Internal）
+
+- 多源门面泛化：`ClaudeProvider` → `MultiSourceProvider(id:)`，Claude / Codex 复用同一套多源 + 控制通道机制；控制文件升级为多 provider 信封（顶层扁平字段保持 = Claude，向后兼容旧扩展）。（[#51](https://github.com/methol-dev/usage-bar/pull/51)、[#52](https://github.com/methol-dev/usage-bar/pull/52)）
+
+### 参考
+
+- 含 PR：#42、#43、#44、#45、#46、#47、#48、#49、#50、#51、#52
+
 ## [v0.7.1] — 2026-07-08
 
 > 版本: `v0.7.1`

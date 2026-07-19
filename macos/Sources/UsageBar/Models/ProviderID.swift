@@ -17,6 +17,9 @@ enum ProviderID: String, Codable, CaseIterable, Identifiable {
     /// Claude 订阅网页用量源（Chrome 扩展 + Native Messaging）。rawValue 带连字符 →
     /// 磁盘目录 `claude-web`（本 provider 无本地 JSONL，不实际建目录，仅取名一致）。
     case claudeWeb = "claude-web"
+    /// Codex（ChatGPT）订阅网页用量源 —— 与 `.claudeWeb` 同机制：Chrome 扩展在用户已登录的
+    /// chatgpt.com 会话里取数（ADR 0012），是 Codex 的一个数据源，非顶层 provider。
+    case codexWeb = "codex-web"
 
     var id: String { rawValue }
 
@@ -24,6 +27,7 @@ enum ProviderID: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .claudeWeb: return "Claude Web"
+        case .codexWeb:  return "Codex Web"
         default:         return rawValue.capitalized
         }
     }

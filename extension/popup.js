@@ -7,9 +7,9 @@ const button = document.getElementById("sync");
 
 const LABELS = {
   ok: "Synced ✓ — check the UsageBar menu bar app.",
-  logged_out: "Not signed in to claude.ai. Open claude.ai and sign in.",
-  no_session: "No claude.ai tab open. Open claude.ai in a tab, then retry.",
-  error: "Sync failed. Make sure a claude.ai tab is open and signed in.",
+  logged_out: "Not signed in. Open claude.ai / chatgpt.com and sign in.",
+  no_session: "No provider tab open. Open claude.ai or chatgpt.com in a tab, then retry.",
+  error: "Sync failed. Make sure a claude.ai / chatgpt.com tab is open and signed in.",
   skipped: "Just synced a moment ago.",
 };
 

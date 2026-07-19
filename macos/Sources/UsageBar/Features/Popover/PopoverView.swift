@@ -76,9 +76,11 @@ struct PopoverView: View {
                       let runtime = coordinator.runtime(for: selectedProvider) {
                 // v0.2.6 起：泛化的 provider 用量区（Codex 等）。configured/unconfigured 由 ProviderUsageArea
                 // 内部读 runtime.isConfigured 决定（@Observable 自动追踪属性读取，驱动子树重渲染）。
+                // ADR 0012 起 `.codex` 注册的是门面（MultiSourceProvider），CLI 源单独挂在 `coordinator.codexCLI`
+                // 上 —— history 从它取（门面只镜像 runtime，不持 history）。
                 let history: (service: UsageHistoryService, primaryLabel: String, secondaryLabel: String)? =
                     (selectedProvider == .codex
-                        ? (coordinator.provider(.codex) as? CodexProvider).map { ($0.history, "Session", "Weekly") }
+                        ? coordinator.codexCLI.map { ($0.history, "Session", "Weekly") }
                         : nil)
                 let costStats: UsageStatsService? = (selectedProvider == .codex ? codexStats : nil)
                 let costContext: ProviderCostContext? = (selectedProvider == .codex

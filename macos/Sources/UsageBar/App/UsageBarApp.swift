@@ -8,9 +8,11 @@ struct UsageBarApp: App {
     // v0.2.11：所有 provider 的后台轮询由 coordinator.startBackgroundPolling() 的统一 timer 管（含 Claude）。
     // v0.3: Claude Web 降为 Claude 的一个数据源（ADR 0010）—— 不再作为独立 provider 装配；
     // ClaudeWebProvider 由 ProviderCoordinator 内部构造并挂在 Claude 门面 `claudeGroup` 下。
+    // ADR 0012: Codex 同样多源（CLI + Web）—— 注入裸 `CodexProvider` 作 `codex:`，coordinator 内部
+    // 构造 `codexGroup`（挂 CodexWebProvider），`.codex` 顶层注册的是门面而非裸 provider。
     @State private var coordinator = ProviderCoordinator(claude: UsageService(),
+                                                         codex: CodexProvider(),
                                                          additionalProviders: [
-                                                             CodexProvider(),
                                                              GeminiProvider()
                                                          ])
     @State private var historyService = UsageHistoryService()
@@ -59,7 +61,8 @@ struct UsageBarApp: App {
                     // Claude 挂在**门面**上（后台 tick 调的是 registry 里注册的 `.claude` = 门面）；本机 JSONL 统计
                     // 每 tick 都刷（与门面选 cli 还是 web 取数无关，故不受「命中即停」影响）。
                     coordinator.claudeGroup.onPollTick = { Task { await usageStats.refresh() } }
-                    coordinator.provider(.codex)?.onPollTick = { Task { await codexStats.refresh() } }
+                    // Codex 门面（若注入）每 tick 刷本机 JSONL 统计；与门面选 cli/web 取数无关（同 Claude）。
+                    coordinator.codexGroup?.onPollTick = { Task { await codexStats.refresh() } }
                     // 起统一后台 timer（覆盖所有 enabled provider，含 Claude；监听 pollingMinutes 变化自动重起）+ 立即各拉一次（这一次就拉了 Claude）。
                     coordinator.startBackgroundPolling()
                 }

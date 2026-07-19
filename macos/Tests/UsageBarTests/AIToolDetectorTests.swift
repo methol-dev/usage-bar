@@ -74,6 +74,7 @@ final class AIToolDetectorTests: XCTestCase {
         let mockFM = MockHomeFileManager(home: tmpDir, real: fm)
         let result = AIToolDetector.detect(fileManager: mockFM, environment: [:])
         XCTAssertFalse(result.contains(.claudeWeb))
+        XCTAssertFalse(result.contains(.codexWeb))
     }
 
     // MARK: - 空结果

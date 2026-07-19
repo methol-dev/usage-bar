@@ -16,6 +16,39 @@ struct ClaudeWebControl: Codable, Equatable {
     var ts: Double
 }
 
+/// 多 provider 控制信封（ADR 0012）—— 一个扩展同时管 claude.ai 与 chatgpt.com，一次 poll 要拿到
+/// **两个** provider 的控制配置，故 host 回传的 control 文件是本信封。
+///
+/// 顶层 `paused/intervalSeconds/syncNonce/ts` = **Claude 的**控制（向后兼容：旧扩展只读顶层扁平字段即得
+/// Claude 配置，行为不变）；`byProvider` 携带每个 web-capable provider 的独立控制（`claude` / `codex`）。
+/// 新扩展按 `byProvider[provider]` 取,缺失时对 Claude 回退顶层扁平字段、对其它 provider 视为「本 app 不支持」。
+struct WebControlEnvelope: Codable, Equatable {
+    var paused: Bool
+    var intervalSeconds: Int
+    var syncNonce: Int
+    var ts: Double
+    var byProvider: [String: ClaudeWebControl]
+
+    init(paused: Bool, intervalSeconds: Int, syncNonce: Int, ts: Double, byProvider: [String: ClaudeWebControl]) {
+        self.paused = paused
+        self.intervalSeconds = intervalSeconds
+        self.syncNonce = syncNonce
+        self.ts = ts
+        self.byProvider = byProvider
+    }
+
+    /// `byProvider` 缺省容忍 —— 旧版本（ADR 0011）写的扁平 control 文件（无 `byProvider`）解码为空 map，
+    /// 不 throw（否则读旧文件会得 nil，是个潜在陷阱）。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        paused = try c.decode(Bool.self, forKey: .paused)
+        intervalSeconds = try c.decode(Int.self, forKey: .intervalSeconds)
+        syncNonce = try c.decode(Int.self, forKey: .syncNonce)
+        ts = try c.decode(Double.self, forKey: .ts)
+        byProvider = try c.decodeIfPresent([String: ClaudeWebControl].self, forKey: .byProvider) ?? [:]
+    }
+}
+
 /// `~/.config/usage-bar/claude-web-control.json` 的读写(照抄 `ClaudeWebStore` 原子 0600 范式)。
 enum ClaudeWebControlStore {
     static var fileURL: URL {
@@ -25,8 +58,8 @@ enum ClaudeWebControlStore {
 
     /// 原子写(0700 目录 + 0600 文件)。host 只会读到完整文件(write-temp + rename),不会读到半截。
     @discardableResult
-    static func write(_ control: ClaudeWebControl) -> Bool {
-        guard let data = try? JSONEncoder().encode(control) else { return false }
+    static func writeEnvelope(_ envelope: WebControlEnvelope) -> Bool {
+        guard let data = try? JSONEncoder().encode(envelope) else { return false }
         let url = fileURL
         let dir = url.deletingLastPathComponent()
         try? FileManager.default.createDirectory(
@@ -42,8 +75,8 @@ enum ClaudeWebControlStore {
     }
 
     /// 全函数化解码(缺失 / 畸形 → nil,不崩)。
-    static func read() -> ClaudeWebControl? {
+    static func read() -> WebControlEnvelope? {
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return try? JSONDecoder().decode(ClaudeWebControl.self, from: data)
+        return try? JSONDecoder().decode(WebControlEnvelope.self, from: data)
     }
 }
