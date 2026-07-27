@@ -90,7 +90,7 @@ async function syncAllProviders() {
 // popup 状态：控制通道 liveness（app 在不在世）+ 每个 provider 的配置、标签页、最近结果。
 async function buildStatus() {
   const keys = [K.control, K.heartbeat];
-  for (const p of PROVIDERS) keys.push(kLastSync(p), kResult(p), kOkAt(p), kControl(p));
+  for (const p of PROVIDERS) keys.push(kResult(p), kOkAt(p), kControl(p));
   const st = await chrome.storage.local.get(keys);
   const providers = [];
   for (const p of PROVIDERS) {
@@ -98,8 +98,9 @@ async function buildStatus() {
       id: p,
       label: PROVIDER_LABEL[p],
       host: PROVIDER_HOST[p],
+      // 「此刻」是否开着标签页 —— 与「上次取数时」是两回事：刚开好标签页、还没轮到下一拍时，
+      // 只报上次的 no_session 会说成「没开标签页」，与用户眼前的事实矛盾。
       tabOpen: await hasTab(p),
-      lastSyncAt: st[kLastSync(p)],
       lastOkAt: st[kOkAt(p)],
       result: st[kResult(p)],
       control: st[kControl(p)],
@@ -236,7 +237,6 @@ async function syncUsage(provider, { force = false } = {}) {
     payload = { status: "error", error: categorize(e), ts: Date.now() };
   }
   payload.provider = provider; // 让 host 分派写入 <provider>-web.json
-  await chrome.storage.local.set({ [kLastSync(provider)]: Date.now() });
 
   // no_session（该 provider 一个标签页都没开）**绝不回传 host**：host 会把它原样写进
   // <provider>-web.json，覆盖掉上一次的好数据。只启用 Web 源的 provider 没有 CLI 兜底，这一覆盖
@@ -244,7 +244,13 @@ async function syncUsage(provider, { force = false } = {}) {
   // （>1h 有明确提示；启用了 CLI 源则自动回退），是可恢复的诚实状态。
   // 「哪个站点没开标签页」这类诊断信息留在本扩展 popup 里显示，不必污染交接文件。
   const sent = payload.status !== "no_session";
-  if (sent) await sendToHost(payload, provider);
+  // 节奏锚点只在**真的做了事**时推进：没标签页时这一趟只做了一次 tabs.query（不注入、不发网络、
+  // 不写文件），不该吃掉一个同步周期 —— 否则手动点一次 Sync now，就把该 provider 的下一次自动
+  // 同步推后最多一整个 interval。不推进也不会空转：无标签页时每次心跳的代价仅一次 tabs.query。
+  if (sent) {
+    await chrome.storage.local.set({ [kLastSync(provider)]: Date.now() });
+    await sendToHost(payload, provider);
+  }
   await recordResult(provider, payload, sent);
   return { ...payload, sent };
 }

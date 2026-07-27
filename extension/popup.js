@@ -34,7 +34,11 @@ function describeResult(p) {
     case "logged_out":
       return { text: "Signed out of " + p.host, tone: "bad" };
     case "no_session":
-      return { text: "No " + p.host + " tab open", tone: "warn" };
+      // 上次取数时没标签页；但此刻可能已经开好了（tabs.onUpdated 会触发同步，只是还没落地）——
+      // 那时再说「没开标签页」就与用户眼前的事实矛盾了。
+      return p.tabOpen
+        ? { text: "Waiting for next sync", tone: "idle" }
+        : { text: "No " + p.host + " tab open", tone: "warn" };
     case "error":
       return { text: "Sync failed" + (r.error ? " (" + r.error + ")" : ""), tone: "bad" };
     default:
