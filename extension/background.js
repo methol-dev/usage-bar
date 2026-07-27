@@ -262,12 +262,15 @@ async function sendToHost(payload, provider) {
     const env = ack && ack.control;
     if (!env || typeof env !== "object") return;
     const patch = {};
-    // 只在信封新鲜时盖 lastControlAt（同 applyControl 的 liveness 语义）。
-    if (Date.now() - (Number(env.ts) || 0) * 1000 <= CONTROL_STALE_MS) patch[K.control] = Date.now();
+    // 只在信封新鲜时盖 lastControlAt（同 applyControl 的 liveness 语义），
+    // 记录 per-provider 配置同理 —— 否则 app 已退出、host 仍回传旧文件时，popup 会一边说
+    // 「App not responding」一边把陈旧配置当成当前配置显示。
+    const fresh = Date.now() - (Number(env.ts) || 0) * 1000 <= CONTROL_STALE_MS;
+    if (fresh) patch[K.control] = Date.now();
     const c = controlFor(env, provider);
     if (c && c.syncNonce !== undefined) patch[kNonce(provider)] = c.syncNonce; // 对齐 nonce，避免下拍重复取数
     await chrome.storage.local.set(patch);
-    await recordControls(env);
+    if (fresh) await recordControls(env);
   } catch (_e) {
     // host 写完文件即退出，扩展侧可能收到 "Native host has exited" —— 属预期，忽略。
   }

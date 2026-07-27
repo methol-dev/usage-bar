@@ -10,6 +10,13 @@ final class CodexWebProviderTests: XCTestCase {
         func load() -> CodexWebPayload? { payload }
     }
 
+    /// 可在两次 `refreshNow()` 之间改内容的 loader —— 模拟扩展重写交接文件。
+    private final class MutableStubLoader: CodexWebLoading {
+        var payload: CodexWebPayload?
+        init(payload: CodexWebPayload?) { self.payload = payload }
+        func load() -> CodexWebPayload? { payload }
+    }
+
     private func makePayload(_ json: String) -> CodexWebPayload {
         CodexWebPayload.parse(Data(json.utf8))!
     }
@@ -29,10 +36,29 @@ final class CodexWebProviderTests: XCTestCase {
         XCTAssertNil(p.runtime.snapshot)
     }
 
-    // no_session（存量旧扩展写的文件）→ 文案讲「没开标签页」，不是笼统的「去登录」。
+    // no_session（存量旧扩展 / 版本错配时才会出现）→ 文案讲「没开标签页」，不是笼统的「去登录」。
     func testNoSessionSaysNoTabOpen() {
         let p = CodexWebProvider(loader: StubLoader(payload: makePayload(#"{"status":"no_session","ts":1}"#)))
-        XCTAssertFalse(p.isConfigured)
+        XCTAssertTrue(p.runtime.lastError?.contains("No chatgpt.com tab open") ?? false)
+    }
+
+    // 关键回归：旧版扩展仍会写 no_session。它是「暂时取不到数」而非凭证失效 ——
+    // 绝不能清掉上一次的好数据，否则 app 更新、扩展没更新时那条数据丢失的路依然通着。
+    func testNoSessionKeepsPreviouslyLoadedData() async {
+        let fresh = Int64(Date().timeIntervalSince1970 * 1000)
+        let reset = Date().timeIntervalSince1970 + 3600
+        let okJSON = #"{"status":"ok","ts":\#(fresh),"usage":{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":42,"reset_at":\#(reset),"limit_window_seconds":18000}}}}"#
+        var payload = makePayload(okJSON)
+        let loader = MutableStubLoader(payload: payload)
+        let p = CodexWebProvider(loader: loader)
+        XCTAssertEqual(p.runtime.snapshot?.primaryWindow?.utilizationPct, 42)
+
+        payload = makePayload(#"{"status":"no_session","ts":\#(fresh)}"#)   // 旧扩展覆盖了文件
+        loader.payload = payload
+        await p.refreshNow()
+
+        XCTAssertEqual(p.runtime.snapshot?.primaryWindow?.utilizationPct, 42, "没开标签页不该抹掉已有用量")
+        XCTAssertTrue(p.isConfigured, "暂时取不到数 ≠ 未配置")
         XCTAssertTrue(p.runtime.lastError?.contains("No chatgpt.com tab open") ?? false)
     }
 

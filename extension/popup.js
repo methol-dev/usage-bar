@@ -68,7 +68,11 @@ function describeMeta(p) {
     parts.push("app has data from " + ago(p.lastOkAt));
   }
   // 有意不回传 app 的情形（no_session）——说明「为什么 app 那边没变化」。
-  if (r && r.sent === false) parts.push("kept the app's last good data");
+  // 必须确认**确实有**成功过：全新安装从没同步过时说「保住了上次的好数据」是无中生有，
+  // 而这个 popup 存在的意义正是让状态可核对。
+  if (r && r.sent === false && typeof p.lastOkAt === "number") {
+    parts.push("kept the app's last good data");
+  }
   return parts.join(" · ");
 }
 

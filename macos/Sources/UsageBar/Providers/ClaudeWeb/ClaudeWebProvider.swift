@@ -49,14 +49,14 @@ final class ClaudeWebProvider: UsageProvider {
             runtime.setError("Open claude.ai and sign in — the extension will sync automatically.",
                              clearSnapshot: true)
         case .noSession:
-            // 新版扩展不再写这个状态（无标签页时它宁可让文件自然变陈旧，也不覆盖好数据）；
-            // 旧版扩展写的存量文件仍会走到这里，故给出对症文案而非笼统的「去登录」。
-            runtime.setConfigured(false)
+            // 与「陈旧」同类的**暂时取不到数**，不是凭证问题：不动 configured、更不清快照
+            // （版本错配时旧扩展仍会写这个状态，详见 `CodexWebProvider.apply`）。
             runtime.setError("No claude.ai tab open — open one and stay signed in; the extension syncs automatically.",
-                             clearSnapshot: true)
+                             clearSnapshot: false)
         case .error, .unknown:
-            // 保留旧卡(若有),显示错误文案。
-            runtime.setError("Claude Web sync failed. Will retry.", clearSnapshot: false)
+            // 保留旧卡(若有),显示错误文案 + 下一步（未配置时提示卡会被错误卡取代，文案本身要能指路）。
+            runtime.setError("Claude Web sync failed — will retry. Keep a claude.ai tab open and signed in.",
+                             clearSnapshot: false)
         case .ok:
             // 先如常落数据、再按新鲜度决定是否挂错误 —— 陈旧不该让「最后已知用量」消失（详见
             // `CodexWebProvider.apply`）。门面判「命中」要求 lastError == nil，陈旧仍会回退 CLI。

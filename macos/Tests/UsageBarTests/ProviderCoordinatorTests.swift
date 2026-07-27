@@ -79,6 +79,25 @@ final class ProviderCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.claude.runtime.lastError, "Sign in with Claude CLI, then tap Retry")   // Claude 被拉过（首屏空 → 兜一次）
     }
 
+    // 处于错误态（有快照但带错，如陈旧的 Web 源）的 provider 在 popover 打开时会被重拉 ——
+    // 否则「开好网页标签页 → 扩展同步 → 开 popover 查看」要等下一个后台 tick（最长 30min）。
+    // 但必须节流：错误态没有 429 backoff 兜底，反复开合菜单栏不能变成对不健康端点的重试风暴。
+    func testRefreshAllEnabledOnOpenRetriesErroredProviderOnceThenThrottles() async {
+        let d = freshDefaults()
+        let claude = UsageService()
+        claude.cliKeychainLoader = { _ in nil }
+        let stub = StubProviderForCoordTest(id: .cursor)
+        stub.runtime.setSuccess(snapshot: ProviderUsageSnapshot())
+        stub.runtime.setError("stale", clearSnapshot: false)      // 有数据 + 带错
+        let c = ProviderCoordinator(claude: claude, additionalProviders: [stub], defaults: d)
+
+        await c.refreshAllEnabledOnOpen()
+        XCTAssertEqual(stub.refreshNowCallCount, 1, "错误态应被重拉一次")
+
+        await c.refreshAllEnabledOnOpen()
+        XCTAssertEqual(stub.refreshNowCallCount, 1, "节流窗口内再次打开 popover 不应重复拉")
+    }
+
     // 修复 issue #10：有 snapshot 的 non-Claude provider 在 popover 打开时不再刷。
     func testRefreshAllEnabledOnOpenSkipsNonClaudeWhenSnapshotPresent() async {
         let d = freshDefaults()

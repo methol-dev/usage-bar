@@ -29,11 +29,12 @@ final class ClaudeWebProviderTests: XCTestCase {
         XCTAssertNil(p.runtime.snapshot)
     }
 
-    // no_session（存量旧扩展写的文件）→ 文案讲「没开标签页」，不是笼统的「去登录」。
-    func testNoSessionSaysNoTabOpen() {
+    // no_session（存量旧扩展 / 版本错配时才会出现）→ 文案讲「没开标签页」，不是笼统的「去登录」；
+    // 且不清快照（暂时取不到数 ≠ 凭证失效，详见 CodexWebProviderTests）。
+    func testNoSessionSaysNoTabOpenAndKeepsSnapshot() {
         let p = ClaudeWebProvider(loader: StubLoader(payload: makePayload(#"{"status":"no_session","ts":1}"#)))
-        XCTAssertFalse(p.isConfigured)
         XCTAssertTrue(p.runtime.lastError?.contains("No claude.ai tab open") ?? false)
+        XCTAssertNil(p.runtime.snapshot, "冷启动本就无数据可留")
     }
 
     // ok 且新鲜 → 已配置 + 有 snapshot（映射到窗口）。

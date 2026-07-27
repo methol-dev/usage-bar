@@ -49,13 +49,15 @@ final class CodexWebProvider: UsageProvider {
             runtime.setError("Open chatgpt.com and sign in — the extension will sync automatically.",
                              clearSnapshot: true)
         case .noSession:
-            // 新版扩展不再写这个状态（无标签页时它宁可让文件自然变陈旧，也不覆盖好数据）；
-            // 旧版扩展写的存量文件仍会走到这里，故给出对症文案而非笼统的「去登录」。
-            runtime.setConfigured(false)
+            // 与「陈旧」同类的**暂时取不到数**，不是凭证问题：不动 configured、更不清快照。
+            // 新版扩展已不再写这个状态（无标签页时宁可让文件自然变陈旧，也不覆盖好数据），但
+            // app 与扩展是两次独立安装、版本会错配（app 已更新、扩展仍是旧版是常态）——
+            // 若这里照旧按凭证失败清空快照，那条数据丢失的路依然通着，修复就只是「取决于用户是否升级扩展」。
             runtime.setError("No chatgpt.com tab open — open one and stay signed in; the extension syncs automatically.",
-                             clearSnapshot: true)
+                             clearSnapshot: false)
         case .error, .unknown:
-            runtime.setError("Codex Web sync failed. Will retry.", clearSnapshot: false)
+            runtime.setError("Codex Web sync failed — will retry. Keep a chatgpt.com tab open and signed in.",
+                             clearSnapshot: false)
         case .ok:
             // 先如常落数据、再按新鲜度决定是否挂错误 —— 陈旧不该让「最后已知用量」消失：
             // 冷启动时 runtime 是空的，旧写法在陈旧分支直接 return，用户重开 app 后只剩「未登录」骨架。
