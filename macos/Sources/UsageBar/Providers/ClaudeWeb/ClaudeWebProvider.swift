@@ -44,23 +44,30 @@ final class ClaudeWebProvider: UsageProvider {
             return
         }
         switch payload.status {
-        case .loggedOut, .noSession:
+        case .loggedOut:
             runtime.setConfigured(false)
             runtime.setError("Open claude.ai and sign in — the extension will sync automatically.",
                              clearSnapshot: true)
+        case .noSession:
+            // 与「陈旧」同类的**暂时取不到数**，不是凭证问题：不动 configured、更不清快照
+            // （版本错配时旧扩展仍会写这个状态，详见 `CodexWebProvider.apply`）。
+            runtime.setError("No claude.ai tab open — open one and stay signed in; the extension syncs automatically.",
+                             clearSnapshot: false)
         case .error, .unknown:
-            // 保留旧卡(若有),显示错误文案。
-            runtime.setError("Claude Web sync failed. Will retry.", clearSnapshot: false)
+            // 保留旧卡(若有),显示错误文案 + 下一步（未配置时提示卡会被错误卡取代，文案本身要能指路）。
+            runtime.setError("Claude Web sync failed — will retry. Keep a claude.ai tab open and signed in.",
+                             clearSnapshot: false)
         case .ok:
-            if let ts = payload.timestamp, now().timeIntervalSince(ts) > Self.stalenessThreshold {
-                runtime.setError("Claude Web data is stale — is the extension still running?",
-                                 clearSnapshot: false)
-                return
-            }
+            // 先如常落数据、再按新鲜度决定是否挂错误 —— 陈旧不该让「最后已知用量」消失（详见
+            // `CodexWebProvider.apply`）。门面判「命中」要求 lastError == nil，陈旧仍会回退 CLI。
             runtime.setConfigured(true)
             // 映射未定(Phase 0 pending)/ 无窗口 → 空快照(骨架态),不报错;已配置。
             let snapshot = ClaudeWebUsageMapper.snapshot(from: payload.usage) ?? ProviderUsageSnapshot()
             runtime.setSuccess(snapshot: snapshot, at: payload.timestamp ?? now())
+            if let ts = payload.timestamp, now().timeIntervalSince(ts) > Self.stalenessThreshold {
+                runtime.setError("Claude Web data is stale — is the extension still running?",
+                                 clearSnapshot: false)
+            }
         }
     }
 }

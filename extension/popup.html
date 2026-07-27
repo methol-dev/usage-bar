@@ -4,25 +4,43 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      body { font: 13px -apple-system, system-ui, sans-serif; width: 260px; margin: 0; padding: 12px; }
+      body { font: 13px -apple-system, system-ui, sans-serif; width: 300px; margin: 0; padding: 12px; color: #222; }
       h1 { font-size: 13px; margin: 0 0 6px; }
-      p { color: #666; margin: 0 0 10px; line-height: 1.4; }
+      p.intro { color: #666; margin: 0 0 10px; line-height: 1.4; }
       button { font: inherit; padding: 5px 10px; cursor: pointer; }
       #status { margin-top: 10px; color: #444; min-height: 1.2em; }
-      #lastSync { margin-top: 8px; color: #888; font-size: 12px; }
-      #channel { margin-top: 4px; color: #888; font-size: 12px; }
+      .rows { margin-top: 10px; border-top: 1px solid #e3e3e3; }
+      .row { padding: 8px 0 7px; border-bottom: 1px solid #e3e3e3; }
+      .row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+      .name { font-weight: 600; }
+      .state { text-align: right; }
+      .state.ok { color: #1a7f37; }
+      .state.warn { color: #9a6700; }
+      .state.bad { color: #b3261e; }
+      .state.idle { color: #888; }
+      .meta { color: #888; font-size: 12px; margin-top: 2px; line-height: 1.35; }
+      #channel { margin-top: 9px; color: #888; font-size: 12px; }
       @media (prefers-color-scheme: dark) {
         body { background: #1e1e1e; color: #ddd; }
-        p { color: #aaa; } #status { color: #bbb; } #lastSync { color: #999; } #channel { color: #999; }
+        p.intro { color: #aaa; } #status { color: #bbb; }
+        .rows, .row { border-color: #3a3a3a; }
+        .meta, #channel { color: #999; }
+        .state.ok { color: #4ac26b; }
+        .state.warn { color: #d4a72c; }
+        .state.bad { color: #ff6b5e; }
+        .state.idle { color: #888; }
       }
     </style>
   </head>
   <body>
     <h1>UsageBar — Web Usage</h1>
-    <p>Reads your claude.ai and chatgpt.com usage in your own signed-in sessions. Cookies and tokens never leave the browser. Syncs automatically — this button just forces one now.</p>
+    <p class="intro">
+      Reads your claude.ai and chatgpt.com usage in your own signed-in sessions. Cookies and tokens
+      never leave the browser. Syncs automatically — this button just forces one now.
+    </p>
     <button id="sync">Sync now</button>
     <div id="status"></div>
-    <div id="lastSync"></div>
+    <div class="rows" id="providers"></div>
     <div id="channel"></div>
     <script src="popup.js"></script>
   </body>

@@ -88,6 +88,10 @@ struct PopoverView: View {
                     : nil)
                 ProviderUsageArea(runtime: runtime,
                                   providerID: selectedProvider,
+                                  // 只启用 Web 源时改用 Web 视角的引导（别让 web-only 用户去装 CLI）。
+                                  signInHint: ProviderSignInHint.text(
+                                      for: selectedProvider,
+                                      enabledSources: coordinator.group(for: selectedProvider)?.enabledSources),
                                   onBackToClaude: { selectedProvider = coordinator.availableIDs.first ?? .claude },
                                   history: history,
                                   costStats: costStats,
@@ -107,6 +111,8 @@ struct PopoverView: View {
     private struct ProviderUsageArea<BottomBar: View>: View {
         let runtime: ProviderRuntime
         let providerID: ProviderID
+        /// 未配置提示卡的文案（按当前启用的数据源择取，见 `ProviderSignInHint`）。
+        let signInHint: String
         let onBackToClaude: () -> Void
         /// 该 provider 的历史（有则显示趋势箭头 + 折线图）。nil → 退化成只有 `ProviderUsageSection`（v0.2.6 现状）。
         var history: (service: UsageHistoryService, primaryLabel: String, secondaryLabel: String)? = nil
@@ -128,9 +134,11 @@ struct PopoverView: View {
                 }
                 // 无凭证时 lastError == nil（CodexProvider 走 clear()），错误卡不出现 ——
                 // 需要单独一张提示卡告诉用户 hero 卡为什么是骨架、怎么恢复。
-                if !runtime.isConfigured {
+                // 有 lastError 时则跳过：那条错误本身就带可操作引导（如 Web 源的「打开网页登录」），
+                // 两张卡并排说同一件事只会互相稀释。
+                if !runtime.isConfigured, runtime.lastError == nil {
                     UsageCard {
-                        Label("\(providerID.displayName) not signed in. \(providerID.signInHint)",
+                        Label("\(providerID.displayName) not signed in. \(signInHint)",
                               systemImage: "person.crop.circle.badge.questionmark")
                             .foregroundStyle(.secondary).font(.caption)
                     }
@@ -230,6 +238,16 @@ struct PopoverView: View {
 
             ProviderUsageSection(runtime: runtime, trendPrimary: trend5h, trendSecondary: trend7d)
 
+            // 与泛化用量区同款的「未配置且无错误」提示卡：只启用 Web 源、扩展还没同步过任何东西时，
+            // 两个源都不报错（web 源文件缺失走 clear()），此前这里整片空白、没有任何下一步指引。
+            if !runtime.isConfigured, runtime.lastError == nil {
+                UsageCard {
+                    Label("Claude not signed in. \(ProviderSignInHint.text(for: .claude, enabledSources: coordinator.claudeGroup.enabledSources))",
+                          systemImage: "person.crop.circle.badge.questionmark")
+                        .foregroundStyle(.secondary).font(.caption)
+                }
+            }
+
             UsageCard {
                 UsageChartSectionView(historyService: historyService, recentEvents: usageStats.recentEvents)
             }
@@ -247,9 +265,11 @@ struct PopoverView: View {
                         .font(.caption)
                     // 未认证时的恢复入口（原整屏 NotAuthenticatedView 的职责下沉到这里）：
                     // 重读 Claude CLI Keychain（允许首次 ACL prompt），成功即经门面立刻拉一次用量。
-                    // 仅在生效源为 CLI（非 web）且 CLI 未登录时给 Retry —— web 的错误文案本身即引导「打开 claude.ai」。
+                    // 判据是「CLI 是启用的源 且 CLI 未登录」而非「当前生效源不是 web」—— 后者会在 web 优先
+                    // 且两源都失败时（门面此刻展示 web 的引导文案）把 CLI 的恢复入口一并藏掉。
+                    // 只启用 Web 源时不给 Retry：重读 CLI 凭证对他毫无意义。
                     // 重试后走门面 refreshNow（B2：写门面镜像 runtime，否则 UI 绑的门面 runtime 不更新）。
-                    if coordinator.claudeGroup.activeSource != .web && !coordinator.claude.isAuthenticated {
+                    if coordinator.claudeGroup.enabledSources.contains(.cli) && !coordinator.claude.isAuthenticated {
                         Button("Retry") {
                             Task {
                                 await coordinator.claude.retrySignIn()

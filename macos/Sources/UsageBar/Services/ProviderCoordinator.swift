@@ -70,6 +70,10 @@ final class ProviderCoordinator {
     /// 每次后台 tick 的「附带副作用」——默认让模型价格目录按 3h 节流自刷新。可注入便于单测。
     var onTickSideEffects: () -> Void = { ModelPricingCatalog.shared.refreshIfStale(now: Date()) }
 
+    /// popover 打开时「重拉错误态 provider」的最小间隔（见 `refreshAllEnabledOnOpen`）。
+    static let openRefreshMinInterval: TimeInterval = 60
+    private var lastOpenRefreshAt: Date?
+
     init(claude: UsageService, codex: CodexProvider? = nil, additionalProviders: [UsageProvider] = [],
          defaults: UserDefaults = .standard,
          firstLaunchDetector: () -> Set<ProviderID> = { AIToolDetector.detect() }) {
@@ -275,14 +279,30 @@ final class ProviderCoordinator {
     }
 
     // MARK: - 刷新纪律
-    /// popover 打开（content 视图 appear）触发一次：对每个 enabled provider，仅在尚无数据（snapshot == nil）时才拉，
-    /// 已有缓存 snapshot 的跳过——刷新由后台 timer 驱动，不因 popover 开关而触发。
+    /// popover 打开（content 视图 appear）触发一次：对每个 enabled provider，仅在尚无数据（snapshot == nil）
+    /// **或当前处于错误态**时才拉，健康且有缓存 snapshot 的跳过——刷新由后台 timer 驱动，不因 popover 开关而触发。
+    ///
+    /// 带错误也拉的原因：Web 源陈旧时快照仍在（陈旧不再清空数据），只按 `snapshot == nil` 判会永远跳过它；
+    /// 而扩展在无标签页时不再回写文件，交给 app 的 mtime 也不动、15s 文件监听同样不触发 ——
+    /// 于是「打开网页标签页 → 扩展同步 → 用户开 popover 查看」这条最自然的恢复路径，
+    /// 要一直等到下一个后台 tick（最长 30min）才生效。
+    ///
+    /// 「有数据但出错」这一支必须**节流**：`nextEligibleRefresh` 只在 429 时才有值
+    /// （且门面在启用 web 时恒返回 nil），服务端 500 之类的错误态没有任何 backoff 兜底 ——
+    /// 不节流的话，反复开合菜单栏 = 反复对着已经不健康的端点发请求（重试风暴）。
+    /// 「完全没有数据」那一支不节流：那是首屏兜底，本来就该拉。
     func refreshAllEnabledOnOpen() async {
+        let now = Date()
+        let throttled = lastOpenRefreshAt.map { now.timeIntervalSince($0) < Self.openRefreshMinInterval } ?? false
+        if !throttled { lastOpenRefreshAt = now }
         for id in availableIDs {
             guard let p = registry.provider(id) else { continue }
-            if let due = p.nextEligibleRefresh, due > Date() { continue }
-            guard p.runtime.snapshot == nil else { continue }
-            await p.refreshNow()
+            if let due = p.nextEligibleRefresh, due > now { continue }
+            if p.runtime.snapshot == nil {
+                await p.refreshNow()
+            } else if p.runtime.lastError != nil, !throttled {
+                await p.refreshNow()
+            }
         }
     }
 

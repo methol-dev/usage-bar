@@ -44,21 +44,32 @@ final class CodexWebProvider: UsageProvider {
             return
         }
         switch payload.status {
-        case .loggedOut, .noSession:
+        case .loggedOut:
             runtime.setConfigured(false)
             runtime.setError("Open chatgpt.com and sign in — the extension will sync automatically.",
                              clearSnapshot: true)
+        case .noSession:
+            // 与「陈旧」同类的**暂时取不到数**，不是凭证问题：不动 configured、更不清快照。
+            // 新版扩展已不再写这个状态（无标签页时宁可让文件自然变陈旧，也不覆盖好数据），但
+            // app 与扩展是两次独立安装、版本会错配（app 已更新、扩展仍是旧版是常态）——
+            // 若这里照旧按凭证失败清空快照，那条数据丢失的路依然通着，修复就只是「取决于用户是否升级扩展」。
+            runtime.setError("No chatgpt.com tab open — open one and stay signed in; the extension syncs automatically.",
+                             clearSnapshot: false)
         case .error, .unknown:
-            runtime.setError("Codex Web sync failed. Will retry.", clearSnapshot: false)
+            runtime.setError("Codex Web sync failed — will retry. Keep a chatgpt.com tab open and signed in.",
+                             clearSnapshot: false)
         case .ok:
-            if let ts = payload.timestamp, now().timeIntervalSince(ts) > Self.stalenessThreshold {
-                runtime.setError("Codex Web data is stale — is the extension still running?",
-                                 clearSnapshot: false)
-                return
-            }
+            // 先如常落数据、再按新鲜度决定是否挂错误 —— 陈旧不该让「最后已知用量」消失：
+            // 冷启动时 runtime 是空的，旧写法在陈旧分支直接 return，用户重开 app 后只剩「未登录」骨架。
+            // 门面判「命中」要求 lastError == nil，故陈旧仍会回退 CLI（PR#53 行为不变）；
+            // 只启用 Web 源时则至少看得到最后一次数据 + 陈旧原因。
             runtime.setConfigured(true)
             let snapshot = CodexWebUsageMapper.snapshot(from: payload.usage) ?? ProviderUsageSnapshot()
             runtime.setSuccess(snapshot: snapshot, at: payload.timestamp ?? now())
+            if let ts = payload.timestamp, now().timeIntervalSince(ts) > Self.stalenessThreshold {
+                runtime.setError("Codex Web data is stale — is the extension still running?",
+                                 clearSnapshot: false)
+            }
         }
     }
 }

@@ -28,7 +28,10 @@ final class MultiSourceProvider: UsageProvider {
     private let cliSource: any UsageProvider
     private let webSource: any UsageProvider
 
-    /// 当前生效源（最近一次 refresh 后确定）—— UI 据此决定登录引导文案（CLI Retry vs 打开网页）。
+    /// 当前生效源（最近一次 refresh 后确定）—— 门面选源结果的可观测出口，供单测与排查用。
+    /// 注：UI **不**读它。登录引导文案按 `enabledSources` 决定（见 `ProviderSignInHint`），
+    /// Claude 的 Retry 入口按「CLI 是启用源且未登录」决定 —— 都与「这一拍命中了谁」无关，
+    /// 否则两源皆失败时会因为展示了另一个源的错误而把恢复入口连带藏掉。
     private(set) var activeSource: UsageSource?
     /// 用户勾选启用的源（至少一个）。Settings 改它 → 下次 refresh 生效。
     private(set) var enabledSources: Set<UsageSource>
@@ -121,9 +124,7 @@ final class MultiSourceProvider: UsageProvider {
             activeSource = s
             mirror(from: provider(for: s).runtime, configured: true)
         } else {
-            activeSource = enabledByPriority.first
-            runtime.setConfigured(false)
-            runtime.clear()
+            mirrorUnconfigured()
         }
     }
 
@@ -197,8 +198,26 @@ final class MultiSourceProvider: UsageProvider {
             mirror(from: provider(for: s).runtime, configured: true)
             return
         }
-        activeSource = enabledByPriority.first
+        mirrorUnconfigured()
+    }
+
+    /// 「所有启用源都未配置」时的门面态：未配置 + **保留最高优先级那条有错误的源的引导文案**。
+    ///
+    /// 直接 `clear()` 会把 web 源的可操作引导（「打开 chatgpt.com 登录，扩展会自动同步」）一并抹掉 ——
+    /// 只启用 Web 源时 UI 就只剩通用 CLI 提示（「去终端跑 `codex`」），既答非所问也无从诊断。
+    /// 挑选规则：按优先级找**第一条真的有 lastError 的**源（未配置但无错误的源 —— 如正常登出的 CLI 走
+    /// `clear()` —— 要跳过，否则会盖掉低优先级源的真错误，如 auth.json 损坏）；全都没有错误才 `clear()`。
+    /// `activeSource` 记成被展示错误的那个源，使它与门面 runtime 显示的内容始终同源（便于排查）。
+    private func mirrorUnconfigured() {
         runtime.setConfigured(false)
+        if let s = enabledByPriority.first(where: { provider(for: $0).runtime.lastError != nil }),
+           let err = provider(for: s).runtime.lastError {
+            activeSource = s
+            runtime.setError(err, clearSnapshot: true)
+        } else {
+            activeSource = enabledByPriority.first
+            runtime.clear()
+        }
     }
 
     // MARK: - config sanitize (static，便于单测)

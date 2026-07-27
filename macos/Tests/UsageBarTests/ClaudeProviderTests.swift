@@ -101,6 +101,55 @@ final class ClaudeProviderTests: XCTestCase {
         XCTAssertNil(g.runtime.snapshot)
     }
 
+    // MARK: - 全部源未配置时保留引导文案（web-only 可诊断性）
+
+    // 只启用 Web 源、web 未配置但带引导错误 → 门面保留那条引导，而不是 clear() 成一片空白
+    // （空白会让 UI 退回通用 CLI 提示「去终端跑 codex」，对 web-only 用户答非所问）。
+    func testUnconfiguredKeepsWebGuidanceWhenWebOnly() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web"], priority: ["web", "cli"])
+        let web = StubSource(id: .claudeWeb, configured: false)
+        web.runtime.setError("Open claude.ai and sign in — the extension will sync automatically.",
+                             clearSnapshot: true)
+        let cli = StubSource(id: .claude, configured: false)
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
+
+        await g.refreshNow()
+
+        XCTAssertFalse(g.isConfigured)
+        XCTAssertEqual(g.runtime.lastError, "Open claude.ai and sign in — the extension will sync automatically.")
+        XCTAssertEqual(g.activeSource, .web)
+    }
+
+    // 冷启动（mirrorInitial，不经 refreshNow）走同一条保留逻辑 —— 这是 popover 首屏看到的态。
+    func testUnconfiguredKeepsGuidanceOnInit() {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web"], priority: ["web", "cli"])
+        let web = StubSource(id: .claudeWeb, configured: false)
+        web.runtime.setError("Open claude.ai and sign in — the extension will sync automatically.",
+                             clearSnapshot: true)
+        let g = MultiSourceProvider(id: .claude, cliSource: StubSource(id: .claude, configured: false),
+                                    webSource: web, defaults: d)
+
+        XCTAssertFalse(g.isConfigured)
+        XCTAssertEqual(g.runtime.lastError, "Open claude.ai and sign in — the extension will sync automatically.")
+    }
+
+    // 高优先级源「未配置且无错误」（如正常登出的 CLI 走 clear()）时，不能把低优先级源的真错误吞掉。
+    func testUnconfiguredSkipsErrorlessSourceAndSurfacesTheRealOne() async {
+        let d = freshDefaults()
+        withSources(d, enabled: ["web", "cli"], priority: ["web", "cli"])
+        let web = StubSource(id: .claudeWeb, configured: false)          // 文件缺失 → 无错误
+        let cli = StubSource(id: .claude, configured: false)
+        cli.runtime.setError("Sign in with Claude CLI, then tap Retry", clearSnapshot: true)
+        let g = MultiSourceProvider(id: .claude, cliSource: cli, webSource: web, defaults: d)
+
+        await g.refreshNow()
+
+        XCTAssertEqual(g.runtime.lastError, "Sign in with Claude CLI, then tap Retry")
+        XCTAssertEqual(g.activeSource, .cli, "activeSource 跟随被展示错误的源，否则 UI 的恢复入口会指错地方")
+    }
+
     func testIsConfiguredReflectsEnabledSourcesOnly() {
         let d = freshDefaults()
         withSources(d, enabled: ["cli"], priority: ["web", "cli"])   // 只启用 cli
