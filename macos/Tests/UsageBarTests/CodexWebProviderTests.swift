@@ -48,13 +48,11 @@ final class CodexWebProviderTests: XCTestCase {
         let fresh = Int64(Date().timeIntervalSince1970 * 1000)
         let reset = Date().timeIntervalSince1970 + 3600
         let okJSON = #"{"status":"ok","ts":\#(fresh),"usage":{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":42,"reset_at":\#(reset),"limit_window_seconds":18000}}}}"#
-        var payload = makePayload(okJSON)
-        let loader = MutableStubLoader(payload: payload)
+        let loader = MutableStubLoader(payload: makePayload(okJSON))
         let p = CodexWebProvider(loader: loader)
         XCTAssertEqual(p.runtime.snapshot?.primaryWindow?.utilizationPct, 42)
 
-        payload = makePayload(#"{"status":"no_session","ts":\#(fresh)}"#)   // 旧扩展覆盖了文件
-        loader.payload = payload
+        loader.payload = makePayload(#"{"status":"no_session","ts":\#(fresh)}"#)   // 旧扩展覆盖了文件
         await p.refreshNow()
 
         XCTAssertEqual(p.runtime.snapshot?.primaryWindow?.utilizationPct, 42, "没开标签页不该抹掉已有用量")
