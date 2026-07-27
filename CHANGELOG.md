@@ -9,7 +9,9 @@
 
 ---
 
-## [Unreleased]
+## [v0.8.2] — 2026-07-27
+
+> 版本: `v0.8.2`
 
 ### 修复（Fixed）
 
@@ -23,6 +25,11 @@
 
 - **Chrome 扩展弹窗改为逐 provider 展示状态**（扩展 v0.3.0）：Claude 与 Codex 各自一行，显示 app 里的配置（Web 源开 / 关、同步间隔、是否被当前 app 版本管理）与最近一次同步结果（已同步 / 未登录 / 没开标签页 / 失败原因）。此前两者被合并成一条，Codex 的失败会被 Claude 的成功掩盖，显示「Synced ✓」而 app 里始终没有数据。（[#54](https://github.com/methol-dev/usage-bar/pull/54)）
 - 只启用 Web 源且冷启动时，网页数据陈旧不再让菜单栏显示未配置图标，而是继续显示最后已知用量，陈旧原因在 popover 内提示。（双源用户此前即自动回退 CLI，不受影响。）（[#54](https://github.com/methol-dev/usage-bar/pull/54)）
+
+### 参考
+
+- 含 PR：#54
+- 配套 Chrome 扩展版本：`0.3.0`（发版产物 `usage-bar-extension-<version>.zip`；popup 改版需重新 Load unpacked 才生效）
 
 ## [v0.8.1] — 2026-07-19
 
