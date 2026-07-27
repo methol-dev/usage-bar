@@ -195,6 +195,7 @@ CI workflow 若使用 generate-appcast 工具需根据 tag 后缀注入 `--chann
 | 2026-05-15 | v0.7.0 | tag-pushed | claude-sonnet-4-6 | tag v0.7.0；更新按钮位置 + 版本号展示；290 tests pass；G7 PASS |
 | 2026-07-19 | v0.8.0 | tag-pushed | claude-code | Claude/Codex 网页用量源 + 多数据源 + 扩展控制通道（#42–#52）；独立 review PASS + CI 绿 |
 | 2026-07-19 | v0.8.1 | tag-pushed | claude-code | 修复 web 源生效时历史采样断线 + stale 回退 CLI（#53）；plan review + 8 视角 code review + verifier PASS；CI 绿（本地无 Swift 工具链，build/test 以 CI 为准） |
+| 2026-07-27 | v0.8.2 | tag-pushed | claude-code（tag 由人工推送） | 修复只启用 Web 源时数据被 `no_session` 覆盖 + 扩展 popup 逐 provider 显示配置与结果（#54）；plan review（approve-with-changes）+ code review（no P0）+ security review（no findings）三轮独立评审 PASS；CI 绿（本地无 Swift 工具链，build/test 以 CI 为准）。release run [30231568746](https://github.com/methol-dev/usage-bar/actions/runs/30231568746) 全绿；产物 UsageBar.zip / .dmg / usage-bar-extension-0.8.2.zip（扩展 manifest 0.3.0）；appcast 已上线（0.8.2 / build 8002 / stable / enclosure 4577957B 与产物一致）。**tag 由人工推送** —— 本次 agent 会话的 git 代理只解析 branch push，tag ref 与 GitHub API 建 ref 均被拒（403） |
 
 ## 引用
 
