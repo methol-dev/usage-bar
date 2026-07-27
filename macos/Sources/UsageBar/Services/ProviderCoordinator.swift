@@ -275,13 +275,18 @@ final class ProviderCoordinator {
     }
 
     // MARK: - 刷新纪律
-    /// popover 打开（content 视图 appear）触发一次：对每个 enabled provider，仅在尚无数据（snapshot == nil）时才拉，
-    /// 已有缓存 snapshot 的跳过——刷新由后台 timer 驱动，不因 popover 开关而触发。
+    /// popover 打开（content 视图 appear）触发一次：对每个 enabled provider，仅在尚无数据（snapshot == nil）
+    /// **或当前处于错误态**时才拉，健康且有缓存 snapshot 的跳过——刷新由后台 timer 驱动，不因 popover 开关而触发。
+    ///
+    /// 带错误也拉的原因：Web 源陈旧时快照仍在（陈旧不再清空数据），只按 `snapshot == nil` 判会永远跳过它；
+    /// 而扩展在无标签页时不再回写文件，交给 app 的 mtime 也不动、15s 文件监听同样不触发 ——
+    /// 于是「打开网页标签页 → 扩展同步 → 用户开 popover 查看」这条最自然的恢复路径，
+    /// 要一直等到下一个后台 tick（最长 30min）才生效。429 backoff 仍优先，不会因此打限流端点。
     func refreshAllEnabledOnOpen() async {
         for id in availableIDs {
             guard let p = registry.provider(id) else { continue }
             if let due = p.nextEligibleRefresh, due > Date() { continue }
-            guard p.runtime.snapshot == nil else { continue }
+            guard p.runtime.snapshot == nil || p.runtime.lastError != nil else { continue }
             await p.refreshNow()
         }
     }

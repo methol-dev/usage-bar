@@ -121,9 +121,7 @@ final class MultiSourceProvider: UsageProvider {
             activeSource = s
             mirror(from: provider(for: s).runtime, configured: true)
         } else {
-            activeSource = enabledByPriority.first
-            runtime.setConfigured(false)
-            runtime.clear()
+            mirrorUnconfigured()
         }
     }
 
@@ -197,8 +195,26 @@ final class MultiSourceProvider: UsageProvider {
             mirror(from: provider(for: s).runtime, configured: true)
             return
         }
-        activeSource = enabledByPriority.first
+        mirrorUnconfigured()
+    }
+
+    /// 「所有启用源都未配置」时的门面态：未配置 + **保留最高优先级那条有错误的源的引导文案**。
+    ///
+    /// 直接 `clear()` 会把 web 源的可操作引导（「打开 chatgpt.com 登录，扩展会自动同步」）一并抹掉 ——
+    /// 只启用 Web 源时 UI 就只剩通用 CLI 提示（「去终端跑 `codex`」），既答非所问也无从诊断。
+    /// 挑选规则：按优先级找**第一条真的有 lastError 的**源（未配置但无错误的源 —— 如正常登出的 CLI 走
+    /// `clear()` —— 要跳过，否则会盖掉低优先级源的真错误，如 auth.json 损坏）；全都没有错误才 `clear()`。
+    /// `activeSource` 跟随被展示错误的那个源：UI 的恢复入口按它决定去向，指错地方会把入口藏掉。
+    private func mirrorUnconfigured() {
         runtime.setConfigured(false)
+        if let s = enabledByPriority.first(where: { provider(for: $0).runtime.lastError != nil }),
+           let err = provider(for: s).runtime.lastError {
+            activeSource = s
+            runtime.setError(err, clearSnapshot: true)
+        } else {
+            activeSource = enabledByPriority.first
+            runtime.clear()
+        }
     }
 
     // MARK: - config sanitize (static，便于单测)

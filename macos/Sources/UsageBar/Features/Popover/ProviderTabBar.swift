@@ -99,12 +99,35 @@ extension ProviderID {
         case .codex:
             return "Run `codex` in your terminal, then come back."
         case .claudeWeb:
-            return "Install the Claude Web extension and stay signed in to claude.ai."
+            return "Install the UsageBar extension and stay signed in to claude.ai."
         case .codexWeb:
             return "Install the UsageBar extension and stay signed in to chatgpt.com."
         default:
             return "Sign in via the \(displayName) CLI / app."
         }
+    }
+
+    /// 该 provider 的 Web 子源 id（用于取 Web 视角的引导文案）。非多源 provider → nil。
+    var webSourceID: ProviderID? {
+        switch self {
+        case .claude: return .claudeWeb
+        case .codex:  return .codexWeb
+        default:      return nil
+        }
+    }
+}
+
+/// 未配置提示文案的选取（纯函数，便于单测）。
+///
+/// 顶层 provider 的默认 `signInHint` 是 **CLI 视角**的（「去终端跑 `codex`」）。用户若只启用了 Web 源，
+/// 这句话答非所问 —— 他可能根本没装 CLI，问题出在扩展 / 网页登录那一侧。故按当前启用的数据源择文案：
+/// 只有 Web、没有 CLI → 用 Web 子源的引导；其余（含 CLI 或源信息缺失）→ 维持原 CLI 文案。
+enum ProviderSignInHint {
+    static func text(for id: ProviderID, enabledSources: Set<UsageSource>?) -> String {
+        guard let sources = enabledSources,
+              sources.contains(.web), !sources.contains(.cli),
+              let webID = id.webSourceID else { return id.signInHint }
+        return webID.signInHint
     }
 }
 

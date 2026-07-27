@@ -25,8 +25,15 @@ final class ClaudeWebProviderTests: XCTestCase {
     func testLoggedOutIsUnconfiguredWithHint() {
         let p = ClaudeWebProvider(loader: StubLoader(payload: makePayload(#"{"status":"logged_out","ts":1}"#)))
         XCTAssertFalse(p.isConfigured)
-        XCTAssertNotNil(p.runtime.lastError)
+        XCTAssertTrue(p.runtime.lastError?.contains("sign in") ?? false)
         XCTAssertNil(p.runtime.snapshot)
+    }
+
+    // no_session（存量旧扩展写的文件）→ 文案讲「没开标签页」，不是笼统的「去登录」。
+    func testNoSessionSaysNoTabOpen() {
+        let p = ClaudeWebProvider(loader: StubLoader(payload: makePayload(#"{"status":"no_session","ts":1}"#)))
+        XCTAssertFalse(p.isConfigured)
+        XCTAssertTrue(p.runtime.lastError?.contains("No claude.ai tab open") ?? false)
     }
 
     // ok 且新鲜 → 已配置 + 有 snapshot（映射到窗口）。
@@ -40,15 +47,16 @@ final class ClaudeWebProviderTests: XCTestCase {
         XCTAssertNil(p.runtime.lastError)
     }
 
-    // ok 但过旧 → 陈旧错误，不误报为「新鲜已配置」。
-    func testStaleOkReportsStale() {
+    // ok 但过旧 → 挂陈旧错误，但**保留**最后已知数据（冷启动同路径，详见 CodexWebProviderTests）。
+    func testStaleOkKeepsLastKnownDataAndReportsStale() {
         let oldMs = Int64((Date().timeIntervalSince1970 - ClaudeWebProvider.stalenessThreshold - 60) * 1000)
         let json = #"{"status":"ok","ts":\#(oldMs),"usage":{"five_hour":{"utilization":30}}}"#
         // 固定 now 保证判定确定性。
         let fixedNow = Date()
         let p = ClaudeWebProvider(loader: StubLoader(payload: makePayload(json)), now: { fixedNow })
-        XCTAssertNotNil(p.runtime.lastError)
         XCTAssertTrue(p.runtime.lastError?.contains("stale") ?? false)
+        XCTAssertTrue(p.isConfigured, "陈旧≠未配置：扩展确实同步过，只是数据旧了")
+        XCTAssertEqual(p.runtime.snapshot?.primaryWindow?.utilizationPct, 30, "最后已知用量不该被抹掉")
     }
 
     // ok 但 usage 无可映射窗口（Phase 0 前的空映射）→ 仍已配置 + 空快照（骨架态），不报错。

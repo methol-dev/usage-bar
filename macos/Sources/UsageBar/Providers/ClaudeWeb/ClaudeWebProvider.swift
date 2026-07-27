@@ -44,23 +44,30 @@ final class ClaudeWebProvider: UsageProvider {
             return
         }
         switch payload.status {
-        case .loggedOut, .noSession:
+        case .loggedOut:
             runtime.setConfigured(false)
             runtime.setError("Open claude.ai and sign in — the extension will sync automatically.",
+                             clearSnapshot: true)
+        case .noSession:
+            // 新版扩展不再写这个状态（无标签页时它宁可让文件自然变陈旧，也不覆盖好数据）；
+            // 旧版扩展写的存量文件仍会走到这里，故给出对症文案而非笼统的「去登录」。
+            runtime.setConfigured(false)
+            runtime.setError("No claude.ai tab open — open one and stay signed in; the extension syncs automatically.",
                              clearSnapshot: true)
         case .error, .unknown:
             // 保留旧卡(若有),显示错误文案。
             runtime.setError("Claude Web sync failed. Will retry.", clearSnapshot: false)
         case .ok:
-            if let ts = payload.timestamp, now().timeIntervalSince(ts) > Self.stalenessThreshold {
-                runtime.setError("Claude Web data is stale — is the extension still running?",
-                                 clearSnapshot: false)
-                return
-            }
+            // 先如常落数据、再按新鲜度决定是否挂错误 —— 陈旧不该让「最后已知用量」消失（详见
+            // `CodexWebProvider.apply`）。门面判「命中」要求 lastError == nil，陈旧仍会回退 CLI。
             runtime.setConfigured(true)
             // 映射未定(Phase 0 pending)/ 无窗口 → 空快照(骨架态),不报错;已配置。
             let snapshot = ClaudeWebUsageMapper.snapshot(from: payload.usage) ?? ProviderUsageSnapshot()
             runtime.setSuccess(snapshot: snapshot, at: payload.timestamp ?? now())
+            if let ts = payload.timestamp, now().timeIntervalSince(ts) > Self.stalenessThreshold {
+                runtime.setError("Claude Web data is stale — is the extension still running?",
+                                 clearSnapshot: false)
+            }
         }
     }
 }

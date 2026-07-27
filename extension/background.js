@@ -15,6 +15,10 @@
 //   • intervalSeconds → 自主取数节奏
 //   • 顶层 ts 陈旧 / 拉不到 → app 不在世 / host 不可达 → 退避「休眠」（拉长心跳周期）
 // 合规不变：poll 不 fetch 任何 provider 网页；取数由用户浏览器在真实会话里发出；无 cookie 权限；token 不出浏览器。
+//
+// 每个 provider 的「最近一次控制配置 / 取数结果」都落在 storage 里，供 popup 逐 provider 展示 ——
+// 合并展示会把一个 provider 的失败藏在另一个的成功后面（Claude 同步成功、Codex 无标签页时，
+// popup 却显示「Synced ✓」），那正是这类问题最难排查的地方。
 
 const HOST_NAME = "com.tuzhihao.usagebar.host";
 const ALARM_NAME = "usagebar-heartbeat";
@@ -27,6 +31,8 @@ const DEFAULT_INTERVAL_MS = 30 * 60 * 1000; // control 缺 intervalSeconds 时�
 const PROVIDERS = ["claude", "codex"];
 const PROVIDER_URL = { claude: "https://claude.ai/", codex: "https://chatgpt.com/" };
 const PROVIDER_QUERY = { claude: "https://claude.ai/*", codex: "https://chatgpt.com/*" };
+const PROVIDER_HOST = { claude: "claude.ai", codex: "chatgpt.com" };
+const PROVIDER_LABEL = { claude: "Claude", codex: "Codex" };
 
 const K = {
   heartbeat: "heartbeatMin", // 当前心跳周期（退避状态，持久化以跨 SW 重启）
@@ -34,6 +40,9 @@ const K = {
 };
 const kLastSync = (p) => "lastSyncAt:" + p; // 上次取数尝试时刻（每 provider）
 const kNonce = (p) => "lastNonce:" + p; // 上次应用过的 syncNonce（每 provider）
+const kResult = (p) => "lastResult:" + p; // 上次**有意义**的取数结果（去抖 skipped 不算）
+const kOkAt = (p) => "lastOkAt:" + p; // 上次成功取数并交给 app 的时刻
+const kControl = (p) => "lastControl:" + p; // app 最近下发的该 provider 控制配置
 
 // —— 顶层同步注册监听器（MV3 SW 会被杀，唤醒后重跑本脚本，顶层注册才能重新挂上）——
 chrome.alarms.onAlarm.addListener((a) => {
@@ -56,45 +65,52 @@ chrome.tabs.onUpdated.addListener((_id, ci, tab) => {
 chrome.windows.onFocusChanged.addListener((wid) => {
   if (wid !== chrome.windows.WINDOW_ID_NONE) wake(null);
 });
-// popup：手动「Sync now」强制取所有 provider；「get-status」给 popup 显示通道状态。
+// popup：手动「Sync now」强制取所有 provider；「get-status」给 popup 显示逐 provider 状态。
 chrome.runtime.onMessage.addListener((msg, _s, reply) => {
   if (msg && msg.type === "sync-now") {
-    syncOpenProviders().then((rs) => reply(pickStatus(rs)));
+    syncAllProviders().then(reply);
     return true;
   }
   if (msg && msg.type === "get-status") {
-    chrome.storage.local
-      .get([K.control, K.heartbeat, ...PROVIDERS.map(kLastSync)])
-      .then((st) => reply(shapeStatus(st)));
+    buildStatus().then(reply);
     return true;
   }
   return false;
 });
 
-// 手动「Sync now」：只强制**有打开标签页**的 provider，避免给没开标签页的 provider 写 no_session
-// （否则会把它的 web 源短暂翻成未配置）。都没开 → 返回 no_session 供 popup 提示。
-async function syncOpenProviders() {
+// 手动「Sync now」：对**每个** provider 都强制取一次，逐个返回结果（不再合并成一条 ——
+// 合并会让某个 provider 的失败被另一个的成功掩盖）。没开标签页的 provider 会得到 no_session，
+// 那不会回传 host（见 syncUsage），只在 popup 里如实显示。
+async function syncAllProviders() {
   const results = [];
+  for (const p of PROVIDERS) results.push(await syncUsage(p, { force: true }));
+  return { results };
+}
+
+// popup 状态：控制通道 liveness（app 在不在世）+ 每个 provider 的配置、标签页、最近结果。
+async function buildStatus() {
+  const keys = [K.control, K.heartbeat];
+  for (const p of PROVIDERS) keys.push(kLastSync(p), kResult(p), kOkAt(p), kControl(p));
+  const st = await chrome.storage.local.get(keys);
+  const providers = [];
   for (const p of PROVIDERS) {
-    const tabs = await chrome.tabs.query({ url: PROVIDER_QUERY[p] });
-    if (tabs.some((t) => typeof t.id === "number")) results.push(await syncUsage(p, { force: true }));
+    providers.push({
+      id: p,
+      label: PROVIDER_LABEL[p],
+      host: PROVIDER_HOST[p],
+      tabOpen: await hasTab(p),
+      lastSyncAt: st[kLastSync(p)],
+      lastOkAt: st[kOkAt(p)],
+      result: st[kResult(p)],
+      control: st[kControl(p)],
+    });
   }
-  return results.length ? results : [{ status: "no_session", ts: Date.now() }];
+  return { lastControlAt: st[K.control], heartbeatMin: st[K.heartbeat], providers };
 }
 
-// popup 状态整形：把每 provider 的 lastSync 汇成「最近一次」，附控制通道 liveness。
-function shapeStatus(st) {
-  const syncs = PROVIDERS.map((p) => st[kLastSync(p)]).filter((v) => typeof v === "number");
-  return {
-    lastSyncAt: syncs.length ? Math.max(...syncs) : undefined,
-    lastControlAt: st[K.control],
-    heartbeatMin: st[K.heartbeat],
-  };
-}
-
-// 从多个 sync 结果里挑一个给 popup 展示（优先 ok，其次任意非 skipped）。
-function pickStatus(results) {
-  return results.find((r) => r && r.status === "ok") || results.find((r) => r && r.status !== "skipped") || results[0];
+async function hasTab(provider) {
+  const tabs = await chrome.tabs.query({ url: PROVIDER_QUERY[provider] });
+  return tabs.some((t) => typeof t.id === "number");
 }
 
 async function ensureAlarm() {
@@ -156,11 +172,27 @@ async function applyControl(envelope, { forceProvider }) {
   if (ageMs > CONTROL_STALE_MS) return backoff();
   await chrome.storage.local.set({ [K.control]: Date.now() }); // 正向信号：收到**新鲜** control = app 在世
   await setHeartbeat(ACTIVE_MIN); // 有效反馈 → 回 active
+  await recordControls(envelope); // 落盘供 popup 展示「app 那边是怎么配的」
   for (const p of PROVIDERS) {
     const control = controlFor(envelope, p);
     if (!control || control.paused) continue; // 不支持 / 要求暂停 → 不取数
     await maybeSync(p, control, p === forceProvider);
   }
+}
+
+// 记下 app 当前对每个 provider 的控制配置（popup 用）。控制缺失 → supported:false，
+// 与「app 里主动关掉了 Web 源」(paused) 是两回事：前者是 app 版本旧 / 没有这个 provider，
+// 混为一谈会让用户以为自己设置错了。
+async function recordControls(envelope) {
+  const patch = {};
+  for (const p of PROVIDERS) {
+    const c = controlFor(envelope, p);
+    const secs = c ? Number(c.intervalSeconds) : NaN;
+    patch[kControl(p)] = c
+      ? { supported: true, paused: !!c.paused, intervalSeconds: secs > 0 ? secs : null, at: Date.now() }
+      : { supported: false, at: Date.now() };
+  }
+  await chrome.storage.local.set(patch);
 }
 
 // 对单个 provider：nonce 变化立即取数；否则按 interval / eventForce 取数。
@@ -169,7 +201,8 @@ async function maybeSync(provider, control, eventForce) {
   const secs = Number(control.intervalSeconds);
   const interval = secs > 0 ? Math.max(60, secs) * 1000 : DEFAULT_INTERVAL_MS; // 缺/非法 → 30min 兜底
   if (control.syncNonce !== st[kNonce(provider)]) {
-    // app 端对该 provider 主动 Refresh → 立即取数。先记 nonce，避免重复触发。
+    // app 端对该 provider 主动 Refresh → 立即取数。**先记 nonce 再取数**，避免重复触发
+    // （取数可能不回传 host、拿不到 ack 里的 nonce，这里不记就会每次心跳都重打一遍）。
     await chrome.storage.local.set({ [kNonce(provider)]: control.syncNonce });
     await syncUsage(provider, { force: true });
   } else if (eventForce || Date.now() - (st[kLastSync(provider)] || 0) >= interval) {
@@ -191,7 +224,10 @@ async function backoff() {
 async function syncUsage(provider, { force = false } = {}) {
   if (!force) {
     const st = await chrome.storage.local.get(kLastSync(provider));
-    if (Date.now() - (st[kLastSync(provider)] || 0) < MIN_SYNC_GAP_MS) return { status: "skipped", ts: Date.now(), provider };
+    if (Date.now() - (st[kLastSync(provider)] || 0) < MIN_SYNC_GAP_MS) {
+      // 去抖跳过。**不记 lastResult** —— 否则 popup 上那条真实结果会被 "skipped" 顶掉。
+      return { status: "skipped", ts: Date.now(), provider };
+    }
   }
   let payload;
   try {
@@ -201,22 +237,43 @@ async function syncUsage(provider, { force = false } = {}) {
   }
   payload.provider = provider; // 让 host 分派写入 <provider>-web.json
   await chrome.storage.local.set({ [kLastSync(provider)]: Date.now() });
+
+  // no_session（该 provider 一个标签页都没开）**绝不回传 host**：host 会把它原样写进
+  // <provider>-web.json，覆盖掉上一次的好数据。只启用 Web 源的 provider 没有 CLI 兜底，这一覆盖
+  // 等于把用量直接抹成「未登录」——用户只是没开着网页而已。不写文件时 app 侧数据只是自然变陈旧
+  // （>1h 有明确提示；启用了 CLI 源则自动回退），是可恢复的诚实状态。
+  // 「哪个站点没开标签页」这类诊断信息留在本扩展 popup 里显示，不必污染交接文件。
+  const sent = payload.status !== "no_session";
+  if (sent) await sendToHost(payload, provider);
+  await recordResult(provider, payload, sent);
+  return { ...payload, sent };
+}
+
+// 把 payload 交给 host，并吃下 ack 里搭便车的控制信封（**不**从这里触发同步，避免与刚做的同步成环）。
+async function sendToHost(payload, provider) {
   try {
-    // usage 的 ack 也带回最新控制信封 → 搭便车更新元信息（但**不**从这里触发同步，避免与刚做的同步成环）。
     const ack = await chrome.runtime.sendNativeMessage(HOST_NAME, payload);
     const env = ack && ack.control;
-    if (env && typeof env === "object") {
-      const patch = {};
-      // 只在信封新鲜时盖 lastControlAt（同 applyControl 的 liveness 语义）。
-      if (Date.now() - (Number(env.ts) || 0) * 1000 <= CONTROL_STALE_MS) patch[K.control] = Date.now();
-      const c = controlFor(env, provider);
-      if (c && c.syncNonce !== undefined) patch[kNonce(provider)] = c.syncNonce; // 对齐 nonce，避免下拍重复取数
-      await chrome.storage.local.set(patch);
-    }
+    if (!env || typeof env !== "object") return;
+    const patch = {};
+    // 只在信封新鲜时盖 lastControlAt（同 applyControl 的 liveness 语义）。
+    if (Date.now() - (Number(env.ts) || 0) * 1000 <= CONTROL_STALE_MS) patch[K.control] = Date.now();
+    const c = controlFor(env, provider);
+    if (c && c.syncNonce !== undefined) patch[kNonce(provider)] = c.syncNonce; // 对齐 nonce，避免下拍重复取数
+    await chrome.storage.local.set(patch);
+    await recordControls(env);
   } catch (_e) {
     // host 写完文件即退出，扩展侧可能收到 "Native host has exited" —— 属预期，忽略。
   }
-  return payload;
+}
+
+// 记一次取数结果供 popup 展示。`sent` = 是否交给了 app（no_session 有意不交，见 syncUsage）。
+async function recordResult(provider, payload, sent) {
+  const patch = {
+    [kResult(provider)]: { status: payload.status, error: payload.error, at: Date.now(), sent },
+  };
+  if (payload.status === "ok") patch[kOkAt(provider)] = Date.now();
+  await chrome.storage.local.set(patch);
 }
 
 // 在一个已打开的 provider 标签页上下文里取数（真同源）。无标签页 → no_session。

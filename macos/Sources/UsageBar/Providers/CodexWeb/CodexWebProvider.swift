@@ -44,21 +44,30 @@ final class CodexWebProvider: UsageProvider {
             return
         }
         switch payload.status {
-        case .loggedOut, .noSession:
+        case .loggedOut:
             runtime.setConfigured(false)
             runtime.setError("Open chatgpt.com and sign in — the extension will sync automatically.",
+                             clearSnapshot: true)
+        case .noSession:
+            // 新版扩展不再写这个状态（无标签页时它宁可让文件自然变陈旧，也不覆盖好数据）；
+            // 旧版扩展写的存量文件仍会走到这里，故给出对症文案而非笼统的「去登录」。
+            runtime.setConfigured(false)
+            runtime.setError("No chatgpt.com tab open — open one and stay signed in; the extension syncs automatically.",
                              clearSnapshot: true)
         case .error, .unknown:
             runtime.setError("Codex Web sync failed. Will retry.", clearSnapshot: false)
         case .ok:
-            if let ts = payload.timestamp, now().timeIntervalSince(ts) > Self.stalenessThreshold {
-                runtime.setError("Codex Web data is stale — is the extension still running?",
-                                 clearSnapshot: false)
-                return
-            }
+            // 先如常落数据、再按新鲜度决定是否挂错误 —— 陈旧不该让「最后已知用量」消失：
+            // 冷启动时 runtime 是空的，旧写法在陈旧分支直接 return，用户重开 app 后只剩「未登录」骨架。
+            // 门面判「命中」要求 lastError == nil，故陈旧仍会回退 CLI（PR#53 行为不变）；
+            // 只启用 Web 源时则至少看得到最后一次数据 + 陈旧原因。
             runtime.setConfigured(true)
             let snapshot = CodexWebUsageMapper.snapshot(from: payload.usage) ?? ProviderUsageSnapshot()
             runtime.setSuccess(snapshot: snapshot, at: payload.timestamp ?? now())
+            if let ts = payload.timestamp, now().timeIntervalSince(ts) > Self.stalenessThreshold {
+                runtime.setError("Codex Web data is stale — is the extension still running?",
+                                 clearSnapshot: false)
+            }
         }
     }
 }

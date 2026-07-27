@@ -25,8 +25,15 @@ final class CodexWebProviderTests: XCTestCase {
     func testLoggedOutIsUnconfiguredWithHint() {
         let p = CodexWebProvider(loader: StubLoader(payload: makePayload(#"{"status":"logged_out","ts":1}"#)))
         XCTAssertFalse(p.isConfigured)
-        XCTAssertNotNil(p.runtime.lastError)
+        XCTAssertTrue(p.runtime.lastError?.contains("sign in") ?? false)
         XCTAssertNil(p.runtime.snapshot)
+    }
+
+    // no_session（存量旧扩展写的文件）→ 文案讲「没开标签页」，不是笼统的「去登录」。
+    func testNoSessionSaysNoTabOpen() {
+        let p = CodexWebProvider(loader: StubLoader(payload: makePayload(#"{"status":"no_session","ts":1}"#)))
+        XCTAssertFalse(p.isConfigured)
+        XCTAssertTrue(p.runtime.lastError?.contains("No chatgpt.com tab open") ?? false)
     }
 
     // ok 且新鲜 → 已配置 + 有 snapshot（wham/usage 与 CLI 同 schema，5h 窗口 → primary）。
@@ -42,14 +49,17 @@ final class CodexWebProviderTests: XCTestCase {
         XCTAssertNil(p.runtime.lastError)
     }
 
-    // ok 但过旧 → 陈旧错误，不误报为「新鲜已配置」。
-    func testStaleOkReportsStale() {
+    // ok 但过旧 → 挂陈旧错误，但**保留**最后已知数据（冷启动也是这条路径：旧写法此时 runtime 全空，
+    // 用户重开 app 只剩「未登录」骨架）。门面判命中要求 lastError == nil，故仍会回退 CLI。
+    func testStaleOkKeepsLastKnownDataAndReportsStale() {
         let oldMs = Int64((Date().timeIntervalSince1970 - CodexWebProvider.stalenessThreshold - 60) * 1000)
-        let json = #"{"status":"ok","ts":\#(oldMs),"usage":{"plan_type":"pro"}}"#
+        let reset = Date().timeIntervalSince1970 + 3600
+        let json = #"{"status":"ok","ts":\#(oldMs),"usage":{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":42,"reset_at":\#(reset),"limit_window_seconds":18000}}}}"#
         let fixedNow = Date()
         let p = CodexWebProvider(loader: StubLoader(payload: makePayload(json)), now: { fixedNow })
-        XCTAssertNotNil(p.runtime.lastError)
         XCTAssertTrue(p.runtime.lastError?.contains("stale") ?? false)
+        XCTAssertTrue(p.isConfigured, "陈旧≠未配置：扩展确实同步过，只是数据旧了")
+        XCTAssertEqual(p.runtime.snapshot?.primaryWindow?.utilizationPct, 42, "最后已知用量不该被抹掉")
     }
 
     // ok 但 usage 无可映射窗口 → 仍已配置 + 空快照（骨架态），不报错。
