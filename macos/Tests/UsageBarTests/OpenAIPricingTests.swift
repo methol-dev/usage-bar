@@ -29,5 +29,10 @@ final class OpenAIPricingTests: XCTestCase {
         // 1M input × $1 + 1M output × $2 + 1M cacheRead × $0.1 + 1M cacheWrite × $3 = 6.1
         XCTAssertEqual(p.cost(input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000, cacheWrite: 1_000_000), 6.1, accuracy: 1e-9)
         XCTAssertEqual(p.cost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0), 0, accuracy: 1e-12)
+        // 无 1h 单价时，1h tokens 回退 5m 价，避免按 0 计
+        XCTAssertEqual(p.cost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 1_000_000), 3.0, accuracy: 1e-9)
+        let with1h = ModelUnitPricing(inputUSDPerMTok: 1, outputUSDPerMTok: 2, cacheReadUSDPerMTok: 0.1,
+                                      cacheWriteUSDPerMTok: 3, cacheWrite1hUSDPerMTok: 5)
+        XCTAssertEqual(with1h.cost(input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cacheWrite1h: 1_000_000), 5.0, accuracy: 1e-9)
     }
 }

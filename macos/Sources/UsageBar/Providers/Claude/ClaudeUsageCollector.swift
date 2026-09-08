@@ -57,7 +57,9 @@ actor ClaudeUsageCollector: UsageCollecting {
                             collected.append(StoredUsageEvent(
                                 ts: ev.timestamp, msgId: ev.messageId, reqId: ev.requestId, sessionId: sessionId,
                                 model: ev.model, inputTokens: ev.inputTokens, outputTokens: ev.outputTokens,
-                                cacheReadInputTokens: ev.cacheReadInputTokens, cacheCreationInputTokens: ev.cacheCreationInputTokens))
+                                cacheReadInputTokens: ev.cacheReadInputTokens,
+                                cacheCreation5mTokens: ev.cacheCreation5mTokens,
+                                cacheCreation1hTokens: ev.cacheCreation1hTokens))
                         } catch {
                             parseErrors += 1
                             NSLog("[usage-bar] usage collect: \(type(of: error))")
@@ -68,18 +70,22 @@ actor ClaudeUsageCollector: UsageCollecting {
             }
         }
 
+        let migrated = await cursor.consumeDidResetStaleSchema()
         guard !collected.isEmpty else {
+            if migrated { await store.rebuildAllAggregates() }
             await cursor.flush()
             lastResult = CollectResult(newEventCount: 0, scannedFileCount: scanned, parseErrorCount: parseErrors, touchedDayKeys: [])
             return lastResult
         }
         let dirty = await store.mergeEvents(collected)
         let touchedDays = Set(collected.map { UsageAggregator.localDayKey($0.ts) })
-        if dirty.isEmpty {
-            await store.rebuildAggregates(forDayKeys: touchedDays)
-        } else {
+        if !dirty.isEmpty {
             for f in scannedFiles { await cursor.clearCursor(for: f) }
             await store.rebuildAllAggregates()
+        } else if migrated {
+            await store.rebuildAllAggregates()
+        } else {
+            await store.rebuildAggregates(forDayKeys: touchedDays)
         }
         await cursor.flush()
         lastResult = CollectResult(newEventCount: collected.count, scannedFileCount: scanned, parseErrorCount: parseErrors, touchedDayKeys: touchedDays)

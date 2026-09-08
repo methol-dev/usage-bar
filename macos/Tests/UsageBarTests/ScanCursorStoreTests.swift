@@ -52,6 +52,22 @@ final class ScanCursorStoreTests: XCTestCase {
         let result = await makeStore().nextReadOffset(for: fakeURL, currentSize: 100, currentMTime: m)
         XCTAssertNil(result)
     }
+    func testLegacySchemaVersionForcesFullRescan() async throws {
+        let m = Date(timeIntervalSince1970: 1_000_000)
+        let s1 = makeStore()
+        await s1.updateCursor(for: fakeURL, size: 100, mtime: m, lineOffset: 5)
+        await s1.flush()
+        let url = tmpDir.appendingPathComponent("scan-cursor.json")
+        var obj = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        obj["schemaVersion"] = 1
+        try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]).write(to: url)
+        let s2 = makeStore()
+        let result = await s2.nextReadOffset(for: fakeURL, currentSize: 100, currentMTime: m)
+        XCTAssertEqual(result, 0)
+        let reset = await s2.consumeDidResetStaleSchema()
+        XCTAssertTrue(reset)
+    }
+
     func testCursorFilePermissionsAre0600() async throws {
         let s = makeStore()
         await s.updateCursor(for: fakeURL, size: 100, mtime: Date(), lineOffset: 1)

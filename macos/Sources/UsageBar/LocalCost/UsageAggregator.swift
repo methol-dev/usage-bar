@@ -49,7 +49,9 @@ enum UsageAggregator {
             let unit = pricing.lookup(normalizedModel)
             if unit == nil { unknown += s.calls }
             let usd = unit?.cost(input: s.inputTokens, output: s.outputTokens,
-                                 cacheRead: s.cacheReadInputTokens, cacheWrite: s.cacheCreationInputTokens) ?? 0
+                                 cacheRead: s.cacheReadInputTokens,
+                                 cacheWrite: s.cacheCreation5mTokens,
+                                 cacheWrite1h: s.cacheCreation1hTokens) ?? 0
             total += usd
             per.append(ModelCost(model: normalizedModel, normalizedModel: normalizedModel, calls: s.calls,
                                  inputTokens: s.inputTokens, outputTokens: s.outputTokens,
@@ -114,7 +116,10 @@ enum UsageAggregator {
             for (mk, s) in bucket {
                 var acc = merged[mk] ?? TokenSums()
                 acc.calls += s.calls; acc.inputTokens += s.inputTokens; acc.outputTokens += s.outputTokens
-                acc.cacheReadInputTokens += s.cacheReadInputTokens; acc.cacheCreationInputTokens += s.cacheCreationInputTokens
+                acc.cacheReadInputTokens += s.cacheReadInputTokens
+                acc.cacheCreation5mTokens += s.cacheCreation5mTokens
+                acc.cacheCreation1hTokens += s.cacheCreation1hTokens
+                acc.cacheCreationInputTokens += s.cacheCreationInputTokens
                 merged[mk] = acc
             }
         }

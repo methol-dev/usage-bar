@@ -84,11 +84,19 @@ actor UsageEventStore {
                 try? fm.moveItem(at: url, to: backup)
             }
             var existing = parsed?.events ?? []
-            var seen = Set(existing.map { "\($0.msgId)|\($0.reqId)" })
+            var indexByKey: [String: Int] = [:]
+            for (i, e) in existing.enumerated() {
+                indexByKey["\(e.msgId)|\(e.reqId)"] = i
+            }
             for e in newEvents {
                 let k = "\(e.msgId)|\(e.reqId)"
-                if seen.contains(k) { continue }
-                seen.insert(k); existing.append(e)
+                if let i = indexByKey[k] {
+                    // 同 key 保留更新的快照（流式 JSONL 后到的一行才是终态 output）
+                    if e.ts >= existing[i].ts { existing[i] = e }
+                } else {
+                    indexByKey[k] = existing.count
+                    existing.append(e)
+                }
             }
             existing.sort { $0.ts < $1.ts }
             saveMonth(MonthDetailFile(provider: provider.rawValue, month: monthKey,
@@ -131,7 +139,7 @@ actor UsageEventStore {
         guard let data = try? Data(contentsOf: aggFileURL(kind)) else { return nil }
         do {
             let f = try Self.decoder.decode(AggregateFile.self, from: data)
-            return f.schemaVersion == 1 ? f : nil
+            return f.schemaVersion == 2 ? f : nil
         } catch { NSLog("[usage-bar] store decode agg: \(type(of: error))"); return nil }
     }
     private func saveAgg(_ kind: String, buckets: [String: [String: TokenSums]]) {

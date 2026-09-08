@@ -18,12 +18,24 @@ struct ModelUnitPricing: Equatable, Sendable {
     let outputUSDPerMTok: Double
     let cacheReadUSDPerMTok: Double
     let cacheWriteUSDPerMTok: Double
+    let cacheWrite1hUSDPerMTok: Double
 
-    func cost(input: Int, output: Int, cacheRead: Int, cacheWrite: Int) -> Double {
-        (Double(input) * inputUSDPerMTok
+    init(inputUSDPerMTok: Double, outputUSDPerMTok: Double, cacheReadUSDPerMTok: Double,
+         cacheWriteUSDPerMTok: Double, cacheWrite1hUSDPerMTok: Double = 0) {
+        self.inputUSDPerMTok = inputUSDPerMTok
+        self.outputUSDPerMTok = outputUSDPerMTok
+        self.cacheReadUSDPerMTok = cacheReadUSDPerMTok
+        self.cacheWriteUSDPerMTok = cacheWriteUSDPerMTok
+        self.cacheWrite1hUSDPerMTok = cacheWrite1hUSDPerMTok
+    }
+
+    func cost(input: Int, output: Int, cacheRead: Int, cacheWrite: Int, cacheWrite1h: Int = 0) -> Double {
+        let write1hRate = cacheWrite1hUSDPerMTok > 0 ? cacheWrite1hUSDPerMTok : cacheWriteUSDPerMTok
+        return (Double(input) * inputUSDPerMTok
          + Double(output) * outputUSDPerMTok
          + Double(cacheRead) * cacheReadUSDPerMTok
-         + Double(cacheWrite) * cacheWriteUSDPerMTok) / 1_000_000.0
+         + Double(cacheWrite) * cacheWriteUSDPerMTok
+         + Double(cacheWrite1h) * write1hRate) / 1_000_000.0
     }
 }
 

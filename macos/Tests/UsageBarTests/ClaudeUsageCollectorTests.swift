@@ -103,8 +103,54 @@ final class ClaudeUsageCollectorTests: XCTestCase {
         XCTAssertEqual(got.count, 1)
     }
 
+    func testStreamingLaterLineReplacesPartialOutput() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpData)
+        let cursor = ScanCursorStore(dataDirOverride: tmpData)
+        _ = try writeSession("p1", "00000000-mock-0000-0000-000000000001", lines: [
+            assistantLine(ts: "2026-05-10T10:00:00.000Z", msg: "msg_mock_a", req: "req_mock_a", output: 4),
+            assistantLine(ts: "2026-05-10T10:00:02.000Z", msg: "msg_mock_a", req: "req_mock_a", output: 644),
+        ])
+        _ = await ClaudeUsageCollector(store: store, cursor: cursor, scanRootsOverride: [tmpRoot]).collect()
+        let fmt = ISO8601DateFormatter()
+        let events = await store.queryEvents(from: fmt.date(from: "2026-05-01T00:00:00Z")!,
+                                             to: fmt.date(from: "2026-06-01T00:00:00Z")!)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.outputTokens, 644)
+    }
+
+    func testIncrementalStreamAppendReplacesStoredPartial() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpData)
+        let cursor = ScanCursorStore(dataDirOverride: tmpData)
+        let f = try writeSession("p1", "00000000-mock-0000-0000-000000000001", lines: [
+            assistantLine(ts: "2026-05-10T10:00:00.000Z", msg: "msg_mock_a", req: "req_mock_a", output: 4),
+        ])
+        _ = await ClaudeUsageCollector(store: store, cursor: cursor, scanRootsOverride: [tmpRoot]).collect()
+        var content = try String(contentsOf: f, encoding: .utf8)
+        content += assistantLine(ts: "2026-05-10T10:00:03.000Z", msg: "msg_mock_a", req: "req_mock_a", output: 644) + "\n"
+        try content.data(using: .utf8)!.write(to: f)
+        _ = await ClaudeUsageCollector(store: store, cursor: cursor, scanRootsOverride: [tmpRoot]).collect()
+        let fmt = ISO8601DateFormatter()
+        let events = await store.queryEvents(from: fmt.date(from: "2026-05-01T00:00:00Z")!,
+                                             to: fmt.date(from: "2026-06-01T00:00:00Z")!)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.outputTokens, 644)
+    }
+
+    func testCollectsSplitCacheWriteTokens() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpData)
+        let cursor = ScanCursorStore(dataDirOverride: tmpData)
+        let line = #"{"type":"assistant","requestId":"req_mock_a","timestamp":"2026-05-10T10:00:00.000Z","message":{"id":"msg_mock_a","model":"claude-opus-4-7","usage":{"input_tokens":1,"output_tokens":2,"cache_creation_input_tokens":100,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":40,"ephemeral_1h_input_tokens":60}}}}"#
+        _ = try writeSession("p1", "00000000-mock-0000-0000-000000000001", lines: [line])
+        _ = await ClaudeUsageCollector(store: store, cursor: cursor, scanRootsOverride: [tmpRoot]).collect()
+        let fmt = ISO8601DateFormatter()
+        let events = await store.queryEvents(from: fmt.date(from: "2026-05-01T00:00:00Z")!,
+                                             to: fmt.date(from: "2026-06-01T00:00:00Z")!)
+        XCTAssertEqual(events.first?.cacheCreation5mTokens, 40)
+        XCTAssertEqual(events.first?.cacheCreation1hTokens, 60)
+    }
+
     /// 钉住"会话源文件被删除后，已统计到 store 的事件不会丢失"的保证。
-    /// mergeEvents 只做 union，rebuildAggregates 从落盘月明细重算——源 jsonl 删除不影响 store。
+    /// mergeEvents 后到覆盖同 key，rebuildAggregates 从落盘月明细重算——源 jsonl 删除不影响 store。
     func testDeletedSourceFileKeepsStoredEvents() async throws {
         let store = UsageEventStore(dataDirOverride: tmpData)
         let cursor = ScanCursorStore(dataDirOverride: tmpData)

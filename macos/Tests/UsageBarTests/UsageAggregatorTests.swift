@@ -10,7 +10,7 @@ final class UsageAggregatorTests: XCTestCase {
                     cr: Int = 0, cc: Int = 0, msg: String = UUID().uuidString) -> StoredUsageEvent {
         StoredUsageEvent(ts: iso(ts), msgId: "msg_mock_\(msg)", reqId: "req_mock_\(msg)",
                          sessionId: "00000000-mock-0000-0000-000000000000", model: model,
-                         inputTokens: input, outputTokens: output, cacheReadInputTokens: cr, cacheCreationInputTokens: cc)
+                         inputTokens: input, outputTokens: output, cacheReadInputTokens: cr, cacheCreation5mTokens: cc)
     }
 
     func testFoldByDayKeysUseLocalTimeZone() {
@@ -28,7 +28,7 @@ final class UsageAggregatorTests: XCTestCase {
     func testUsdForBucketSumsCostsFromCatalog() {
         var sums = TokenSums()
         sums.calls = 1; sums.inputTokens = 1_000_000; sums.outputTokens = 1_000_000
-        sums.cacheReadInputTokens = 1_000_000; sums.cacheCreationInputTokens = 1_000_000
+        sums.cacheReadInputTokens = 1_000_000; sums.cacheCreation5mTokens = 1_000_000
         let bucket: [String: TokenSums] = ["claude-opus-4-7": sums]
         let r = UsageAggregator.usdForBucket(bucket)
         XCTAssertEqual(r.unknownModelCalls, 0)               // bundle 内快照能查到 claude-opus-4-7
@@ -36,6 +36,15 @@ final class UsageAggregatorTests: XCTestCase {
         // 1M of each token type → usd 应等于该模型四项 per-Mtok 单价之和（验证 usdForBucket → catalog 的 plumbing，不硬编码金额）
         guard let p = ClaudeModelPriceTable.shared.lookup("claude-opus-4-7") else { return XCTFail("claude-opus-4-7 not in bundled snapshot") }
         XCTAssertEqual(r.usd, p.inputUSDPerMTok + p.outputUSDPerMTok + p.cacheReadUSDPerMTok + p.cacheWriteUSDPerMTok, accuracy: 1e-6)
+    }
+    func testUsdForBucketUses1hCacheWriteRate() {
+        var sums = TokenSums()
+        sums.calls = 1; sums.cacheCreation1hTokens = 1_000_000
+        let r = UsageAggregator.usdForBucket(["claude-opus-4-7": sums])
+        guard let p = ClaudeModelPriceTable.shared.lookup("claude-opus-4-7") else { return XCTFail("claude-opus-4-7 not in bundled snapshot") }
+        XCTAssertGreaterThan(p.cacheWrite1hUSDPerMTok, p.cacheWriteUSDPerMTok)
+        XCTAssertEqual(r.usd, p.cacheWrite1hUSDPerMTok, accuracy: 1e-6)
+        XCTAssertNotEqual(r.usd, p.cacheWriteUSDPerMTok, accuracy: 1e-6)
     }
     func testUnknownModelContributesZeroUSDAndCountsCalls() {
         var sums = TokenSums(); sums.calls = 3; sums.inputTokens = 1_000_000
