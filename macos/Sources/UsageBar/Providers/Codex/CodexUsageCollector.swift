@@ -54,18 +54,22 @@ actor CodexUsageCollector: UsageCollecting {
             }
         }
 
+        let migrated = await cursor.consumeDidResetStaleSchema()
         guard !collected.isEmpty else {
+            if migrated { await store.rebuildAllAggregates(normalize: { OpenAIPricing.normalize($0) }) }
             await cursor.flush()
             lastResult = CollectResult(newEventCount: 0, scannedFileCount: scanned, parseErrorCount: 0, touchedDayKeys: [])
             return lastResult
         }
         let dirty = await store.mergeEvents(collected)
         let touchedDays = Set(collected.map { UsageAggregator.localDayKey($0.ts) })
-        if dirty.isEmpty {
-            await store.rebuildAggregates(forDayKeys: touchedDays, normalize: { OpenAIPricing.normalize($0) })
-        } else {
+        if !dirty.isEmpty {
             for f in scannedFiles { await cursor.clearCursor(for: f) }
             await store.rebuildAllAggregates(normalize: { OpenAIPricing.normalize($0) })
+        } else if migrated {
+            await store.rebuildAllAggregates(normalize: { OpenAIPricing.normalize($0) })
+        } else {
+            await store.rebuildAggregates(forDayKeys: touchedDays, normalize: { OpenAIPricing.normalize($0) })
         }
         await cursor.flush()
         lastResult = CollectResult(newEventCount: collected.count, scannedFileCount: scanned, parseErrorCount: 0, touchedDayKeys: touchedDays)

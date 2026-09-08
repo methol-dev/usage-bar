@@ -73,7 +73,7 @@ final class CodexRolloutCostParserTests: XCTestCase {
         let evs = CodexRolloutCostParser.parseFile(lines: [turnContext(model: "gpt-5"), tokenCount(input: 100, cached: 10, output: 20)], sessionId: "S")
         let data = try JSONEncoder().encode(evs[0])
         let dict = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        let allowed: Set<String> = ["ts", "msgId", "reqId", "sessionId", "model", "inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens"]
+        let allowed: Set<String> = ["ts", "msgId", "reqId", "sessionId", "model", "inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens", "cacheCreation5mTokens", "cacheCreation1hTokens"]
         XCTAssertTrue(Set(dict.keys).isSubset(of: allowed), "StoredUsageEvent leaked extra keys: \(Set(dict.keys).subtracting(allowed))")
     }
 }

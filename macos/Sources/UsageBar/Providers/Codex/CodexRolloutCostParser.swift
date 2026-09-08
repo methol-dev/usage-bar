@@ -46,7 +46,8 @@ enum CodexRolloutCostParser {
                 inputTokens: max(inputAll - cached, 0),     // input_tokens 含 cached_input_tokens，拆出非缓存部分
                 outputTokens: max(output, 0),               // output_tokens 已含 reasoning_output_tokens
                 cacheReadInputTokens: max(cached, 0),
-                cacheCreationInputTokens: 0                 // OpenAI 自动 prompt caching，无 cache-write 口径
+                cacheCreation5mTokens: 0,                   // OpenAI 自动 prompt caching，无 cache-write 口径
+                cacheCreation1hTokens: 0
             ))
         }
         return out

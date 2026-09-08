@@ -18,10 +18,11 @@ final class UsageEventStoreTests: XCTestCase {
         return f.date(from: s) ?? ISO8601DateFormatter().date(from: s)!
     }
     private func event(ts: String, msg: String = "msg_mock_1", req: String = "req_mock_1",
-                       model: String = "claude-opus-4-7", input: Int = 100, output: Int = 50) -> StoredUsageEvent {
+                       model: String = "claude-opus-4-7", input: Int = 100, output: Int = 50,
+                       cache5m: Int = 0, cache1h: Int = 0) -> StoredUsageEvent {
         StoredUsageEvent(ts: iso(ts), msgId: msg, reqId: req, sessionId: "00000000-mock-0000-0000-000000000000",
                          model: model, inputTokens: input, outputTokens: output,
-                         cacheReadInputTokens: 0, cacheCreationInputTokens: 0)
+                         cacheReadInputTokens: 0, cacheCreation5mTokens: cache5m, cacheCreation1hTokens: cache1h)
     }
 
     func testMergeEventsDeduplicatesByMsgIdAndReqId() async throws {
@@ -91,6 +92,48 @@ final class UsageEventStoreTests: XCTestCase {
         let totalCalls = day.values.flatMap { $0.values }.reduce(0) { $0 + $1.calls }
         XCTAssertEqual(totalCalls, 2)
     }
+    func testMergeEventsLaterSnapshotReplacesEarlier() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpDir)
+        _ = await store.mergeEvents([event(ts: "2026-05-11T10:00:00.000Z", output: 4)])
+        _ = await store.mergeEvents([event(ts: "2026-05-11T10:00:01.000Z", output: 644)])
+        let got = await store.queryEvents(from: iso("2026-05-01T00:00:00.000Z"), to: iso("2026-06-01T00:00:00.000Z"))
+        XCTAssertEqual(got.count, 1)
+        XCTAssertEqual(got.first?.outputTokens, 644)
+    }
+
+    func testMergeEventsEarlierSnapshotDoesNotReplaceLater() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpDir)
+        _ = await store.mergeEvents([event(ts: "2026-05-11T10:00:01.000Z", output: 644)])
+        _ = await store.mergeEvents([event(ts: "2026-05-11T10:00:00.000Z", output: 4)])
+        let got = await store.queryEvents(from: iso("2026-05-01T00:00:00.000Z"), to: iso("2026-06-01T00:00:00.000Z"))
+        XCTAssertEqual(got.count, 1)
+        XCTAssertEqual(got.first?.outputTokens, 644)
+    }
+
+    func testMergeEventsSameTimestampKeepsIncoming() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpDir)
+        _ = await store.mergeEvents([event(ts: "2026-05-11T10:00:00.000Z", output: 4, cache5m: 10)])
+        _ = await store.mergeEvents([event(ts: "2026-05-11T10:00:00.000Z", output: 4, cache5m: 10, cache1h: 99)])
+        let got = await store.queryEvents(from: iso("2026-05-01T00:00:00.000Z"), to: iso("2026-06-01T00:00:00.000Z"))
+        XCTAssertEqual(got.count, 1)
+        XCTAssertEqual(got.first?.cacheCreation1hTokens, 99)
+    }
+
+    func testDecodesLegacyMonthFileWithoutCacheSplit() throws {
+        let json = """
+        {"schemaVersion":1,"provider":"claude","month":"2026-05","lastUpdated":"2026-05-11T10:00:00Z",
+         "events":[{"ts":"2026-05-11T10:00:00Z","msgId":"msg_mock_1","reqId":"req_mock_1",
+         "sessionId":"00000000-mock-0000-0000-000000000000","model":"claude-opus-4-7",
+         "inputTokens":1,"outputTokens":2,"cacheReadInputTokens":3,"cacheCreationInputTokens":40}]}
+        """
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let file = try decoder.decode(MonthDetailFile.self, from: json.data(using: .utf8)!)
+        XCTAssertEqual(file.events.count, 1)
+        XCTAssertEqual(file.events[0].cacheCreation5mTokens, 40)
+        XCTAssertEqual(file.events[0].cacheCreation1hTokens, 0)
+        XCTAssertEqual(file.events[0].cacheCreationInputTokens, 40)
+    }
+
     func testCorruptedMonthFileTreatedAsEmpty() async throws {
         let store = UsageEventStore(dataDirOverride: tmpDir)
         let dir = tmpDir.appendingPathComponent("claude", isDirectory: true)

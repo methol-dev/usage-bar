@@ -4,7 +4,7 @@ import Foundation
 // 用作 `data/<provider>/` 目录名的语义不变（`ProviderID.claude.rawValue == "claude"`）。
 
 /// 单次 assistant 调用的事实记录。**故意不含 content/text/contentBlocks**（隐私 schema 守护）。
-struct StoredUsageEvent: Codable, Equatable {
+struct StoredUsageEvent: Equatable {
     let ts: Date                        // ISO8601 UTC
     let msgId: String
     let reqId: String
@@ -13,7 +13,19 @@ struct StoredUsageEvent: Codable, Equatable {
     let inputTokens: Int
     let outputTokens: Int
     let cacheReadInputTokens: Int
-    let cacheCreationInputTokens: Int
+    let cacheCreation5mTokens: Int
+    let cacheCreation1hTokens: Int
+    var cacheCreationInputTokens: Int { cacheCreation5mTokens + cacheCreation1hTokens }
+
+    init(ts: Date, msgId: String, reqId: String, sessionId: String, model: String,
+         inputTokens: Int, outputTokens: Int, cacheReadInputTokens: Int,
+         cacheCreation5mTokens: Int, cacheCreation1hTokens: Int = 0) {
+        self.ts = ts; self.msgId = msgId; self.reqId = reqId; self.sessionId = sessionId
+        self.model = model; self.inputTokens = inputTokens; self.outputTokens = outputTokens
+        self.cacheReadInputTokens = cacheReadInputTokens
+        self.cacheCreation5mTokens = cacheCreation5mTokens
+        self.cacheCreation1hTokens = cacheCreation1hTokens
+    }
 }
 
 /// data/<provider>/<YYYY>-<MM>.json
@@ -26,18 +38,24 @@ struct MonthDetailFile: Codable, Equatable {
 }
 
 /// agg 文件桶里某个 model 的累积。
-struct TokenSums: Codable, Equatable {
+struct TokenSums: Equatable {
     var calls: Int = 0
     var inputTokens: Int = 0
     var outputTokens: Int = 0
     var cacheReadInputTokens: Int = 0
+    var cacheCreation5mTokens: Int = 0
+    var cacheCreation1hTokens: Int = 0
     var cacheCreationInputTokens: Int = 0
+
+    init() {}
 
     mutating func add(_ e: StoredUsageEvent) {
         calls += 1
         inputTokens += e.inputTokens
         outputTokens += e.outputTokens
         cacheReadInputTokens += e.cacheReadInputTokens
+        cacheCreation5mTokens += e.cacheCreation5mTokens
+        cacheCreation1hTokens += e.cacheCreation1hTokens
         cacheCreationInputTokens += e.cacheCreationInputTokens
     }
 }
@@ -46,7 +64,7 @@ struct TokenSums: Codable, Equatable {
 /// buckets 键：day = "YYYY-MM-DD"（本地时区）/ month = "YYYY-MM"（UTC）/ year = "YYYY"（UTC）
 /// 内层键 = ClaudePricing.normalize 后的 model 字符串
 struct AggregateFile: Codable, Equatable {
-    var schemaVersion: Int = 1
+    var schemaVersion: Int = 2
     var provider: String
     var lastUpdated: Date
     var buckets: [String: [String: TokenSums]]
@@ -54,13 +72,93 @@ struct AggregateFile: Codable, Equatable {
 
 /// data/scan-cursor.json
 struct ScanCursorFile: Codable, Equatable {
-    var schemaVersion: Int = 1
+    static let currentSchemaVersion = 2
+    var schemaVersion: Int = 2
     var files: [String: FileCursor]     // 键 = jsonl 绝对路径
 
     struct FileCursor: Codable, Equatable {
         var size: Int
         var mtime: Date
         var lineOffset: Int             // 已处理行数（下次跳过前 lineOffset 行）
+    }
+}
+
+extension StoredUsageEvent: Codable {
+    enum CodingKeys: String, CodingKey {
+        case ts, msgId, reqId, sessionId, model
+        case inputTokens, outputTokens, cacheReadInputTokens
+        case cacheCreationInputTokens, cacheCreation5mTokens, cacheCreation1hTokens
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ts = try c.decode(Date.self, forKey: .ts)
+        msgId = try c.decode(String.self, forKey: .msgId)
+        reqId = try c.decode(String.self, forKey: .reqId)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        model = try c.decode(String.self, forKey: .model)
+        inputTokens = try c.decode(Int.self, forKey: .inputTokens)
+        outputTokens = try c.decode(Int.self, forKey: .outputTokens)
+        cacheReadInputTokens = try c.decode(Int.self, forKey: .cacheReadInputTokens)
+        let legacy = try c.decodeIfPresent(Int.self, forKey: .cacheCreationInputTokens) ?? 0
+        if let c5 = try c.decodeIfPresent(Int.self, forKey: .cacheCreation5mTokens) {
+            cacheCreation5mTokens = c5
+            cacheCreation1hTokens = try c.decodeIfPresent(Int.self, forKey: .cacheCreation1hTokens) ?? 0
+        } else {
+            cacheCreation5mTokens = legacy
+            cacheCreation1hTokens = 0
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(ts, forKey: .ts)
+        try c.encode(msgId, forKey: .msgId)
+        try c.encode(reqId, forKey: .reqId)
+        try c.encode(sessionId, forKey: .sessionId)
+        try c.encode(model, forKey: .model)
+        try c.encode(inputTokens, forKey: .inputTokens)
+        try c.encode(outputTokens, forKey: .outputTokens)
+        try c.encode(cacheReadInputTokens, forKey: .cacheReadInputTokens)
+        try c.encode(cacheCreation5mTokens, forKey: .cacheCreation5mTokens)
+        try c.encode(cacheCreation1hTokens, forKey: .cacheCreation1hTokens)
+        try c.encode(cacheCreationInputTokens, forKey: .cacheCreationInputTokens)
+    }
+}
+
+extension TokenSums: Codable {
+    enum CodingKeys: String, CodingKey {
+        case calls, inputTokens, outputTokens, cacheReadInputTokens
+        case cacheCreationInputTokens, cacheCreation5mTokens, cacheCreation1hTokens
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        calls = try c.decodeIfPresent(Int.self, forKey: .calls) ?? 0
+        inputTokens = try c.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
+        outputTokens = try c.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
+        cacheReadInputTokens = try c.decodeIfPresent(Int.self, forKey: .cacheReadInputTokens) ?? 0
+        let legacy = try c.decodeIfPresent(Int.self, forKey: .cacheCreationInputTokens) ?? 0
+        if let c5 = try c.decodeIfPresent(Int.self, forKey: .cacheCreation5mTokens) {
+            cacheCreation5mTokens = c5
+            cacheCreation1hTokens = try c.decodeIfPresent(Int.self, forKey: .cacheCreation1hTokens) ?? 0
+            cacheCreationInputTokens = cacheCreation5mTokens + cacheCreation1hTokens
+        } else {
+            cacheCreation5mTokens = legacy
+            cacheCreation1hTokens = 0
+            cacheCreationInputTokens = legacy
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(calls, forKey: .calls)
+        try c.encode(inputTokens, forKey: .inputTokens)
+        try c.encode(outputTokens, forKey: .outputTokens)
+        try c.encode(cacheReadInputTokens, forKey: .cacheReadInputTokens)
+        try c.encode(cacheCreation5mTokens, forKey: .cacheCreation5mTokens)
+        try c.encode(cacheCreation1hTokens, forKey: .cacheCreation1hTokens)
+        try c.encode(cacheCreationInputTokens, forKey: .cacheCreationInputTokens)
     }
 }
 

@@ -15,7 +15,28 @@ final class JSONLCostParserTests: XCTestCase {
         XCTAssertEqual(event?.inputTokens, 6)
         XCTAssertEqual(event?.outputTokens, 619)
         XCTAssertEqual(event?.cacheCreationInputTokens, 26254)
+        XCTAssertEqual(event?.cacheCreation5mTokens, 26254)
+        XCTAssertEqual(event?.cacheCreation1hTokens, 0)
         XCTAssertEqual(event?.cacheReadInputTokens, 15896)
+    }
+
+    func testCacheCreationNestedSplits5mAnd1h() throws {
+        let line = #"""
+        {"type":"assistant","requestId":"req_mock_1","timestamp":"2026-05-11T09:24:52.422Z","message":{"id":"msg_mock_1","model":"claude-opus-4-7","usage":{"input_tokens":6,"output_tokens":10,"cache_creation_input_tokens":100,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":40,"ephemeral_1h_input_tokens":60}}}}
+        """#
+        let event = try JSONLCostParser.parseLine(line)
+        XCTAssertEqual(event?.cacheCreation5mTokens, 40)
+        XCTAssertEqual(event?.cacheCreation1hTokens, 60)
+        XCTAssertEqual(event?.cacheCreationInputTokens, 100)
+    }
+
+    func testCacheCreationMissingNestedUsesTopLevelAs5m() throws {
+        let line = #"""
+        {"type":"assistant","requestId":"req_mock_1","timestamp":"2026-05-11T09:24:52.422Z","message":{"id":"msg_mock_1","model":"claude-opus-4-7","usage":{"input_tokens":1,"output_tokens":1,"cache_creation_input_tokens":77,"cache_read_input_tokens":0}}}
+        """#
+        let event = try JSONLCostParser.parseLine(line)
+        XCTAssertEqual(event?.cacheCreation5mTokens, 77)
+        XCTAssertEqual(event?.cacheCreation1hTokens, 0)
     }
 
     func testNonAssistantTypeReturnsNil() throws {

@@ -4,6 +4,7 @@ actor ScanCursorStore {
     private let cursorURL: URL
     private let fm = FileManager.default
     private var cache: ScanCursorFile?
+    private var didResetStaleSchema = false
 
     init(dataDirOverride: URL? = nil, provider: ProviderID = .claude) {
         let dir: URL
@@ -21,10 +22,13 @@ actor ScanCursorStore {
     private func loaded() -> ScanCursorFile {
         if let c = cache { return c }
         if let data = try? Data(contentsOf: cursorURL),
-           let f = try? Self.decoder.decode(ScanCursorFile.self, from: data), f.schemaVersion == 1 {
+           let f = try? Self.decoder.decode(ScanCursorFile.self, from: data),
+           f.schemaVersion == ScanCursorFile.currentSchemaVersion {
             cache = f; return f
         }
-        let fresh = ScanCursorFile(schemaVersion: 1, files: [:]); cache = fresh; return fresh
+        didResetStaleSchema = true
+        let fresh = ScanCursorFile(schemaVersion: ScanCursorFile.currentSchemaVersion, files: [:])
+        cache = fresh; return fresh
     }
 
     private func persist(_ f: ScanCursorFile) {
@@ -60,5 +64,12 @@ actor ScanCursorStore {
     /// 把内存中的游标 cache 一次性写盘。collect() 结束时调用一次，避免每文件都 atomic-write 的 O(n²) 写放大。
     func flush() {
         if let c = cache { persist(c) }
+    }
+
+    /// 本次进程里是否因旧 schema 丢掉了磁盘游标。collect 末尾读一次后清掉。
+    func consumeDidResetStaleSchema() -> Bool {
+        let v = didResetStaleSchema
+        didResetStaleSchema = false
+        return v
     }
 }

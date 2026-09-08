@@ -19,7 +19,7 @@ final class ModelPricingCatalogTests: XCTestCase {
       "gpt-5": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001, "cache_read_input_token_cost": 0.000000125},
       "gpt-5-codex": {"input_cost_per_token": 0.00000125, "output_cost_per_token": 0.00001},
       "gpt-5-mini": {"input_cost_per_token": 0.00000025, "output_cost_per_token": 0.000002},
-      "claude-opus-4-20250514": {"input_cost_per_token": 0.000015, "output_cost_per_token": 0.000075, "cache_read_input_token_cost": 0.0000015, "cache_creation_input_token_cost": 0.00001875},
+      "claude-opus-4-20250514": {"input_cost_per_token": 0.000015, "output_cost_per_token": 0.000075, "cache_read_input_token_cost": 0.0000015, "cache_creation_input_token_cost": 0.00001875, "cache_creation_input_token_cost_above_1hr": 0.00003},
       "openai/gpt-4o": {"input_cost_per_token": 0.0000025, "output_cost_per_token": 0.00001},
       "azure/gpt-4o": {"input_cost_per_token": 0.0000099, "output_cost_per_token": 0.0000099},
       "broken-model": {"input_cost_per_token": "not-a-number"}
@@ -36,6 +36,10 @@ final class ModelPricingCatalogTests: XCTestCase {
         XCTAssertEqual(p?.outputUSDPerMTok ?? 0, 10.0, accuracy: 1e-9)
         XCTAssertEqual(p?.cacheReadUSDPerMTok ?? 0, 0.125, accuracy: 1e-9)
         XCTAssertEqual(p?.cacheWriteUSDPerMTok ?? -1, 0.0, accuracy: 1e-12)  // 缺 cache_creation → 0
+        XCTAssertEqual(p?.cacheWrite1hUSDPerMTok ?? -1, 0.0, accuracy: 1e-12)
+        let opus = cat.unitPricing(rawModel: "claude-opus-4-20250514")
+        XCTAssertEqual(opus?.cacheWriteUSDPerMTok ?? 0, 18.75, accuracy: 1e-9)
+        XCTAssertEqual(opus?.cacheWrite1hUSDPerMTok ?? 0, 30.0, accuracy: 1e-9)
         XCTAssertNil(cat.unitPricing(rawModel: "sample_spec"))               // 非模型键不进表
         XCTAssertNil(cat.unitPricing(rawModel: "broken-model"))             // 字段非数 → 跳过该 key
     }

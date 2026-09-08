@@ -123,12 +123,14 @@ final class ModelPricingCatalog: @unchecked Sendable {
             let outPT = num("output_cost_per_token")
             let crPT = num("cache_read_input_token_cost")
             let cwPT = num("cache_creation_input_token_cost")
+            let cw1hPT = num("cache_creation_input_token_cost_above_1hr")
             if inPT == 0 && outPT == 0 && crPT == 0 && cwPT == 0 { continue }   // 无价格字段 → 跳过
             out[rawKey.lowercased()] = ModelUnitPricing(
                 inputUSDPerMTok: inPT * 1_000_000,
                 outputUSDPerMTok: outPT * 1_000_000,
                 cacheReadUSDPerMTok: crPT * 1_000_000,
-                cacheWriteUSDPerMTok: cwPT * 1_000_000)
+                cacheWriteUSDPerMTok: cwPT * 1_000_000,
+                cacheWrite1hUSDPerMTok: cw1hPT * 1_000_000)
         }
         return out
     }
