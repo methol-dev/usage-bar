@@ -55,22 +55,26 @@ struct TokenSums: Equatable {
 
     init() {}
 
-    mutating func add(_ e: StoredUsageEvent) {
-        addCounts(e)
-        let prompt = e.inputTokens + e.cacheReadInputTokens + e.cacheCreationInputTokens
-        for t in Self.longContextThresholds where prompt > t {
-            longContext[String(t), default: TokenSums()].addCounts(e)
-        }
+    /// 单个事件的计数（calls = 1，不含 longContext 子桶）。
+    private init(_ e: StoredUsageEvent) {
+        calls = 1
+        inputTokens = e.inputTokens
+        outputTokens = e.outputTokens
+        cacheReadInputTokens = e.cacheReadInputTokens
+        cacheCreation5mTokens = e.cacheCreation5mTokens
+        cacheCreation1hTokens = e.cacheCreation1hTokens
+        cacheCreationInputTokens = e.cacheCreationInputTokens
     }
 
-    private mutating func addCounts(_ e: StoredUsageEvent) {
-        calls += 1
-        inputTokens += e.inputTokens
-        outputTokens += e.outputTokens
-        cacheReadInputTokens += e.cacheReadInputTokens
-        cacheCreation5mTokens += e.cacheCreation5mTokens
-        cacheCreation1hTokens += e.cacheCreation1hTokens
-        cacheCreationInputTokens += e.cacheCreationInputTokens
+    mutating func add(_ e: StoredUsageEvent) {
+        let one = TokenSums(e)
+        // usage 全 0 的不是一次计费调用（如 Claude CLI 在 API 报错时写的 `<synthetic>` 占位消息）
+        guard one.inputTokens + one.outputTokens + one.cacheReadInputTokens + one.cacheCreationInputTokens > 0 else { return }
+        merge(one)
+        let prompt = e.inputTokens + e.cacheReadInputTokens + e.cacheCreationInputTokens
+        for t in Self.longContextThresholds where prompt > t {
+            longContext[String(t), default: TokenSums()].merge(one)
+        }
     }
 
     mutating func merge(_ o: TokenSums) {
@@ -82,6 +86,19 @@ struct TokenSums: Equatable {
         cacheCreation1hTokens += o.cacheCreation1hTokens
         cacheCreationInputTokens += o.cacheCreationInputTokens
         for (k, v) in o.longContext { longContext[k, default: TokenSums()].merge(v) }
+    }
+
+    /// 标量计数相减（不含 longContext 子桶），用于从总量里扣掉长上下文那部分。
+    func subtracting(_ o: TokenSums) -> TokenSums {
+        var r = TokenSums()
+        r.calls = calls - o.calls
+        r.inputTokens = inputTokens - o.inputTokens
+        r.outputTokens = outputTokens - o.outputTokens
+        r.cacheReadInputTokens = cacheReadInputTokens - o.cacheReadInputTokens
+        r.cacheCreation5mTokens = cacheCreation5mTokens - o.cacheCreation5mTokens
+        r.cacheCreation1hTokens = cacheCreation1hTokens - o.cacheCreation1hTokens
+        r.cacheCreationInputTokens = cacheCreationInputTokens - o.cacheCreationInputTokens
+        return r
     }
 }
 

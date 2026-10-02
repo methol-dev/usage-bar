@@ -298,6 +298,8 @@ final class ProviderCoordinator {
         if !throttled { lastOpenRefreshAt = now }
         for id in availableIDs {
             guard let p = registry.provider(id) else { continue }
+            // 本机统计只随后台 tick（默认 30min）刷新，打开时补刷一次，否则 1h/6h/1d 窗口最多滞后一个 tick
+            if !throttled { p.onPollTick?() }
             if let due = p.nextEligibleRefresh, due > now { continue }
             if p.runtime.snapshot == nil {
                 await p.refreshNow()

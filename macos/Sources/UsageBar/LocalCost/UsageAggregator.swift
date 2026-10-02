@@ -45,7 +45,7 @@ enum UsageAggregator {
     static func usdForBucket(_ bucket: [String: TokenSums], pricing: ModelPriceTable = ClaudeModelPriceTable.shared) -> BucketCost {
         var total = 0.0, unknown = 0
         var per: [ModelCost] = []
-        for (normalizedModel, s) in bucket {
+        for (normalizedModel, s) in bucket where s.calls > 0 {   // 只含全 0 事件的模型（如 `<synthetic>`）不出现在明细里
             let unit = pricing.lookup(normalizedModel)
             if unit == nil { unknown += s.calls }
             let usd = unit?.cost(s) ?? 0

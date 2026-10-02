@@ -40,13 +40,7 @@ struct PopoverView: View {
         )
         // v0.2.10 刷新纪律：popover 打开（content 视图首次 appear）触发一次「刷新所有 enabled provider」；
         // 切 tab / 任何其它操作都不再触发刷新（删了原来的 `.task(id: selectedProvider)`）—— UI 立即用 runtime.snapshot 缓存渲染。
-        .task {
-            // 本机 JSONL 统计不随订阅用量刷新，打开时单独补刷（内部节流），与网络刷新并行
-            async let claudeLocal: Void = usageStats.refreshIfStale()
-            async let codexLocal: Void = codexStats.refreshIfStale()
-            await coordinator.refreshAllEnabledOnOpen()
-            _ = await (claudeLocal, codexLocal)
-        }
+        .task { await coordinator.refreshAllEnabledOnOpen() }
         // 用户在 Settings 里禁用了当前选中 tab 的 provider → 回退到 Claude。
         .onChange(of: coordinator.availableIDs) { _, ids in
             if !ids.contains(selectedProvider) {

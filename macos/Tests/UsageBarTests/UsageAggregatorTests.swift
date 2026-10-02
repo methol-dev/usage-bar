@@ -100,6 +100,14 @@ final class UsageAggregatorTests: XCTestCase {
         XCTAssertEqual(acc.longContext["272000"]?.calls, 2)
         XCTAssertEqual(acc.longContext["272000"]?.inputTokens, 600_000)
     }
+    func testAllZeroUsageEventIsNotACall() {
+        // Claude CLI 在 API 报错时写的 `<synthetic>` 占位消息 usage 全 0
+        var s = TokenSums(); s.add(ev("2026-05-11T12:00:00.000Z", model: "<synthetic>", input: 0, output: 0, msg: "s"))
+        XCTAssertEqual(s.calls, 0)
+        let r = UsageAggregator.usdForBucket(["<synthetic>": s])
+        XCTAssertTrue(r.perModel.isEmpty)
+        XCTAssertEqual(r.unknownModelCalls, 0)
+    }
     func testTokenSumsCodableRoundTripWithLongContext() throws {
         var s = TokenSums(); s.add(ev("2026-05-11T12:00:00.000Z", input: 300_000, output: 7, msg: "x"))
         let back = try JSONDecoder().decode(TokenSums.self, from: JSONEncoder().encode(s))

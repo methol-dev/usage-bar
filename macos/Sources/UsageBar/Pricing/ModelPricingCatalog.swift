@@ -114,11 +114,7 @@ final class ModelPricingCatalog: @unchecked Sendable {
         for (rawKey, value) in dict {
             if nonModelKeys.contains(rawKey) { continue }
             guard let attrs = value as? [String: Any] else { continue }
-            func num(_ k: String) -> Double {
-                if let d = attrs[k] as? Double { return d }
-                if let n = attrs[k] as? NSNumber { return n.doubleValue }
-                return 0
-            }
+            func num(_ k: String) -> Double { number(attrs, k) ?? 0 }
             let inPT = num("input_cost_per_token")
             let outPT = num("output_cost_per_token")
             let crPT = num("cache_read_input_token_cost")
@@ -139,21 +135,15 @@ final class ModelPricingCatalog: @unchecked Sendable {
     /// 解析长上下文档：键名须**精确**为 `input_cost_per_token_above_<N>k_tokens`（排除 `_batches` / `_priority` / `_flex` 等变体）。
     /// 其余分量缺失 → 回退该分量基础价；1h cache write 缺失 → 按「长档 5m 写 / 基础 5m 写」的倍率由基础 1h 价推算。
     /// 计价口径：单次请求 prompt 超阈值即整单按长档（Anthropic 官方规则；OpenAI 官方措辞是按 session，LiteLLM/本实现按单次请求）。
-    private static let longContextInputKey = try! NSRegularExpression(pattern: #"^input_cost_per_token_above_(\d+)k_tokens$"#)
     private static func longContextTier(_ attrs: [String: Any],
                                         base: (input: Double, output: Double, cacheRead: Double, cacheWrite: Double, cacheWrite1h: Double)) -> LongContextTier? {
-        func num(_ k: String) -> Double? {
-            if let d = attrs[k] as? Double { return d }
-            return (attrs[k] as? NSNumber)?.doubleValue
-        }
-        let thresholdsK = attrs.keys.compactMap { key -> Int? in
-            guard key.hasPrefix("input_cost_per_token_above_") else { return nil }
-            let range = NSRange(key.startIndex..., in: key)
-            guard let m = longContextInputKey.firstMatch(in: key, range: range),
-                  let r = Range(m.range(at: 1), in: key) else { return nil }
-            return Int(key[r])
-        }.sorted()
-        guard let k = thresholdsK.first, let input = num("input_cost_per_token_above_\(k)k_tokens") else { return nil }
+        func num(_ k: String) -> Double? { number(attrs, k) }
+        let prefix = "input_cost_per_token_above_", tail = "k_tokens"
+        let k = attrs.keys.compactMap { key -> Int? in
+            guard key.hasPrefix(prefix), key.hasSuffix(tail) else { return nil }
+            return Int(key.dropFirst(prefix.count).dropLast(tail.count))   // 非纯数字（如带 _batches）→ nil
+        }.min()
+        guard let k, let input = num("\(prefix)\(k)\(tail)") else { return nil }
         let suffix = "_above_\(k)k_tokens"
         let cacheWrite = num("cache_creation_input_token_cost\(suffix)") ?? base.cacheWrite
         let cacheWrite1h = num("cache_creation_input_token_cost_above_1hr\(suffix)")
@@ -164,6 +154,11 @@ final class ModelPricingCatalog: @unchecked Sendable {
             cacheReadUSDPerMTok: (num("cache_read_input_token_cost\(suffix)") ?? base.cacheRead) * 1_000_000,
             cacheWriteUSDPerMTok: cacheWrite * 1_000_000,
             cacheWrite1hUSDPerMTok: cacheWrite1h * 1_000_000))
+    }
+
+    private static func number(_ attrs: [String: Any], _ k: String) -> Double? {
+        if let d = attrs[k] as? Double { return d }
+        return (attrs[k] as? NSNumber)?.doubleValue
     }
 
     // MARK: - 查表（逐级回退候选链）

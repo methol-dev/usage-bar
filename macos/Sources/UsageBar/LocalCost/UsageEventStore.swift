@@ -24,10 +24,10 @@ actor UsageEventStore {
     }
 
     private var providerDir: URL { dataDir.appendingPathComponent(provider.rawValue, isDirectory: true) }
-    /// agg 桶的模型 key 规范化：随 provider 走，保证任何重建入口（含 `resolvedAgg` 的自动重建）口径一致。
+    /// agg 桶的模型 key 规范化：与该 provider 的估价表同源，保证任何重建入口（含 `resolvedAgg` 的自动重建）口径一致。
     private var normalize: @Sendable (String) -> String {
-        if provider == .codex { return { OpenAIPricing.normalize($0) } }
-        return { ClaudePricing.normalize($0) }
+        let table = provider.costPriceTable
+        return { table.normalize($0) }
     }
     private func monthFileURL(_ key: String) -> URL { providerDir.appendingPathComponent("\(key).json") }
 
@@ -79,6 +79,7 @@ actor UsageEventStore {
 
     private var migrationsURL: URL { providerDir.appendingPathComponent("migrations.json") }
     private struct MigrationsFile: Codable { var done: [String] }
+    private var migrationsCache: MigrationsFile?
 
     /// 对全部存量明细跑一次 `transform`（**只删不改**：返回输入的子集；跨月整体处理，同一会话可能跨月），只跑一次：
     /// 完成标记记在 `<provider>/migrations.json`，且**所有**改动的月文件写盘成功后才落标记（失败下次重试）。
@@ -86,8 +87,10 @@ actor UsageEventStore {
     /// 有改动则全量重建 agg。返回是否改动了数据。
     @discardableResult
     func runMigrationOnce(_ name: String, transform: ([StoredUsageEvent]) -> [StoredUsageEvent]) -> Bool {
-        var marks = (try? Data(contentsOf: migrationsURL)).flatMap { try? Self.decoder.decode(MigrationsFile.self, from: $0) }
+        var marks = migrationsCache
+            ?? (try? Data(contentsOf: migrationsURL)).flatMap { try? Self.decoder.decode(MigrationsFile.self, from: $0) }
             ?? MigrationsFile(done: [])
+        migrationsCache = marks
         guard !marks.done.contains(name) else { return false }
         let keys = allMonthKeys()
         var before: [String: [StoredUsageEvent]] = [:]
@@ -113,6 +116,7 @@ actor UsageEventStore {
         }
         if changed { rebuildAllAggregates() }
         marks.done.append(name)
+        migrationsCache = marks
         if let data = try? Self.encoder.encode(marks) { writeAtomic0600(data, to: migrationsURL) }
         return changed
     }
