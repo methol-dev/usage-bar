@@ -64,4 +64,56 @@ final class UsageAggregatorTests: XCTestCase {
         XCTAssertGreaterThan(summary.totalUSD, 0)
         XCTAssertEqual(summary.perModel.reduce(0) { $0 + $1.calls }, 1)
     }
+
+    // MARK: 长上下文阶梯价
+
+    private func tierPricing(threshold: Int) -> ModelUnitPricing {
+        ModelUnitPricing(inputUSDPerMTok: 1, outputUSDPerMTok: 10, cacheReadUSDPerMTok: 0.1, cacheWriteUSDPerMTok: 1.25,
+                         cacheWrite1hUSDPerMTok: 2,
+                         longContext: LongContextTier(thresholdTokens: threshold, rates: .init(
+                            inputUSDPerMTok: 2, outputUSDPerMTok: 15, cacheReadUSDPerMTok: 0.2, cacheWriteUSDPerMTok: 2.5,
+                            cacheWrite1hUSDPerMTok: 4)))
+    }
+    func testLongContextRequestsPricedWholeAtTierRate() {
+        var s = TokenSums()
+        s.add(ev("2026-05-11T12:00:00.000Z", input: 1_000, output: 1_000_000, cr: 199_000, msg: "small"))   // prompt 200_000，不超
+        s.add(ev("2026-05-11T12:00:01.000Z", input: 1_000, output: 1_000_000, cr: 299_000, msg: "big"))     // prompt 300_000
+        XCTAssertEqual(s.longContext["200000"]?.calls, 1)
+        XCTAssertEqual(s.longContext["272000"]?.calls, 1)
+        let usd = tierPricing(threshold: 272_000).cost(s)
+        let small: Double = (1_000.0 * 1 + 1_000_000.0 * 10 + 199_000.0 * 0.1) / 1e6   // 基础价
+        let big: Double = (1_000.0 * 2 + 1_000_000.0 * 15 + 299_000.0 * 0.2) / 1e6     // 整单长档价
+        let expected = small + big
+        XCTAssertEqual(usd, expected, accuracy: 1e-9)
+    }
+    func testLongContextThresholdNotTrackedFallsBackToBase() {
+        var s = TokenSums()
+        s.add(ev("2026-05-11T12:00:00.000Z", input: 500_000, output: 0, msg: "x"))
+        XCTAssertEqual(tierPricing(threshold: 128_000).cost(s), 0.5, accuracy: 1e-9)
+    }
+    func testRolling30dSummaryKeepsLongContextSubBuckets() {
+        let now = iso("2026-05-12T12:00:00.000Z")
+        var s = TokenSums(); s.add(ev("2026-05-11T12:00:00.000Z", input: 300_000, output: 0, msg: "x"))
+        let merged = UsageAggregator.rolling30dSummary(dayAggregates: ["2026-05-11": ["m": s]], now: now)
+        XCTAssertEqual(merged.perModel.first?.calls, 1)
+        var acc = TokenSums(); acc.merge(s); acc.merge(s)
+        XCTAssertEqual(acc.longContext["272000"]?.calls, 2)
+        XCTAssertEqual(acc.longContext["272000"]?.inputTokens, 600_000)
+    }
+    func testAllZeroUsageEventIsNotACall() {
+        // Claude CLI 在 API 报错时写的 `<synthetic>` 占位消息 usage 全 0
+        var s = TokenSums(); s.add(ev("2026-05-11T12:00:00.000Z", model: "<synthetic>", input: 0, output: 0, msg: "s"))
+        XCTAssertEqual(s.calls, 0)
+        let r = UsageAggregator.usdForBucket(["<synthetic>": s])
+        XCTAssertTrue(r.perModel.isEmpty)
+        XCTAssertEqual(r.unknownModelCalls, 0)
+    }
+    func testTokenSumsCodableRoundTripWithLongContext() throws {
+        var s = TokenSums(); s.add(ev("2026-05-11T12:00:00.000Z", input: 300_000, output: 7, msg: "x"))
+        let back = try JSONDecoder().decode(TokenSums.self, from: JSONEncoder().encode(s))
+        XCTAssertEqual(back, s)
+        // 旧 agg（无 longContext 字段）可解码
+        let legacy = try JSONDecoder().decode(TokenSums.self, from: Data(#"{"calls":1,"inputTokens":5,"outputTokens":0,"cacheReadInputTokens":0,"cacheCreationInputTokens":0}"#.utf8))
+        XCTAssertTrue(legacy.longContext.isEmpty)
+    }
 }

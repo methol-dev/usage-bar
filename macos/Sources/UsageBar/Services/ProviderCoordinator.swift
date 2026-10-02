@@ -197,6 +197,7 @@ final class ProviderCoordinator {
     func refreshNow(_ id: ProviderID) async {
         // web-capable provider 的用户主动 Refresh → bump 其 nonce，让扩展 ≤1min 内真去对应网页拉一次。
         if group(for: id) != nil { publishWebControl(bumpFor: id) }
+        registry.provider(id)?.onPollTick?()   // 用户主动刷新也带上本机统计
         await registry.provider(id)?.refreshNow()
     }
 
@@ -297,6 +298,8 @@ final class ProviderCoordinator {
         if !throttled { lastOpenRefreshAt = now }
         for id in availableIDs {
             guard let p = registry.provider(id) else { continue }
+            // 本机统计只随后台 tick（默认 30min）刷新，打开时补刷一次，否则 1h/6h/1d 窗口最多滞后一个 tick
+            if !throttled { p.onPollTick?() }
             if let due = p.nextEligibleRefresh, due > now { continue }
             if p.runtime.snapshot == nil {
                 await p.refreshNow()

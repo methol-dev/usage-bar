@@ -156,6 +156,9 @@ case .<name>: return "<sf-symbol-name>"  // 在 macOS 14 SF Symbols 5 里找合�
 2. 创建 `<Name>UsageCollector.swift`（`actor`，conform `UsageCollecting`，扫 sessions 目录，增量 cursor）
 3. 在 `UsageStatsService.init(provider:)` 的 switch 里加 `case .<name>:` 分支，传入对应 collector + pricing table
 4. 在 `UsageBarApp` 里加 `@StateObject var <name>Stats = UsageStatsService(provider: .<name>)`
+5. `UsageEventStore` 的 agg 模型 key 归一按 provider 选（`normalize`），新 provider 需在那里补分支
+6. 长上下文阶梯价只认 `TokenSums.longContextThresholds`（当前 200k / 272k）；新 provider 的模型若用别的阈值（LiteLLM `*_above_<N>k_tokens`），需把 N 加进去，否则静默按基础价
+7. 若日志可能重复写同一次调用（如 Codex 的 `token_count` 连发两遍），解析器必须去重
 
 ---
 

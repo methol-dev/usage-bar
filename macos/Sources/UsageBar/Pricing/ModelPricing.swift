@@ -19,14 +19,20 @@ struct ModelUnitPricing: Equatable, Sendable {
     let cacheReadUSDPerMTok: Double
     let cacheWriteUSDPerMTok: Double
     let cacheWrite1hUSDPerMTok: Double
+    /// 长上下文档（LiteLLM `*_above_<N>k_tokens`）：单次请求 prompt 超过阈值时**整单**按此档计价
+    /// （OpenAI >272k、Anthropic >200k 的官方规则）。nil = 该模型无阶梯价。
+    var longContext: LongContextTier? { longContextStorage.first }
+    /// 用数组存放以打破值类型递归（`LongContextTier.rates` 本身是 `ModelUnitPricing`），至多一个元素。
+    private let longContextStorage: [LongContextTier]
 
     init(inputUSDPerMTok: Double, outputUSDPerMTok: Double, cacheReadUSDPerMTok: Double,
-         cacheWriteUSDPerMTok: Double, cacheWrite1hUSDPerMTok: Double = 0) {
+         cacheWriteUSDPerMTok: Double, cacheWrite1hUSDPerMTok: Double = 0, longContext: LongContextTier? = nil) {
         self.inputUSDPerMTok = inputUSDPerMTok
         self.outputUSDPerMTok = outputUSDPerMTok
         self.cacheReadUSDPerMTok = cacheReadUSDPerMTok
         self.cacheWriteUSDPerMTok = cacheWriteUSDPerMTok
         self.cacheWrite1hUSDPerMTok = cacheWrite1hUSDPerMTok
+        self.longContextStorage = longContext.map { [$0] } ?? []
     }
 
     func cost(input: Int, output: Int, cacheRead: Int, cacheWrite: Int, cacheWrite1h: Int = 0) -> Double {
@@ -36,6 +42,31 @@ struct ModelUnitPricing: Equatable, Sendable {
          + Double(cacheRead) * cacheReadUSDPerMTok
          + Double(cacheWrite) * cacheWriteUSDPerMTok
          + Double(cacheWrite1h) * write1hRate) / 1_000_000.0
+    }
+
+    /// 一个桶的费用：超过长上下文阈值的那部分请求（`TokenSums.longContext` 子桶）按长上下文档计价，其余按基础价。
+    /// 阈值不在 `TokenSums.longContextThresholds` 里（没有对应子桶）→ 全按基础价。
+    func cost(_ s: TokenSums) -> Double {
+        let long = longContext.flatMap { s.longContext[String($0.thresholdTokens)] } ?? TokenSums()
+        return flatCost(s.subtracting(long)) + (longContext?.rates.flatCost(long) ?? 0)
+    }
+
+    private func flatCost(_ s: TokenSums) -> Double {
+        cost(input: s.inputTokens, output: s.outputTokens, cacheRead: s.cacheReadInputTokens,
+             cacheWrite: s.cacheCreation5mTokens, cacheWrite1h: s.cacheCreation1hTokens)
+    }
+}
+
+/// 长上下文计价档：prompt（input + cache read + cache write）> `thresholdTokens` 的请求整单按 `rates` 计价。
+struct LongContextTier: Equatable, Sendable {
+    let thresholdTokens: Int
+    let rates: ModelUnitPricing
+}
+
+extension ProviderID {
+    /// 本机费用统计的估价表（agg 模型 key 归一 + 查价同源）。
+    var costPriceTable: any ModelPriceTable {
+        self == .codex ? OpenAIModelPriceTable.shared : ClaudeModelPriceTable.shared
     }
 }
 

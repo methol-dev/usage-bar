@@ -38,7 +38,7 @@ final class UsageStatsService {
             let store = UsageEventStore(provider: .codex)
             self.init(store: store,
                       collector: CodexUsageCollector(store: store, cursor: ScanCursorStore(provider: .codex)),
-                      pricing: OpenAIModelPriceTable.shared)
+                      pricing: provider.costPriceTable)
         default:
             let store = UsageEventStore()
             self.init(store: store, collector: ClaudeUsageCollector(store: store, cursor: ScanCursorStore()))

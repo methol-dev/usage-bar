@@ -158,4 +158,30 @@ final class ModelPricingCatalogTests: XCTestCase {
         XCTAssertEqual(cat.unitPricing(rawModel: "gpt-5")?.inputUSDPerMTok ?? 0, 1.25, accuracy: 1e-9) // 旧值不变
         XCTAssertFalse(FileManager.default.fileExists(atPath: metaURL.path))                            // 没写 meta
     }
+
+    func testParsesLongContextTierWithExactKeysOnly() {
+        let json = """
+        {
+          "gpt-x": {"input_cost_per_token": 0.0000025, "output_cost_per_token": 0.000015, "cache_read_input_token_cost": 0.00000025,
+                    "input_cost_per_token_above_272k_tokens": 0.000005, "output_cost_per_token_above_272k_tokens": 0.0000225,
+                    "input_cost_per_token_above_272k_tokens_priority": 0.00002, "output_cost_per_token_above_272k_tokens_batches": 0.000001},
+          "claude-x": {"input_cost_per_token": 0.000003, "output_cost_per_token": 0.000015, "cache_read_input_token_cost": 0.0000003,
+                       "cache_creation_input_token_cost": 0.00000375, "cache_creation_input_token_cost_above_1hr": 0.000006,
+                       "input_cost_per_token_above_200k_tokens": 0.000006, "output_cost_per_token_above_200k_tokens": 0.0000225,
+                       "cache_creation_input_token_cost_above_200k_tokens": 0.0000075},
+          "plain": {"input_cost_per_token": 0.000001, "output_cost_per_token": 0.000002, "input_cost_per_token_batches": 0.0000005}
+        }
+        """
+        let cat = ModelPricingCatalog(cacheURL: tempJSON(json), bundledURL: nil, minBytesOverride: 0)
+        let g = cat.unitPricing(rawModel: "gpt-x")?.longContext
+        XCTAssertEqual(g?.thresholdTokens, 272_000)
+        XCTAssertEqual(g?.rates.inputUSDPerMTok ?? 0, 5, accuracy: 1e-9)
+        XCTAssertEqual(g?.rates.outputUSDPerMTok ?? 0, 22.5, accuracy: 1e-9)      // 不取 _batches / _priority 变体
+        XCTAssertEqual(g?.rates.cacheReadUSDPerMTok ?? 0, 0.25, accuracy: 1e-9)   // 缺失 → 基础价
+        let c = cat.unitPricing(rawModel: "claude-x")?.longContext
+        XCTAssertEqual(c?.thresholdTokens, 200_000)
+        XCTAssertEqual(c?.rates.cacheWriteUSDPerMTok ?? 0, 7.5, accuracy: 1e-9)
+        XCTAssertEqual(c?.rates.cacheWrite1hUSDPerMTok ?? 0, 12, accuracy: 1e-9)  // 缺失 → 基础 1h × (7.5/3.75)
+        XCTAssertNil(cat.unitPricing(rawModel: "plain")?.longContext)
+    }
 }

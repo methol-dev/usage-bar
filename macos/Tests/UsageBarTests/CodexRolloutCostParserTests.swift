@@ -76,4 +76,47 @@ final class CodexRolloutCostParserTests: XCTestCase {
         let allowed: Set<String> = ["ts", "msgId", "reqId", "sessionId", "model", "inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens", "cacheCreation5mTokens", "cacheCreation1hTokens"]
         XCTAssertTrue(Set(dict.keys).isSubset(of: allowed), "StoredUsageEvent leaked extra keys: \(Set(dict.keys).subtracting(allowed))")
     }
+
+    // MARK: 重复发射的 token_count
+
+    private func tokenCount(last: (Int, Int, Int), total: (Int, Int, Int)?) -> String {
+        var info: [String: Any] = ["last_token_usage": ["input_tokens": last.0, "cached_input_tokens": last.1, "output_tokens": last.2]]
+        if let t = total { info["total_token_usage"] = ["input_tokens": t.0, "cached_input_tokens": t.1, "output_tokens": t.2] }
+        return line(["timestamp": "2026-05-12T07:00:00.000Z", "type": "event_msg", "payload": ["type": "token_count", "info": info]])
+    }
+    func testRepeatedEmissionWithSameTotalIsSkipped() {
+        let lines = [
+            turnContext(model: "gpt-5"),
+            tokenCount(last: (100, 50, 10), total: (100, 50, 10)),
+            tokenCount(last: (100, 50, 10), total: (100, 50, 10)),   // codex CLI 重复发射
+            tokenCount(last: (120, 100, 20), total: (220, 150, 30)),
+            tokenCount(last: (120, 100, 20), total: (220, 150, 30)),
+        ]
+        let evs = CodexRolloutCostParser.parseFile(lines: lines, sessionId: "S")
+        XCTAssertEqual(evs.map(\.reqId), ["1", "3"])
+    }
+    func testSameLastButAdvancedTotalIsKept() {
+        let lines = [
+            tokenCount(last: (100, 50, 10), total: (100, 50, 10)),
+            tokenCount(last: (100, 50, 10), total: (200, 100, 20)),   // 真实的第二次调用，恰好 last 相同
+        ]
+        XCTAssertEqual(CodexRolloutCostParser.parseFile(lines: lines, sessionId: "S").count, 2)
+    }
+    func testWithoutTotalFallsBackToComparingLast() {
+        let lines = [tokenCount(last: (100, 50, 10), total: nil), tokenCount(last: (100, 50, 10), total: nil),
+                     tokenCount(last: (90, 50, 10), total: nil)]
+        XCTAssertEqual(CodexRolloutCostParser.parseFile(lines: lines, sessionId: "S").map(\.reqId), ["0", "2"])
+    }
+    func testDropRepeatedEmissionsOnStoredEvents() {
+        func ev(_ session: String, _ idx: Int, _ input: Int, model: String = "gpt-5") -> StoredUsageEvent {
+            StoredUsageEvent(ts: Date(timeIntervalSince1970: 1_780_000_000 + Double(idx)), msgId: "\(session):\(idx)", reqId: String(idx),
+                             sessionId: session, model: model, inputTokens: input, outputTokens: 5,
+                             cacheReadInputTokens: 0, cacheCreation5mTokens: 0)
+        }
+        let events = [ev("A", 13, 10), ev("A", 8, 10), ev("A", 20, 10, model: "gpt-5-mini"), ev("A", 30, 11),
+                      ev("B", 2, 10), ev("B", 9, 10), ev("B", 10, 12)]
+        let kept = CodexRolloutCostParser.dropRepeatedEmissions(events)
+        // A: 8 留、13 是 8 的重复、20 换了模型留、30 不同留；B: 2 留、9 重复、10 留。按数值行号排序（"13" < "8" 的字典序陷阱）
+        XCTAssertEqual(Set(kept.map(\.msgId)), ["A:8", "A:20", "A:30", "B:2", "B:10"])
+    }
 }
