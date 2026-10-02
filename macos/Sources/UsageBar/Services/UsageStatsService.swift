@@ -22,6 +22,7 @@ final class UsageStatsService {
     private let collector: any UsageCollecting
     private let pricing: ModelPriceTable
     private var inFlight = false
+    private var lastRefreshAt: Date?
 
     init(store: UsageEventStore, collector: any UsageCollecting, pricing: ModelPriceTable = ClaudeModelPriceTable.shared) {
         self.store = store; self.collector = collector; self.pricing = pricing
@@ -45,9 +46,17 @@ final class UsageStatsService {
         }
     }
 
+    /// popover 打开时调：距上次刷新不足 `minInterval` 则跳过。后台 tick 间隔（默认 30min）太长，
+    /// 不在打开时补刷的话 1h/6h/1d 窗口会滞后最多一个 tick。
+    func refreshIfStale(minInterval: TimeInterval = 60) async {
+        if let last = lastRefreshAt, Date().timeIntervalSince(last) < minInterval { return }
+        await refresh()
+    }
+
     func refresh() async {
         guard !inFlight else { return }
         inFlight = true
+        lastRefreshAt = Date()
         defer { inFlight = false }
         let store = self.store
         let collector = self.collector

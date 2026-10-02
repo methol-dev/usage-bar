@@ -22,6 +22,7 @@ actor CodexUsageCollector: UsageCollecting {
         if inFlight { return lastResult }
         inFlight = true
         defer { inFlight = false }
+        await store.runMigrationOnce("codex-dedupe-token-count-v1", transform: CodexRolloutCostParser.dropRepeatedEmissions)
 
         let roots = scanRootsOverride ?? Self.scanRoots()
         var collected: [StoredUsageEvent] = []
@@ -56,7 +57,7 @@ actor CodexUsageCollector: UsageCollecting {
 
         let migrated = await cursor.consumeDidResetStaleSchema()
         guard !collected.isEmpty else {
-            if migrated { await store.rebuildAllAggregates(normalize: { OpenAIPricing.normalize($0) }) }
+            if migrated { await store.rebuildAllAggregates() }
             await cursor.flush()
             lastResult = CollectResult(newEventCount: 0, scannedFileCount: scanned, parseErrorCount: 0, touchedDayKeys: [])
             return lastResult
@@ -65,11 +66,11 @@ actor CodexUsageCollector: UsageCollecting {
         let touchedDays = Set(collected.map { UsageAggregator.localDayKey($0.ts) })
         if !dirty.isEmpty {
             for f in scannedFiles { await cursor.clearCursor(for: f) }
-            await store.rebuildAllAggregates(normalize: { OpenAIPricing.normalize($0) })
+            await store.rebuildAllAggregates()
         } else if migrated {
-            await store.rebuildAllAggregates(normalize: { OpenAIPricing.normalize($0) })
+            await store.rebuildAllAggregates()
         } else {
-            await store.rebuildAggregates(forDayKeys: touchedDays, normalize: { OpenAIPricing.normalize($0) })
+            await store.rebuildAggregates(forDayKeys: touchedDays)
         }
         await cursor.flush()
         lastResult = CollectResult(newEventCount: collected.count, scannedFileCount: scanned, parseErrorCount: 0, touchedDayKeys: touchedDays)

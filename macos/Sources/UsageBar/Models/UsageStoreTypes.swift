@@ -39,6 +39,10 @@ struct MonthDetailFile: Codable, Equatable {
 
 /// agg 文件桶里某个 model 的累积。
 struct TokenSums: Equatable {
+    /// 长上下文计价阈值（LiteLLM `*_above_<N>k_tokens`：Anthropic 200k、OpenAI 272k）。
+    /// 单次请求 prompt 超过阈值时额外计入对应子桶，计价时这部分整单按长上下文档算（见 `ModelUnitPricing.cost(_:)`）。
+    static let longContextThresholds = [200_000, 272_000]
+
     var calls: Int = 0
     var inputTokens: Int = 0
     var outputTokens: Int = 0
@@ -46,10 +50,20 @@ struct TokenSums: Equatable {
     var cacheCreation5mTokens: Int = 0
     var cacheCreation1hTokens: Int = 0
     var cacheCreationInputTokens: Int = 0
+    /// 键 = 阈值（十进制字符串，JSON 对象键需为字符串）；值 = prompt 超过该阈值的请求的累计（其自身 longContext 恒空）。
+    var longContext: [String: TokenSums] = [:]
 
     init() {}
 
     mutating func add(_ e: StoredUsageEvent) {
+        addCounts(e)
+        let prompt = e.inputTokens + e.cacheReadInputTokens + e.cacheCreationInputTokens
+        for t in Self.longContextThresholds where prompt > t {
+            longContext[String(t), default: TokenSums()].addCounts(e)
+        }
+    }
+
+    private mutating func addCounts(_ e: StoredUsageEvent) {
         calls += 1
         inputTokens += e.inputTokens
         outputTokens += e.outputTokens
@@ -58,13 +72,26 @@ struct TokenSums: Equatable {
         cacheCreation1hTokens += e.cacheCreation1hTokens
         cacheCreationInputTokens += e.cacheCreationInputTokens
     }
+
+    mutating func merge(_ o: TokenSums) {
+        calls += o.calls
+        inputTokens += o.inputTokens
+        outputTokens += o.outputTokens
+        cacheReadInputTokens += o.cacheReadInputTokens
+        cacheCreation5mTokens += o.cacheCreation5mTokens
+        cacheCreation1hTokens += o.cacheCreation1hTokens
+        cacheCreationInputTokens += o.cacheCreationInputTokens
+        for (k, v) in o.longContext { longContext[k, default: TokenSums()].merge(v) }
+    }
 }
 
 /// data/<provider>/agg-{day,month,year}.json
 /// buckets 键：day = "YYYY-MM-DD"（本地时区）/ month = "YYYY-MM"（UTC）/ year = "YYYY"（UTC）
 /// 内层键 = ClaudePricing.normalize 后的 model 字符串
 struct AggregateFile: Codable, Equatable {
-    var schemaVersion: Int = 2
+    /// v3：TokenSums 增加 longContext 子桶。版本不符的旧文件读出为 nil → 全量重建。
+    static let currentSchemaVersion = 3
+    var schemaVersion: Int = AggregateFile.currentSchemaVersion
     var provider: String
     var lastUpdated: Date
     var buckets: [String: [String: TokenSums]]
@@ -130,10 +157,12 @@ extension TokenSums: Codable {
     enum CodingKeys: String, CodingKey {
         case calls, inputTokens, outputTokens, cacheReadInputTokens
         case cacheCreationInputTokens, cacheCreation5mTokens, cacheCreation1hTokens
+        case longContext
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        longContext = try c.decodeIfPresent([String: TokenSums].self, forKey: .longContext) ?? [:]
         calls = try c.decodeIfPresent(Int.self, forKey: .calls) ?? 0
         inputTokens = try c.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
         outputTokens = try c.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
@@ -159,6 +188,7 @@ extension TokenSums: Codable {
         try c.encode(cacheCreation5mTokens, forKey: .cacheCreation5mTokens)
         try c.encode(cacheCreation1hTokens, forKey: .cacheCreation1hTokens)
         try c.encode(cacheCreationInputTokens, forKey: .cacheCreationInputTokens)
+        if !longContext.isEmpty { try c.encode(longContext, forKey: .longContext) }
     }
 }
 

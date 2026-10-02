@@ -24,6 +24,11 @@ actor UsageEventStore {
     }
 
     private var providerDir: URL { dataDir.appendingPathComponent(provider.rawValue, isDirectory: true) }
+    /// agg 桶的模型 key 规范化：随 provider 走，保证任何重建入口（含 `resolvedAgg` 的自动重建）口径一致。
+    private var normalize: @Sendable (String) -> String {
+        if provider == .codex { return { OpenAIPricing.normalize($0) } }
+        return { ClaudePricing.normalize($0) }
+    }
     private func monthFileURL(_ key: String) -> URL { providerDir.appendingPathComponent("\(key).json") }
 
     // MARK: month key (UTC)
@@ -46,13 +51,16 @@ actor UsageEventStore {
         try? fm.createDirectory(at: url, withIntermediateDirectories: true,
                                 attributes: [.posixPermissions: 0o700])
     }
-    private func writeAtomic0600(_ data: Data, to url: URL) {
+    @discardableResult
+    private func writeAtomic0600(_ data: Data, to url: URL) -> Bool {
         ensureDir(url.deletingLastPathComponent())
         do {
             try data.write(to: url, options: .atomic)
             try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            return true
         } catch {
             NSLog("[usage-bar] store write: \(type(of: error))")
+            return false
         }
     }
 
@@ -61,9 +69,52 @@ actor UsageEventStore {
         do { return try Self.decoder.decode(MonthDetailFile.self, from: data) }
         catch { NSLog("[usage-bar] store decode month: \(type(of: error))"); return nil }
     }
-    private func saveMonth(_ file: MonthDetailFile, key: String) {
-        guard let data = try? Self.encoder.encode(file) else { return }
-        writeAtomic0600(data, to: monthFileURL(key))
+    @discardableResult
+    private func saveMonth(_ file: MonthDetailFile, key: String) -> Bool {
+        guard let data = try? Self.encoder.encode(file) else { return false }
+        return writeAtomic0600(data, to: monthFileURL(key))
+    }
+
+    // MARK: public — 一次性存量修复
+
+    private var migrationsURL: URL { providerDir.appendingPathComponent("migrations.json") }
+    private struct MigrationsFile: Codable { var done: [String] }
+
+    /// 对全部存量明细跑一次 `transform`（**只删不改**：返回输入的子集；跨月整体处理，同一会话可能跨月），只跑一次：
+    /// 完成标记记在 `<provider>/migrations.json`，且**所有**改动的月文件写盘成功后才落标记（失败下次重试）。
+    /// 改写前把被改动的月文件备份成 `<YYYY-MM>.pre-<name>.bak.json`（源 JSONL 可能已被 CLI 清理，写错无从重扫恢复）。
+    /// 有改动则全量重建 agg。返回是否改动了数据。
+    @discardableResult
+    func runMigrationOnce(_ name: String, transform: ([StoredUsageEvent]) -> [StoredUsageEvent]) -> Bool {
+        var marks = (try? Data(contentsOf: migrationsURL)).flatMap { try? Self.decoder.decode(MigrationsFile.self, from: $0) }
+            ?? MigrationsFile(done: [])
+        guard !marks.done.contains(name) else { return false }
+        let keys = allMonthKeys()
+        var before: [String: [StoredUsageEvent]] = [:]
+        for k in keys {
+            // 有月文件解码失败就不动（mergeEvents 那条路会处理损坏文件），下次再试
+            guard let mf = loadMonth(k) else { NSLog("[usage-bar] migration \(name) deferred: month file unreadable"); return false }
+            before[k] = mf.events
+        }
+        let after = Dictionary(grouping: transform(keys.flatMap { before[$0] ?? [] })) { Self.utcMonthKey($0.ts) }
+        var changed = false
+        for k in Set(keys).union(after.keys) {
+            let new = (after[k] ?? []).sorted { $0.ts < $1.ts }
+            guard new.count != (before[k] ?? []).count else { continue }
+            changed = true
+            let url = monthFileURL(k)
+            if fm.fileExists(atPath: url.path) {
+                let backup = providerDir.appendingPathComponent("\(k).pre-\(name).bak.json")
+                try? fm.removeItem(at: backup)
+                guard (try? fm.copyItem(at: url, to: backup)) != nil else { return false }
+            }
+            guard saveMonth(MonthDetailFile(provider: provider.rawValue, month: k, lastUpdated: Date(), events: new), key: k)
+            else { return false }
+        }
+        if changed { rebuildAllAggregates() }
+        marks.done.append(name)
+        if let data = try? Self.encoder.encode(marks) { writeAtomic0600(data, to: migrationsURL) }
+        return changed
     }
 
     // MARK: public — merge
@@ -139,7 +190,7 @@ actor UsageEventStore {
         guard let data = try? Data(contentsOf: aggFileURL(kind)) else { return nil }
         do {
             let f = try Self.decoder.decode(AggregateFile.self, from: data)
-            return f.schemaVersion == 2 ? f : nil
+            return f.schemaVersion == AggregateFile.currentSchemaVersion ? f : nil
         } catch { NSLog("[usage-bar] store decode agg: \(type(of: error))"); return nil }
     }
     private func saveAgg(_ kind: String, buckets: [String: [String: TokenSums]]) {
@@ -157,7 +208,7 @@ actor UsageEventStore {
         return loadAgg(kind)?.buckets ?? [:]
     }
 
-    func rebuildAllAggregates(normalize: @Sendable (String) -> String = { ClaudePricing.normalize($0) }) {
+    func rebuildAllAggregates() {
         let allEvents = allMonthKeys().flatMap { eventsForMonth($0) }
         saveAgg("day", buckets: UsageAggregator.foldByDay(events: allEvents, normalize: normalize))
         saveAgg("month", buckets: UsageAggregator.foldByMonth(events: allEvents, normalize: normalize))
@@ -165,8 +216,13 @@ actor UsageEventStore {
     }
 
     /// 增量重建：只读受影响的月明细文件，重算受影响的 day/month/year 桶覆盖回去。
-    func rebuildAggregates(forDayKeys dayKeys: Set<String>, normalize: @Sendable (String) -> String = { ClaudePricing.normalize($0) }) {
+    func rebuildAggregates(forDayKeys dayKeys: Set<String>) {
         guard !dayKeys.isEmpty else { return }
+        // 任一 agg 缺失 / 旧版本 → 增量基底不可信（从空表增量会把其它日期的历史覆盖掉），改走全量重建。
+        guard var day = loadAgg("day")?.buckets, var month = loadAgg("month")?.buckets,
+              var year = loadAgg("year")?.buckets else {
+            rebuildAllAggregates(); return
+        }
         let dayFmt = DateFormatter(); dayFmt.calendar = Calendar(identifier: .gregorian)
         dayFmt.timeZone = TimeZone.current; dayFmt.locale = Locale(identifier: "en_US_POSIX"); dayFmt.dateFormat = "yyyy-MM-dd"
         var candidateMonths = Set<String>()
@@ -185,9 +241,6 @@ actor UsageEventStore {
         let touchedMonthKeys = Set(touchedEvents.map { UsageAggregator.utcMonthKey($0.ts) })
         let touchedYearKeys = Set(touchedEvents.map { UsageAggregator.utcYearKey($0.ts) })
 
-        var day = loadAgg("day")?.buckets ?? [:]
-        var month = loadAgg("month")?.buckets ?? [:]
-        var year = loadAgg("year")?.buckets ?? [:]
         for k in dayKeys { day[k] = nil }
         for k in touchedMonthKeys { month[k] = nil }
         for k in touchedYearKeys { year[k] = nil }

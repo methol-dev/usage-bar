@@ -144,4 +144,74 @@ final class UsageEventStoreTests: XCTestCase {
         let got = await store.queryEvents(from: iso("2026-05-01T00:00:00.000Z"), to: iso("2026-06-01T00:00:00.000Z"))
         XCTAssertEqual(got.count, 1)
     }
+
+    // MARK: 一次性存量修复
+
+    private func monthFiles() -> [String] {
+        let dir = tmpDir.appendingPathComponent("claude")
+        return ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).sorted()
+    }
+
+    func testRunMigrationOnceRemovesBacksUpAndRunsOnlyOnce() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpDir)
+        await store.mergeEvents([event(ts: "2026-04-30T23:00:00.000Z", msg: "a", req: "a"),
+                                 event(ts: "2026-05-01T01:00:00.000Z", msg: "b", req: "b", model: "<synthetic>"),
+                                 event(ts: "2026-05-01T02:00:00.000Z", msg: "c", req: "c")])
+        await store.rebuildAllAggregates()
+        var calls = 0
+        let changed = await store.runMigrationOnce("drop-x") { evs in calls += 1; return evs.filter { $0.model != "<synthetic>" } }
+        XCTAssertTrue(changed)
+        let left = await store.queryEvents(from: .distantPast, to: .distantFuture)
+        XCTAssertEqual(left.map(\.msgId), ["a", "c"])
+        // 只有被改动的 05 月有备份；agg 已重建
+        XCTAssertTrue(monthFiles().contains("2026-05.pre-drop-x.bak.json"))
+        XCTAssertFalse(monthFiles().contains("2026-04.pre-drop-x.bak.json"))
+        let monthAgg = await store.readMonthAggregates()
+        XCTAssertEqual(monthAgg["2026-05"]?.values.reduce(0) { $0 + $1.calls }, 1)
+        // 备份文件不被当成月文件
+        let keys = await store.allMonthKeys()
+        XCTAssertEqual(keys, ["2026-04", "2026-05"])
+        // 第二次不再执行（新 store 实例同样读到标记）
+        let again = await UsageEventStore(dataDirOverride: tmpDir).runMigrationOnce("drop-x") { evs in calls += 1; return [] }
+        XCTAssertFalse(again)
+        XCTAssertEqual(calls, 1)
+        let final = await store.queryEvents(from: .distantPast, to: .distantFuture)
+        XCTAssertEqual(final.count, 2)
+    }
+
+    func testRunMigrationSkipsWhenMonthFileCorrupted() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpDir)
+        await store.mergeEvents([event(ts: "2026-05-01T01:00:00.000Z")])
+        try Data("{bad".utf8).write(to: tmpDir.appendingPathComponent("claude/2026-04.json"))
+        let changed = await store.runMigrationOnce("drop-all") { _ in [] }
+        XCTAssertFalse(changed)
+        // 没落标记 → 修好后会重试
+        try FileManager.default.removeItem(at: tmpDir.appendingPathComponent("claude/2026-04.json"))
+        let retried = await store.runMigrationOnce("drop-all") { _ in [] }
+        XCTAssertTrue(retried)
+    }
+
+    func testIncrementalRebuildWithStaleAggFallsBackToFullRebuild() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpDir)
+        await store.mergeEvents([event(ts: "2026-04-10T12:00:00.000Z", msg: "old", req: "old"),
+                                 event(ts: "2026-05-12T12:00:00.000Z", msg: "new", req: "new")])
+        await store.rebuildAllAggregates()
+        // 模拟升级前的旧版本 agg 文件
+        for kind in ["day", "month", "year"] {
+            let url = tmpDir.appendingPathComponent("claude/agg-\(kind).json")
+            var obj = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+            obj["schemaVersion"] = 2
+            try JSONSerialization.data(withJSONObject: obj).write(to: url)
+        }
+        await store.rebuildAggregates(forDayKeys: [UsageAggregator.localDayKey(iso("2026-05-12T12:00:00.000Z"))])
+        let day = await store.readDayAggregates()
+        XCTAssertNotNil(day[UsageAggregator.localDayKey(iso("2026-04-10T12:00:00.000Z"))], "旧日期的历史不能因增量重建丢失")
+    }
+
+    func testCodexStoreAutoRebuildUsesOpenAINormalize() async throws {
+        let store = UsageEventStore(dataDirOverride: tmpDir, provider: .codex)
+        await store.mergeEvents([event(ts: "2026-05-12T12:00:00.000Z", model: "gpt-5-2025-08-07")])
+        let month = await store.readMonthAggregates()   // agg 不存在 → 自动重建
+        XCTAssertEqual(month["2026-05"]?.keys.first, "gpt-5")
+    }
 }

@@ -86,4 +86,9 @@ final class JSONLCostParserTests: XCTestCase {
         let event = try JSONLCostParser.parseLine(lineNoReqId)
         XCTAssertEqual(event?.requestId, "msg_only")
     }
+
+    func testSyntheticPlaceholderIsNotACall() throws {
+        let line = #"{"type":"assistant","timestamp":"2026-05-11T09:24:52.422Z","isApiErrorMessage":true,"message":{"id":"msg_mock_s","model":"<synthetic>","usage":{"input_tokens":0,"output_tokens":0}}}"#
+        XCTAssertNil(try JSONLCostParser.parseLine(line))
+    }
 }

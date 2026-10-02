@@ -197,6 +197,7 @@ final class ProviderCoordinator {
     func refreshNow(_ id: ProviderID) async {
         // web-capable provider 的用户主动 Refresh → bump 其 nonce，让扩展 ≤1min 内真去对应网页拉一次。
         if group(for: id) != nil { publishWebControl(bumpFor: id) }
+        registry.provider(id)?.onPollTick?()   // 用户主动刷新也带上本机统计
         await registry.provider(id)?.refreshNow()
     }
 

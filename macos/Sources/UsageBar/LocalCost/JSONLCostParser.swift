@@ -89,6 +89,8 @@ enum JSONLCostParser {
               let usage = msg.usage else {
             throw ParseError.missingRequiredField
         }
+        // `<synthetic>` 是 CLI 在 API 报错时写的占位消息（usage 全 0），不是一次真实调用
+        if model == "<synthetic>" { return nil }
         // requestId 可能缺失（早期 CLI 版本）；此时回退用 msgId 单独作为去重 key
         let requestId = env.requestId ?? msgId
         let timestamp = isoFormatter.date(from: timestampStr)

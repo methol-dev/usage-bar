@@ -48,10 +48,7 @@ enum UsageAggregator {
         for (normalizedModel, s) in bucket {
             let unit = pricing.lookup(normalizedModel)
             if unit == nil { unknown += s.calls }
-            let usd = unit?.cost(input: s.inputTokens, output: s.outputTokens,
-                                 cacheRead: s.cacheReadInputTokens,
-                                 cacheWrite: s.cacheCreation5mTokens,
-                                 cacheWrite1h: s.cacheCreation1hTokens) ?? 0
+            let usd = unit?.cost(s) ?? 0
             total += usd
             per.append(ModelCost(model: normalizedModel, normalizedModel: normalizedModel, calls: s.calls,
                                  inputTokens: s.inputTokens, outputTokens: s.outputTokens,
@@ -113,15 +110,7 @@ enum UsageAggregator {
         var merged: [String: TokenSums] = [:]
         for (dayKey, bucket) in dayAggregates {
             guard let date = f.date(from: dayKey), date >= cutoff else { continue }
-            for (mk, s) in bucket {
-                var acc = merged[mk] ?? TokenSums()
-                acc.calls += s.calls; acc.inputTokens += s.inputTokens; acc.outputTokens += s.outputTokens
-                acc.cacheReadInputTokens += s.cacheReadInputTokens
-                acc.cacheCreation5mTokens += s.cacheCreation5mTokens
-                acc.cacheCreation1hTokens += s.cacheCreation1hTokens
-                acc.cacheCreationInputTokens += s.cacheCreationInputTokens
-                merged[mk] = acc
-            }
+            for (mk, s) in bucket { merged[mk, default: TokenSums()].merge(s) }
         }
         let c = usdForBucket(merged, pricing: pricing)
         return CostSummary(generatedAt: now, windowDays: 30, totalUSD: c.usd, perModel: c.perModel,

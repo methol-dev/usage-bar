@@ -23,6 +23,8 @@ actor ClaudeUsageCollector: UsageCollecting {
         if inFlight { return lastResult }
         inFlight = true
         defer { inFlight = false }
+        // 旧版解析器把 `<synthetic>`（API 报错占位、usage 全 0）也记成了调用
+        await store.runMigrationOnce("claude-drop-synthetic-v1") { $0.filter { $0.model != "<synthetic>" } }
 
         let roots = scanRootsOverride ?? Self.scanRoots()
         var collected: [StoredUsageEvent] = []

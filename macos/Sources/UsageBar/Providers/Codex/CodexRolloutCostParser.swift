@@ -13,6 +13,7 @@ enum CodexRolloutCostParser {
     /// `UsageEventStore.mergeEvents` 的 `(msgId,reqId)` 去重才幂等。
     static func parseFile(lines: [String], sessionId: String) -> [StoredUsageEvent] {
         var currentModel: String?
+        var lastUsageKey: [Int]?
         var out: [StoredUsageEvent] = []
         for (idx, raw) in lines.enumerated() {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -33,6 +34,11 @@ enum CodexRolloutCostParser {
                   let info = payload?["info"] as? [String: Any],
                   let lt = info["last_token_usage"] as? [String: Any]
             else { continue }
+            // codex CLI 会把同一次调用的 token_count 连发两遍（total_token_usage 不变）—— 累计量没前进就是重复发射，跳过。
+            // 无 total 的旧格式退化为比较 last_token_usage。
+            let usageKey = usageKey(info["total_token_usage"] as? [String: Any] ?? lt)
+            if usageKey == lastUsageKey { continue }
+            lastUsageKey = usageKey
             let inputAll = intValue(lt["input_tokens"])
             let cached = intValue(lt["cached_input_tokens"])
             let output = intValue(lt["output_tokens"])
@@ -53,6 +59,26 @@ enum CodexRolloutCostParser {
         return out
     }
 
+    /// 存量修复用：旧版解析器把 codex CLI 重复发射的 token_count 都记成了调用。rollout 源文件可能已被 codex 清理
+    /// （0.154 起迁进 sqlite），无法重扫，只能在已存事件上去重：同一会话按行号排序，与前一条 token 事件
+    /// （model + 各 token 数）完全相同 → 视为重复发射丢弃。真实的相邻两次调用 token 完全一致几乎不可能（cached 单调增长）。
+    static func dropRepeatedEmissions(_ events: [StoredUsageEvent]) -> [StoredUsageEvent] {
+        var out: [StoredUsageEvent] = []
+        for (_, session) in Dictionary(grouping: events, by: \.sessionId) {
+            var prev: StoredUsageEvent?
+            for e in session.sorted(by: { (Int($0.reqId) ?? 0) < (Int($1.reqId) ?? 0) }) {
+                defer { prev = e }
+                if let p = prev, p.model == e.model, p.inputTokens == e.inputTokens, p.outputTokens == e.outputTokens,
+                   p.cacheReadInputTokens == e.cacheReadInputTokens,
+                   p.cacheCreation5mTokens == e.cacheCreation5mTokens, p.cacheCreation1hTokens == e.cacheCreation1hTokens {
+                    continue
+                }
+                out.append(e)
+            }
+        }
+        return out
+    }
+
     /// 从 `rollout-<ISO8601>-<uuid>.jsonl` 取末尾的 UUID；取不到就用去扩展名的文件名兜底。
     static func sessionId(fromFileName name: String) -> String {
         let base = (name as NSString).deletingPathExtension
@@ -61,6 +87,10 @@ enum CodexRolloutCostParser {
             return String(base[r])
         }
         return base
+    }
+
+    private static func usageKey(_ u: [String: Any]) -> [Int] {
+        ["input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens", "total_tokens"].map { intValue(u[$0]) }
     }
 
     private static func intValue(_ any: Any?) -> Int {

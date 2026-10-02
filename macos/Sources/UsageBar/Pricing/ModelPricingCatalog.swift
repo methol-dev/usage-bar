@@ -130,9 +130,40 @@ final class ModelPricingCatalog: @unchecked Sendable {
                 outputUSDPerMTok: outPT * 1_000_000,
                 cacheReadUSDPerMTok: crPT * 1_000_000,
                 cacheWriteUSDPerMTok: cwPT * 1_000_000,
-                cacheWrite1hUSDPerMTok: cw1hPT * 1_000_000)
+                cacheWrite1hUSDPerMTok: cw1hPT * 1_000_000,
+                longContext: longContextTier(attrs, base: (inPT, outPT, crPT, cwPT, cw1hPT)))
         }
         return out
+    }
+
+    /// 解析长上下文档：键名须**精确**为 `input_cost_per_token_above_<N>k_tokens`（排除 `_batches` / `_priority` / `_flex` 等变体）。
+    /// 其余分量缺失 → 回退该分量基础价；1h cache write 缺失 → 按「长档 5m 写 / 基础 5m 写」的倍率由基础 1h 价推算。
+    /// 计价口径：单次请求 prompt 超阈值即整单按长档（Anthropic 官方规则；OpenAI 官方措辞是按 session，LiteLLM/本实现按单次请求）。
+    private static let longContextInputKey = try! NSRegularExpression(pattern: #"^input_cost_per_token_above_(\d+)k_tokens$"#)
+    private static func longContextTier(_ attrs: [String: Any],
+                                        base: (input: Double, output: Double, cacheRead: Double, cacheWrite: Double, cacheWrite1h: Double)) -> LongContextTier? {
+        func num(_ k: String) -> Double? {
+            if let d = attrs[k] as? Double { return d }
+            return (attrs[k] as? NSNumber)?.doubleValue
+        }
+        let thresholdsK = attrs.keys.compactMap { key -> Int? in
+            guard key.hasPrefix("input_cost_per_token_above_") else { return nil }
+            let range = NSRange(key.startIndex..., in: key)
+            guard let m = longContextInputKey.firstMatch(in: key, range: range),
+                  let r = Range(m.range(at: 1), in: key) else { return nil }
+            return Int(key[r])
+        }.sorted()
+        guard let k = thresholdsK.first, let input = num("input_cost_per_token_above_\(k)k_tokens") else { return nil }
+        let suffix = "_above_\(k)k_tokens"
+        let cacheWrite = num("cache_creation_input_token_cost\(suffix)") ?? base.cacheWrite
+        let cacheWrite1h = num("cache_creation_input_token_cost_above_1hr\(suffix)")
+            ?? (base.cacheWrite > 0 ? base.cacheWrite1h * cacheWrite / base.cacheWrite : base.cacheWrite1h)
+        return LongContextTier(thresholdTokens: k * 1000, rates: .init(
+            inputUSDPerMTok: input * 1_000_000,
+            outputUSDPerMTok: (num("output_cost_per_token\(suffix)") ?? base.output) * 1_000_000,
+            cacheReadUSDPerMTok: (num("cache_read_input_token_cost\(suffix)") ?? base.cacheRead) * 1_000_000,
+            cacheWriteUSDPerMTok: cacheWrite * 1_000_000,
+            cacheWrite1hUSDPerMTok: cacheWrite1h * 1_000_000))
     }
 
     // MARK: - 查表（逐级回退候选链）
