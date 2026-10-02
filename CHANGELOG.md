@@ -9,6 +9,26 @@
 
 ---
 
+## [v0.8.4] — 2026-10-02
+
+> 版本: `v0.8.4`
+
+### 修复（Fixed）
+
+- **Codex 本机费用多算约一倍**：Codex CLI 会把同一次调用的 token 记录连写两遍，软件两条都计入，导致金额、调用数和 token 数都被放大（部分月份约 2 倍）。现在按累计用量去重；已存的历史数据在升级后首次刷新时自动修复，修复前会把原文件备份为 `*.pre-*.bak.json`。（[#58](https://github.com/methol-dev/usage-bar/pull/58)）
+- **长上下文请求少算**：OpenAI 单次 prompt 超过 272k、Anthropic 超过 200k 时，应整单按长上下文价计费，此前一律按基础价，开 1M 上下文的 Codex 用户偏低明显（实测某月少算约 26%）。现在按 LiteLLM 价格表中的阶梯价逐次计费。（[#58](https://github.com/methol-dev/usage-bar/pull/58)）
+- **费用卡 1h / 6h / 1d 数据滞后**：本机统计此前只随后台轮询（默认 30 分钟）刷新，打开菜单时看到的可能是半小时前的数字。现在打开 popover 和点 Refresh 都会补刷一次本机统计。（[#58](https://github.com/methol-dev/usage-bar/pull/58)）
+- **调用数虚高与「无价格数据」误报**：Claude CLI 在 API 报错时写入的 `<synthetic>` 占位消息（token 全为 0）不再计为调用。（[#58](https://github.com/methol-dev/usage-bar/pull/58)）
+- 修复统计缓存升级时可能只保留最近几天、丢失更早历史的问题。（[#58](https://github.com/methol-dev/usage-bar/pull/58)）
+
+### 说明
+
+- Claude 本机费用已与 Claude Code 自身记录的会话成本逐会话核对，单价一致。剩余约 2%~6% 的差距来自 Claude Code 未写入会话日志的内部调用（如标题生成），本机日志无法还原。与 ccusage 对比时本软件会高 10%~20%，因为 ccusage 把 1 小时 cache write 按 5 分钟价计。
+
+### 参考
+
+- 含 PR：#58
+
 ## [v0.8.3] — 2026-09-08
 
 > 版本: `v0.8.3`
